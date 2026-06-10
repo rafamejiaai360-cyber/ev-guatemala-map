@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -9,6 +9,8 @@ import { loadPhotosForStation, savePhoto } from '../utils/photoDb';
 import type { StationPhoto } from '../utils/photoDb';
 import type { ChargerStation } from '../types';
 
+const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
 // Fix Leaflet default icon URLs broken by bundlers
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -17,20 +19,26 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
+const iconCache = new Map<string, L.DivIcon>();
+
 function makeStationIcon(status: string, dimmed: boolean) {
+  const key = `${status}-${dimmed}`;
+  if (iconCache.has(key)) return iconCache.get(key)!;
   const colors: Record<string, string> = {
     active: '#22c55e',
     maintenance: '#f59e0b',
     offline: '#ef4444',
   };
   const color = colors[status] ?? '#6b7280';
-  return L.divIcon({
+  const icon = L.divIcon({
     className: '',
     html: `<div class="ev-marker ${status}${dimmed ? ' dimmed' : ''}" style="background:${color};width:30px;height:30px;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;font-size:14px;">⚡</div>`,
     iconSize: [30, 30],
     iconAnchor: [15, 15],
     popupAnchor: [0, -18],
   });
+  iconCache.set(key, icon);
+  return icon;
 }
 
 const userIcon = L.divIcon({
@@ -346,6 +354,16 @@ function MapController({ markerRefs }: { markerRefs: React.MutableRefObject<Reco
   return null;
 }
 
+function DisableTap() {
+  const map = useMap();
+  useEffect(() => {
+    // Leaflet's tap handler causes 300ms delay and freezes on iOS — disable it
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (map as any).tap?.disable();
+  }, [map]);
+  return null;
+}
+
 function GeolocationButton() {
   const { setUserLocation } = useStore();
 
@@ -377,13 +395,16 @@ export default function EVMap() {
   const { stations, filteredStations, selectedVehicle, filters } = useStore();
   const markerRefs = useRef<Record<string, L.Marker | null>>({});
 
-  // Dim markers that don't pass ANY active filter (vehicle, status, connector type, level)
   const hasActiveFilters =
     selectedVehicle !== null ||
     filters.status !== 'all' ||
     filters.connectorTypes.length > 0 ||
     filters.level !== 'all';
-  const filteredIds = hasActiveFilters ? new Set(filteredStations.map((s) => s.id)) : null;
+
+  const filteredIds = useMemo(
+    () => (hasActiveFilters ? new Set(filteredStations.map((s) => s.id)) : null),
+    [hasActiveFilters, filteredStations],
+  );
 
   return (
     <div className="relative flex-1 h-full">
@@ -396,9 +417,13 @@ export default function EVMap() {
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          keepBuffer={2}
+          updateWhenZooming={false}
+          updateWhenIdle={true}
         />
 
         <MapController markerRefs={markerRefs} />
+        {isTouch && <DisableTap />}
 
         {stations.map((station) => {
           const dimmed = filteredIds !== null && !filteredIds.has(station.id);
@@ -424,9 +449,11 @@ export default function EVMap() {
               <Popup>
                 <StationPopupContent station={station} />
               </Popup>
-              <Tooltip className="station-tooltip" direction="top" offset={[0, -18]} opacity={1}>
-                <StationTooltipContent station={station} />
-              </Tooltip>
+              {!isTouch && (
+                <Tooltip className="station-tooltip" direction="top" offset={[0, -18]} opacity={1}>
+                  <StationTooltipContent station={station} />
+                </Tooltip>
+              )}
             </Marker>
           );
         })}
