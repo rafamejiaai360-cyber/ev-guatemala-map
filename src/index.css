@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #fafafa;
+  color: #111827;
+}
+
+/* Leaflet overrides */
+.leaflet-container {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #f0f0f0;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 16px !important;
+  padding: 0 !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10) !important;
+  border: 1px solid #e5e7eb !important;
+  overflow: hidden;
+  min-width: 260px;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  width: auto !important;
+}
+
+.leaflet-popup-tip-container {
+  display: none !important;
+}
+
+.leaflet-popup-close-button {
+  top: 10px !important;
+  right: 10px !important;
+  font-size: 18px !important;
+  color: #6b7280 !important;
+  z-index: 10;
+}
+
+/* Custom marker styles */
+.ev-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2.5px solid white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  transition: transform 0.15s ease, opacity 0.2s ease;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.ev-marker.dimmed {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.ev-marker.active   { background: #22c55e; }
+.ev-marker.maintenance { background: #f59e0b; }
+.ev-marker.offline  { background: #ef4444; }
+.ev-marker.user     { background: #3b82f6; }
+
+/* Station hover tooltip */
+.leaflet-tooltip.station-tooltip {
+  background: white;
+  border: none !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.14), 0 1px 4px rgba(0,0,0,0.07) !important;
+  padding: 0 !important;
+  overflow: hidden;
+  pointer-events: none;
+  max-width: 230px;
+}
+
+.leaflet-tooltip.station-tooltip::before {
+  display: none !important;
+}
