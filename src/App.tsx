@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import AdminPanel from './components/AdminPanel';
@@ -12,10 +12,7 @@ const isAdmin =
   new URLSearchParams(window.location.search).get('admin') === 'true';
 
 export default function App() {
-  const { refreshStatus, scanModalOpen } = useStore();
-
-  // refreshStatus is available for manual use via the header button
-  void refreshStatus;
+  const { scanModalOpen } = useStore();
 
   if (isAdmin) return <AdminPanel />;
 
