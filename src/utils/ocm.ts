@@ -1,6 +1,7 @@
 import { haversineKm } from './geo';
 
 const OCM_BASE = 'https://api.openchargemap.io/v3/poi/';
+const OCM_API_KEY = import.meta.env.VITE_OCM_API_KEY as string | undefined;
 
 export interface OCMStation {
   ID: number;
@@ -25,6 +26,7 @@ export interface OCMStation {
 }
 
 export async function fetchGTStations(): Promise<OCMStation[]> {
+  if (!OCM_API_KEY) throw new Error('NO_API_KEY');
   const params = new URLSearchParams({
     output: 'json',
     countrycode: 'GT',
@@ -33,7 +35,10 @@ export async function fetchGTStations(): Promise<OCMStation[]> {
     verbose: 'false',
     includecomments: 'false',
   });
-  const res = await fetch(`${OCM_BASE}?${params}`, { cache: 'no-store' });
+  const res = await fetch(`${OCM_BASE}?${params}`, {
+    cache: 'no-store',
+    headers: { 'X-API-Key': OCM_API_KEY },
+  });
   if (!res.ok) throw new Error(`OCM ${res.status}`);
   return res.json();
 }

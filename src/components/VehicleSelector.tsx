@@ -14,17 +14,22 @@ export default function VehicleSelector() {
     `${v.brand} ${v.model}`.toLowerCase().includes(query.toLowerCase()),
   );
 
-  // Close on outside click, resize, or scroll
+  // Close on outside click, resize, or scroll (but not when scrolling inside the dropdown)
   useEffect(() => {
     if (!open) return;
     function close() { setOpen(false); }
+    function closeOnScroll(e: Event) {
+      const portal = document.getElementById('vehicle-dropdown-portal');
+      if (portal && portal.contains(e.target as Node)) return;
+      setOpen(false);
+    }
     document.addEventListener('mousedown', handleOutside);
     window.addEventListener('resize', close);
-    window.addEventListener('scroll', close, true);
+    window.addEventListener('scroll', closeOnScroll, true);
     return () => {
       document.removeEventListener('mousedown', handleOutside);
       window.removeEventListener('resize', close);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('scroll', closeOnScroll, true);
     };
   }, [open]);
 

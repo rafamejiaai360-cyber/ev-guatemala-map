@@ -41,8 +41,11 @@ export default function ScanModal() {
         }
 
         setNewItems(results);
-      } catch {
-        setError('No se pudo conectar con OpenChargeMap. Verifica tu conexión a internet.');
+      } catch (e) {
+        const isNoKey = e instanceof Error && e.message === 'NO_API_KEY';
+        setError(isNoKey
+          ? 'Falta configurar la API key de OpenChargeMap en las variables de entorno.'
+          : 'No se pudo conectar con OpenChargeMap. Verifica tu conexión a internet.');
       } finally {
         setLoading(false);
       }

@@ -200,10 +200,10 @@ export const useStore = create<AppState>((set, get) => ({
         statusCheckError: matched === 0 ? 'Sin datos en tiempo real para este momento.' : null,
       });
     } catch (e) {
-      set({
-        statusCheckLoading: false,
-        statusCheckError: 'Error de conexión con OpenChargeMap.',
-      });
+      const msg = e instanceof Error && e.message === 'NO_API_KEY'
+        ? 'Falta API key de OpenChargeMap.'
+        : 'Error de conexión con OpenChargeMap.';
+      set({ statusCheckLoading: false, statusCheckError: msg });
     }
   },
 

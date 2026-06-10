@@ -24,17 +24,22 @@ export default function FilterBar() {
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Close on outside click, resize, scroll
+  // Close on outside click, resize, scroll (but not when scrolling inside the dropdown)
   useEffect(() => {
     if (!connectorOpen) return;
     function close() { setConnectorOpen(false); }
+    function closeOnScroll(e: Event) {
+      const portal = document.getElementById('connector-dropdown-portal');
+      if (portal && portal.contains(e.target as Node)) return;
+      setConnectorOpen(false);
+    }
     document.addEventListener('mousedown', handleOutside);
     window.addEventListener('resize', close);
-    window.addEventListener('scroll', close, true);
+    window.addEventListener('scroll', closeOnScroll, true);
     return () => {
       document.removeEventListener('mousedown', handleOutside);
       window.removeEventListener('resize', close);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('scroll', closeOnScroll, true);
     };
   }, [connectorOpen]);
 
