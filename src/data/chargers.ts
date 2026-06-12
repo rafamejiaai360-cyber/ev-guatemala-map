@@ -31,7 +31,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'Electron Power',
     access: 'semi-public',
-    notes: 'Disponible en horario de oficina.',
   },
   // ── Guatemala Ciudad — Zona 9 ──────────────────────────────────────────
   {
@@ -56,14 +55,13 @@ export const chargerStations: ChargerStation[] = [
     zone: 'Zona 9',
     lat: 14.6093,
     lng: -90.5138,
-    status: 'maintenance',
+    status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
       { type: 'CHAdeMO', power_kw: 50, level: 'DC' },
     ],
     network: 'EV Network GT',
     access: 'public',
-    notes: 'En mantenimiento hasta julio 2026.',
   },
   {
     id: 'gt-z9-bac-torre',
@@ -78,7 +76,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'BAC Ruta Eléctrica',
     access: 'semi-public',
-    notes: 'Disponible en horario bancario.',
   },
   // ── Guatemala Ciudad — Zona 10 ──────────────────────────────────────────
   {
@@ -111,7 +108,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'Privado',
     access: 'semi-public',
-    notes: 'Disponible para huéspedes y visitantes del hotel.',
   },
   {
     id: 'gt-z10-obelisco',
@@ -204,7 +200,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'Privado',
     access: 'semi-public',
-    notes: 'Nivel P2 del estacionamiento.',
   },
   {
     id: 'gt-z14-bmw',
@@ -283,7 +278,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'Electron Power',
     access: 'public',
-    notes: 'Agencia Electron Power en C.C. Metro 15.',
   },
   {
     id: 'gt-z15-mc',
@@ -299,7 +293,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: "McDonald's EV",
     access: 'public',
-    notes: 'Acceso 24/7 junto al estacionamiento de McDonald\'s.',
   },
   {
     id: 'gt-z15-audi',
@@ -454,7 +447,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: "McDonald's EV",
     access: 'public',
-    notes: 'Acceso 24/7.',
   },
   {
     id: 'mix-bac-naranjo',
@@ -508,14 +500,13 @@ export const chargerStations: ChargerStation[] = [
     zone: 'Villa Nueva',
     lat: 14.5220,
     lng: -90.5793,
-    status: 'maintenance',
+    status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 120, level: 'DC' },
       { type: 'CHAdeMO', power_kw: 50, level: 'DC' },
     ],
     network: 'Shell Recharge',
     access: 'public',
-    notes: 'En proceso de instalación.',
   },
   // ── Antigua Guatemala ──────────────────────────────────────────────────
   {
@@ -556,13 +547,12 @@ export const chargerStations: ChargerStation[] = [
     zone: 'Antigua Guatemala',
     lat: 14.5611,
     lng: -90.7304,
-    status: 'offline',
+    status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 11, level: 'L2' },
     ],
     network: 'Privado',
     access: 'semi-public',
-    notes: 'Fuera de servicio temporalmente.',
   },
   // ── Panajachel ────────────────────────────────────────────────────────
   {
@@ -578,7 +568,7 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'Electron Power',
     access: 'semi-public',
-    notes: 'Disponible para huéspedes. A orillas del Lago Atitlán.',
+    notes: 'A orillas del Lago Atitlán.',
   },
   // ── Quetzaltenango ───────────────────────────────────────────────────
   {
@@ -595,7 +585,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'Metroproyectos',
     access: 'public',
-    notes: 'Inaugurado mayo 2024. Cargador rápido 120 kW.',
   },
   {
     id: 'xela-bac-americas',
@@ -690,7 +679,6 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'INGUAT',
     access: 'public',
-    notes: 'Disponible durante horario de visita del parque.',
   },
   // ── San Marcos ───────────────────────────────────────────────────────
   {
@@ -737,7 +725,7 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'Electron Power',
     access: 'semi-public',
-    notes: 'Campus universitario, lunes a sábado.',
+    notes: 'Campus universitario.',
   },
   // ── Cobán ─────────────────────────────────────────────────────────────
   {
@@ -918,13 +906,12 @@ export const chargerStations: ChargerStation[] = [
     zone: 'Petén',
     lat: 16.9183,
     lng: -89.8916,
-    status: 'offline',
+    status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
       { type: 'Type2', power_kw: 22, level: 'L2' },
     ],
     network: 'EV Network GT',
     access: 'public',
-    notes: 'Fuera de servicio. Reparación programada para Q3 2026.',
   },
 ];
