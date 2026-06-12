@@ -803,6 +803,21 @@ export const chargerStations: ChargerStation[] = [
   },
   // ── Jutiapa ───────────────────────────────────────────────────────────
   {
+    id: 'jut-pc-interplaza',
+    name: 'Pollo Campero Interplaza Jutiapa',
+    address: 'Interplaza Jutiapa, Jutiapa',
+    zone: 'Jutiapa',
+    lat: 14.2929,
+    lng: -89.9115,
+    status: 'active',
+    connectors: [
+      { type: 'J1772', power_kw: 7.4, level: 'L2' },
+    ],
+    network: 'Pollo Campero EV',
+    access: 'public',
+    notes: 'Fuente: OpenChargeMap.',
+  },
+  {
     id: 'jut-cc-metroplaza',
     name: 'CC Metro Plaza Jutiapa',
     address: 'Av. Principal, Jutiapa',
@@ -830,6 +845,38 @@ export const chargerStations: ChargerStation[] = [
     network: 'BAC Ruta Eléctrica',
     access: 'semi-public',
   },
+  // ── El Progreso / El Rancho ───────────────────────────────────────────
+  {
+    id: 'elp-pc-el-rancho',
+    name: 'Pollo Campero El Rancho',
+    address: 'Km 84.5 Carretera al Atlántico, El Rancho',
+    zone: 'El Progreso',
+    lat: 14.9229,
+    lng: -90.0169,
+    status: 'active',
+    connectors: [
+      { type: 'J1772', power_kw: 7.4, level: 'L2' },
+    ],
+    network: 'Pollo Campero EV',
+    access: 'public',
+    notes: 'Cargador en Pollo Campero. Fuente: OpenChargeMap.',
+  },
+  // ── Izabal ────────────────────────────────────────────────────────────
+  {
+    id: 'iza-metroplaza-morales',
+    name: 'Metroplaza Morales',
+    address: 'Morales, Izabal',
+    zone: 'Izabal',
+    lat: 15.4912,
+    lng: -88.8594,
+    status: 'active',
+    connectors: [
+      { type: 'CCS2', power_kw: 50, level: 'DC' },
+    ],
+    network: 'EV Network GT',
+    access: 'public',
+    notes: 'Cargador rápido en ruta al Caribe. Fuente: OpenChargeMap.',
+  },
   // ── Chiquimula ────────────────────────────────────────────────────────
   {
     id: 'chiq-carretera',
@@ -848,6 +895,22 @@ export const chargerStations: ChargerStation[] = [
     notes: 'Corredor logístico hacia Honduras.',
   },
   // ── Petén ─────────────────────────────────────────────────────────────
+  {
+    id: 'pet-pc-poptun',
+    name: 'Pollo Campero Poptún',
+    address: 'Poptún, Petén',
+    zone: 'Petén',
+    lat: 16.3280,
+    lng: -89.4069,
+    status: 'active',
+    connectors: [
+      { type: 'CCS2', power_kw: 50, level: 'DC' },
+      { type: 'J1772', power_kw: 7.4, level: 'L2' },
+    ],
+    network: 'Pollo Campero EV',
+    access: 'public',
+    notes: 'Cargador rápido DC + L2. Fuente: OpenChargeMap.',
+  },
   {
     id: 'pet-flores-cc',
     name: 'Portal del Lago Flores',
