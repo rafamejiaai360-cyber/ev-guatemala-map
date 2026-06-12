@@ -61,26 +61,26 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile backdrop */}
+      {/* Mobile backdrop — above Leaflet panes (max z-index 700) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/20 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/20 z-[750] lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar panel */}
+      {/* Sidebar panel — above backdrop and all Leaflet layers */}
       <aside
         className={`
-          fixed bottom-0 left-0 right-0 z-40 lg:z-auto
+          fixed bottom-0 left-0 right-0 z-[800] lg:z-auto
           lg:static lg:w-80 lg:flex-shrink-0
           bg-white border-t border-gray-200
           lg:border-t-0 lg:border-r lg:border-gray-200
           flex flex-col
-          transition-all duration-300
+          transition-transform duration-300
           ${sidebarOpen
-            ? 'translate-y-0 h-[60vh] lg:h-full'
-            : 'translate-y-full lg:translate-y-0 h-full'}
+            ? 'translate-y-0 h-[70vh] lg:h-full'
+            : 'translate-y-full lg:translate-y-0 lg:h-full'}
         `}
       >
         {/* Handle (mobile) */}
