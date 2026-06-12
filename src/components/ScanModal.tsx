@@ -4,6 +4,13 @@ import { fetchGTStations, findClosestLocal } from '../utils/ocm';
 import type { OCMStation } from '../utils/ocm';
 import type { ChargerStation } from '../types';
 
+const SOURCES = [
+  { label: 'Electron Power', url: 'https://www.electronpower.com/red-de-carga/' },
+  { label: 'BAC Ruta Eléctrica', url: 'https://www.baccredomatic.com/es-gt/personas/landing/ruta-electrica' },
+  { label: 'PlugShare Guatemala', url: 'https://www.plugshare.com/location/guatemala' },
+  { label: 'AMEGUA', url: 'https://www.amegua.org/cargadores-elctricos' },
+];
+
 const STATUS_LABEL: Record<string, string> = {
   active: 'Activo',
   maintenance: 'Mantenimiento',
@@ -166,16 +173,32 @@ export default function ScanModal() {
           )}
         </div>
 
+        {/* External sources */}
+        <div className="px-5 py-3 border-t border-gray-100">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Verificar fuentes externas</p>
+          <div className="flex flex-wrap gap-1.5">
+            {SOURCES.map((s) => (
+              <a
+                key={s.url}
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 transition-colors"
+              >
+                {s.label}
+                <svg width="9" height="9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            ))}
+          </div>
+        </div>
+
         {/* Footer */}
         <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
           <p className="text-[10px] text-gray-400 leading-relaxed">
             Datos:{' '}
-            <a
-              href="https://openchargemap.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
+            <a href="https://openchargemap.org" target="_blank" rel="noopener noreferrer" className="underline">
               OpenChargeMap
             </a>{' '}
             · CC BY-SA 3.0

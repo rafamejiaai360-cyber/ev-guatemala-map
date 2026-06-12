@@ -44,7 +44,7 @@ export default function Header() {
         {/* Logo */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
-            className="lg:hidden p-1 text-gray-500 hover:text-gray-800 transition-colors"
+            className="lg:hidden -m-2 p-3 text-gray-500 hover:text-gray-800 active:text-gray-900 transition-colors rounded-xl touch-manipulation"
             onClick={() => setSidebarOpen(!sidebarOpen)}
             aria-label="Toggle sidebar"
           >

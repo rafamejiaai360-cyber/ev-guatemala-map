@@ -252,7 +252,39 @@ export const chargerStations: ChargerStation[] = [
     access: 'public',
     notes: 'Cortesía Grupo Los Tres.',
   },
+  // ── Guatemala Ciudad — Zona 11 ────────────────────────────────────────
+  {
+    id: 'gt-z11-sarita-majadas',
+    name: 'Sarita Majadas',
+    address: 'Av. Periférico, C.C. Majadas, Zona 11',
+    zone: 'Zona 11',
+    lat: 14.5979,
+    lng: -90.5488,
+    status: 'active',
+    connectors: [
+      { type: 'Type2', power_kw: 22, level: 'L2' },
+    ],
+    network: 'Electron Power',
+    access: 'public',
+    notes: 'En Restaurante Sarita, C.C. Majadas.',
+  },
   // ── Guatemala Ciudad — Zona 15 ─────────────────────────────────────────
+  {
+    id: 'gt-z15-metro15',
+    name: 'C.C. Metro 15',
+    address: 'Blvd. Vista Hermosa, Zona 15',
+    zone: 'Zona 15',
+    lat: 14.5748,
+    lng: -90.4972,
+    status: 'active',
+    connectors: [
+      { type: 'Type2', power_kw: 22, level: 'L2' },
+      { type: 'CCS2', power_kw: 50, level: 'DC' },
+    ],
+    network: 'Electron Power',
+    access: 'public',
+    notes: 'Agencia Electron Power en C.C. Metro 15.',
+  },
   {
     id: 'gt-z15-mc',
     name: "McDonald's Vista Hermosa",
@@ -736,6 +768,38 @@ export const chargerStations: ChargerStation[] = [
     ],
     network: 'EV Network GT',
     access: 'public',
+  },
+  // ── Santa Rosa ────────────────────────────────────────────────────────
+  {
+    id: 'str-sarita-la-isla',
+    name: 'Sarita La Isla',
+    address: 'Km 72.5 Carretera a El Salvador, Comercial La Isla, Cuilapa, Santa Rosa',
+    zone: 'Santa Rosa',
+    lat: 14.2820,
+    lng: -90.2968,
+    status: 'active',
+    connectors: [
+      { type: 'Type2', power_kw: 22, level: 'L2' },
+    ],
+    network: 'Electron Power',
+    access: 'public',
+    notes: 'En Restaurante Sarita La Isla. Camino a Jutiapa / El Salvador.',
+  },
+  // ── El Progreso ────────────────────────────────────────────────────────
+  {
+    id: 'elp-sarita-el-rancho',
+    name: 'Sarita El Rancho',
+    address: 'Km 84.5 Carretera al Atlántico, El Rancho, Guastatoya',
+    zone: 'El Progreso',
+    lat: 14.9850,
+    lng: -90.0820,
+    status: 'active',
+    connectors: [
+      { type: 'Type2', power_kw: 22, level: 'L2' },
+    ],
+    network: 'Electron Power',
+    access: 'public',
+    notes: 'En Restaurante Sarita. Punto de carga en ruta al Atlántico.',
   },
   // ── Jutiapa ───────────────────────────────────────────────────────────
   {

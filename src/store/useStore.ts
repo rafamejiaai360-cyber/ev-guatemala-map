@@ -160,7 +160,7 @@ export const useStore = create<AppState>((set, get) => ({
   userLocation: null,
   setUserLocation: (loc) => set({ userLocation: loc }),
 
-  sidebarOpen: true,
+  sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   lastStatusCheck: null,
