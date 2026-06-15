@@ -479,6 +479,21 @@ export const chargerStations: ChargerStation[] = [
   },
   // ── Villa Nueva ───────────────────────────────────────────────────────
   {
+    id: 'vn-metrosur',
+    name: 'Metrosur',
+    address: 'Calzada Raúl Aguilar Batres, Villa Nueva',
+    zone: 'Villa Nueva',
+    lat: 14.5630,
+    lng: -90.5660,
+    status: 'active',
+    connectors: [
+      { type: 'Type2', power_kw: 7.4, level: 'L2' },
+    ],
+    network: 'No networked',
+    access: 'public',
+    notes: 'Fuente: PlugShare (3 check-ins verificados). Horario referencial: 10am-8pm.',
+  },
+  {
     id: 'vn-cc-villas',
     name: 'Centro Comercial Villas Fontabella',
     address: 'Blvd. El Frutal, Villa Nueva',
