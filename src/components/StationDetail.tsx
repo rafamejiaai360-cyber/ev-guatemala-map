@@ -1,9 +1,6 @@
-import { useState, useEffect } from 'react';
-import type { ChargerStation, Review } from '../types';
-import { getReviews } from '../utils/reviewsApi';
-import { useStore } from '../store/useStore';
-import StarRating from './StarRating';
-import ReviewForm from './ReviewForm';
+import type { ChargerStation } from '../types';
+import StationPhotos from './StationPhotos';
+import StationReviews from './StationReviews';
 
 interface Props {
   station: ChargerStation;
@@ -38,29 +35,6 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function StationDetail({ station, onBack }: Props) {
-  const { ratings, loadRatings } = useStore();
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-
-  const ratingInfo = ratings[station.id];
-
-  useEffect(() => {
-    setLoading(true);
-    setReviews([]);
-    setShowForm(false);
-    getReviews(station.id)
-      .then(setReviews)
-      .catch(() => setReviews([]))
-      .finally(() => setLoading(false));
-  }, [station.id]);
-
-  function handleReviewSubmitted() {
-    setShowForm(false);
-    getReviews(station.id).then(setReviews).catch(() => {});
-    loadRatings();
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* Back header */}
@@ -109,72 +83,11 @@ export default function StationDetail({ station, onBack }: Props) {
           )}
         </div>
 
-        {/* Rating summary */}
-        <div className="px-4 py-3 border-b border-gray-100">
-          {ratingInfo ? (
-            <div className="flex items-center gap-2">
-              <StarRating value={ratingInfo.avg} size="md" />
-              <span className="text-sm font-semibold text-gray-900">{ratingInfo.avg.toFixed(1)}</span>
-              <span className="text-xs text-gray-400">
-                ({ratingInfo.count} {ratingInfo.count === 1 ? 'reseña' : 'reseñas'})
-              </span>
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400">Sin calificaciones todavía</p>
-          )}
-        </div>
+        {/* Photos */}
+        <StationPhotos stationId={station.id} />
 
-        {/* Reviews section */}
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Reseñas</h3>
-            {!showForm && (
-              <button
-                onClick={() => setShowForm(true)}
-                className="text-xs text-green-600 hover:text-green-700 font-medium transition-colors"
-              >
-                + Dejar reseña
-              </button>
-            )}
-          </div>
-
-          {showForm && (
-            <div className="mb-4">
-              <ReviewForm
-                station={station}
-                onSubmitted={handleReviewSubmitted}
-                onCancel={() => setShowForm(false)}
-              />
-            </div>
-          )}
-
-          {loading ? (
-            <p className="text-xs text-gray-400 text-center py-6">Cargando reseñas...</p>
-          ) : reviews.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-6">
-              No hay reseñas aún. ¡Sé el primero en opinar!
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {reviews.map((r) => (
-                <li key={r.id} className="border-b border-gray-50 pb-3 last:border-0 last:pb-0">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <StarRating value={r.rating} size="sm" />
-                      <span className="text-[10px] font-medium text-gray-700">{r.author}</span>
-                    </div>
-                    <span className="text-[10px] text-gray-400 flex-shrink-0">
-                      {new Date(r.date).toLocaleDateString('es-GT')}
-                    </span>
-                  </div>
-                  {r.text && (
-                    <p className="text-xs text-gray-600 leading-relaxed">{r.text}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {/* Reviews + ratings */}
+        <StationReviews stationId={station.id} stationName={station.name} />
       </div>
     </div>
   );
