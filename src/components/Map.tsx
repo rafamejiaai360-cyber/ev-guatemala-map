@@ -436,12 +436,10 @@ export default function EVMap() {
               icon={makeStationIcon(station.status, dimmed)}
               eventHandlers={{
                 click: () => {
-                  const { selectedStationId, setSelectedStationId } = useStore.getState();
-                  setSelectedStationId(selectedStationId === station.id ? null : station.id);
-                },
-                popupclose: () => {
-                  const { selectedStationId, setSelectedStationId } = useStore.getState();
-                  if (selectedStationId === station.id) setSelectedStationId(null);
+                  const { selectedStationId, setSelectedStationId, setSidebarOpen } = useStore.getState();
+                  const isAlreadySelected = selectedStationId === station.id;
+                  setSelectedStationId(isAlreadySelected ? null : station.id);
+                  if (!isAlreadySelected) setSidebarOpen(true);
                 },
               }}
               opacity={dimmed ? 0.25 : 1}
