@@ -25,6 +25,21 @@ export interface ChargerStation {
   image_url?: string;
 }
 
+export interface Review {
+  id: string;
+  stationId: string;
+  stationName: string;
+  rating: number;
+  text: string;
+  author: string;
+  date: string;
+}
+
+export interface RatingInfo {
+  avg: number;
+  count: number;
+}
+
 export interface Vehicle {
   id: string;
   brand: string;

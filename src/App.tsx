@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import AdminPanel from './components/AdminPanel';
@@ -12,7 +12,9 @@ const isAdmin =
   new URLSearchParams(window.location.search).get('admin') === 'true';
 
 export default function App() {
-  const { scanModalOpen } = useStore();
+  const { scanModalOpen, loadRatings } = useStore();
+
+  useEffect(() => { loadRatings(); }, []);
 
   if (isAdmin) return <AdminPanel />;
 

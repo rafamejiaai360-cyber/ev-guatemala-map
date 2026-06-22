@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { chargerStations } from '../data/chargers';
 import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } from '../utils/ocm';
-import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle } from '../types';
+import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo } from '../types';
+import { getAllRatings } from '../utils/reviewsApi';
 
 const STORAGE_KEY = 'ev_gt_status_overrides';
 const CUSTOM_KEY = 'ev_gt_custom_stations';
@@ -89,6 +90,10 @@ interface AppState {
   // Scan modal
   scanModalOpen: boolean;
   setScanModalOpen: (open: boolean) => void;
+
+  // Ratings (loaded from Worker API)
+  ratings: Record<string, RatingInfo>;
+  loadRatings: () => Promise<void>;
 }
 
 function computeFiltered(
@@ -209,6 +214,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   scanModalOpen: false,
   setScanModalOpen: (open) => set({ scanModalOpen: open }),
+
+  ratings: {},
+  loadRatings: async () => {
+    try {
+      const data = await getAllRatings();
+      set({ ratings: data });
+    } catch {
+      // silently fail when Worker isn't running (e.g. local dev with vite only)
+    }
+  },
 }));
 
 // Helper to build a ChargerStation from an OCM station (used in ScanModal)
