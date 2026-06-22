@@ -221,7 +221,7 @@ function StationPopupContent({ station }: { station: ChargerStation }) {
       </div>
 
       {/* User photos */}
-      <StationPhotos stationId={station.id} />
+      <StationPhotos stationId={station.id} stationName={station.name} />
 
       {/* Reviews */}
       <StationReviews stationId={station.id} stationName={station.name} compact />

@@ -5,12 +5,14 @@ import type { StationPhoto } from '../utils/photoDb';
 
 interface Props {
   stationId: string;
+  stationName?: string;
   padding?: string;
 }
 
-export default function StationPhotos({ stationId, padding = 'px-4 py-3' }: Props) {
+export default function StationPhotos({ stationId, stationName = '', padding = 'px-4 py-3' }: Props) {
   const [photos, setPhotos] = useState<StationPhoto[]>([]);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     loadPhotosForStation(stationId).then(setPhotos);
@@ -19,6 +21,7 @@ export default function StationPhotos({ stationId, padding = 'px-4 py-3' }: Prop
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploading(true);
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
@@ -28,9 +31,25 @@ export default function StationPhotos({ stationId, padding = 'px-4 py-3' }: Prop
         dataUrl,
         timestamp: Date.now(),
       };
+      // Save locally first (instant display)
       await savePhoto(photo);
       setPhotos((prev) => [...prev, photo]);
+      setUploading(false);
+
+      // Back up to Notion in background (non-blocking)
+      fetch('/api/photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stationId,
+          stationName,
+          imageBase64: dataUrl,
+          mimeType: file.type || 'image/jpeg',
+          filename: file.name || `${stationId}_${Date.now()}.jpg`,
+        }),
+      }).catch(() => {/* silently ignore upload errors */});
     };
+    reader.onerror = () => setUploading(false);
     reader.readAsDataURL(file);
     e.target.value = '';
   }
@@ -48,13 +67,24 @@ export default function StationPhotos({ stationId, padding = 'px-4 py-3' }: Prop
             className="w-16 h-16 object-cover rounded-lg cursor-pointer flex-shrink-0 hover:opacity-85 transition-opacity border border-gray-100"
           />
         ))}
-        <label className="flex-shrink-0 w-16 h-16 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors gap-1">
-          <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={handleUpload} />
-          <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-            <circle cx="12" cy="13" r="3" />
-          </svg>
-          <span className="text-[9px] text-gray-400">Subir</span>
+        <label className={`flex-shrink-0 w-16 h-16 border-2 border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-colors gap-1 ${uploading ? 'border-green-300 bg-green-50' : 'border-gray-200 hover:border-green-400 hover:bg-green-50'}`}>
+          <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={handleUpload} disabled={uploading} />
+          {uploading ? (
+            <>
+              <svg className="animate-spin" width="18" height="18" fill="none" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="#86efac" strokeWidth="3" strokeLinecap="round" strokeDasharray="31.4" strokeDashoffset="10" />
+              </svg>
+              <span className="text-[9px] text-green-500">Guardando</span>
+            </>
+          ) : (
+            <>
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <circle cx="12" cy="13" r="3" />
+              </svg>
+              <span className="text-[9px] text-gray-400">Subir</span>
+            </>
+          )}
         </label>
       </div>
 

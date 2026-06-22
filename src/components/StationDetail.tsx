@@ -84,7 +84,7 @@ export default function StationDetail({ station, onBack }: Props) {
         </div>
 
         {/* Photos */}
-        <StationPhotos stationId={station.id} />
+        <StationPhotos stationId={station.id} stationName={station.name} />
 
         {/* Reviews + ratings */}
         <StationReviews stationId={station.id} stationName={station.name} />
