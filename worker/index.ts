@@ -3,6 +3,7 @@ export interface Env {
   NOTION_TOKEN: string;
   NOTION_REVIEWS_DB_ID: string;
   NOTION_STATIONS_DB_ID: string;
+  PHOTOS?: KVNamespace; // set up with: npx wrangler kv namespace create PHOTOS
 }
 
 const NOTION_API = 'https://api.notion.com/v1';
@@ -18,10 +19,7 @@ function notionHeaders(token: string): HeadersInit {
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-    },
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });
 }
 
@@ -29,7 +27,7 @@ function apiError(msg: string, status = 400): Response {
   return json({ error: msg }, status);
 }
 
-// ─── Notion page types ───────────────────────────────────────────────────────
+// ─── Notion types ─────────────────────────────────────────────────────────────
 
 interface NotionPage {
   id: string;
@@ -40,14 +38,13 @@ interface NotionPage {
 interface NotionProp {
   number?: number;
   rich_text?: { text: { content: string } }[];
-  created_time?: string;
   files?: NotionFile[];
 }
 
 interface NotionFile {
   name?: string;
   type?: string;
-  file?: { url: string; expiry_time: string };
+  file?: { url: string };
   external?: { url: string };
 }
 
@@ -67,7 +64,7 @@ function pageToReview(page: NotionPage) {
   };
 }
 
-// ─── Station helpers ─────────────────────────────────────────────────────────
+// ─── Station helpers ──────────────────────────────────────────────────────────
 
 async function findStationPageId(stationId: string, env: Env): Promise<string | null> {
   const res = await fetch(`${NOTION_API}/databases/${env.NOTION_STATIONS_DB_ID}/query`, {
@@ -84,7 +81,6 @@ async function findStationPageId(stationId: string, env: Env): Promise<string | 
 }
 
 async function updateStationStats(stationId: string, env: Env): Promise<void> {
-  // Recalculate avg rating + count from all reviews for this station
   const res = await fetch(`${NOTION_API}/databases/${env.NOTION_REVIEWS_DB_ID}/query`, {
     method: 'POST',
     headers: notionHeaders(env.NOTION_TOKEN),
@@ -100,8 +96,6 @@ async function updateStationStats(stationId: string, env: Env): Promise<void> {
   if (!ratings.length) return;
 
   const avg = Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10;
-  const count = ratings.length;
-
   const pageId = await findStationPageId(stationId, env);
   if (!pageId) return;
 
@@ -111,118 +105,13 @@ async function updateStationStats(stationId: string, env: Env): Promise<void> {
     body: JSON.stringify({
       properties: {
         'Rating Promedio': { number: avg },
-        'Total Reseñas': { number: count },
+        'Total Reseñas': { number: ratings.length },
       },
     }),
   });
 }
 
-// ─── Photo upload helpers ─────────────────────────────────────────────────────
-
-function base64ToUint8Array(base64: string): Uint8Array {
-  const b64 = base64.includes(',') ? base64.split(',')[1] : base64;
-  const binaryStr = atob(b64);
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i);
-  }
-  return bytes;
-}
-
-async function uploadPhotoToNotion(
-  imageBase64: string,
-  mimeType: string,
-  filename: string,
-  env: Env,
-): Promise<string | null> {
-  // Step 1: Initialize file upload
-  const initRes = await fetch(`${NOTION_API}/file_uploads`, {
-    method: 'POST',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ mode: 'single_part', filename, content_type: mimeType }),
-  });
-
-  if (!initRes.ok) {
-    console.error('File upload init failed:', await initRes.text());
-    return null;
-  }
-
-  const init = await initRes.json() as { id: string };
-  const fileUploadId = init.id;
-
-  // Step 2: Upload binary content as multipart/form-data
-  const imageBytes = base64ToUint8Array(imageBase64);
-  const boundary = `----CFBoundary${Date.now().toString(36)}`;
-
-  const enc = new TextEncoder();
-  const headerPart = enc.encode(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`,
-  );
-  const footerPart = enc.encode(`\r\n--${boundary}--\r\n`);
-
-  const body = new Uint8Array(headerPart.length + imageBytes.length + footerPart.length);
-  body.set(headerPart, 0);
-  body.set(imageBytes, headerPart.length);
-  body.set(footerPart, headerPart.length + imageBytes.length);
-
-  const uploadRes = await fetch(`${NOTION_API}/file_uploads/${fileUploadId}/send`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.NOTION_TOKEN}`,
-      'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      'Notion-Version': '2022-06-28',
-    },
-    body,
-  });
-
-  if (!uploadRes.ok) {
-    console.error('File upload content failed:', await uploadRes.text());
-    return null;
-  }
-
-  return fileUploadId;
-}
-
-async function appendPhotoToStation(pageId: string, fileUploadId: string, env: Env): Promise<boolean> {
-  // Get existing files first
-  const pageRes = await fetch(`${NOTION_API}/pages/${pageId}`, {
-    headers: notionHeaders(env.NOTION_TOKEN),
-  });
-
-  const existingFiles: unknown[] = [];
-  if (pageRes.ok) {
-    const page = await pageRes.json() as { properties: Record<string, NotionProp> };
-    const existing = page.properties['Fotos']?.files ?? [];
-    // Re-encode existing files as external refs (internal files have temporary URLs,
-    // so we preserve only external ones; new ones will be file_uploads)
-    for (const f of existing) {
-      if (f.type === 'external' && f.external?.url) {
-        existingFiles.push({ type: 'external', name: f.name ?? 'foto', external: { url: f.external.url } });
-      } else if (f.file?.url) {
-        // Include internal files by their current URL (they may expire but Notion keeps them)
-        existingFiles.push({ type: 'external', name: f.name ?? 'foto', external: { url: f.file.url } });
-      }
-    }
-  }
-
-  const allFiles = [
-    ...existingFiles,
-    { type: 'file_upload', file_upload: { id: fileUploadId } },
-  ];
-
-  const patchRes = await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ properties: { Fotos: { files: allFiles } } }),
-  });
-
-  if (!patchRes.ok) {
-    console.error('Attach photo failed:', await patchRes.text());
-  }
-  return patchRes.ok;
-}
-
-// ─── Route handlers ───────────────────────────────────────────────────────────
+// ─── Review handlers ──────────────────────────────────────────────────────────
 
 async function handleGetReviews(stationId: string, env: Env): Promise<Response> {
   const res = await fetch(`${NOTION_API}/databases/${env.NOTION_REVIEWS_DB_ID}/query`, {
@@ -249,7 +138,6 @@ async function handleGetRatings(env: Env): Promise<Response> {
 
   const data = await res.json() as { results: NotionPage[] };
   const agg: Record<string, { sum: number; count: number }> = {};
-
   for (const page of data.results) {
     const sid = richText(page.properties['Station ID']);
     const rating = page.properties['Rating']?.number;
@@ -259,7 +147,6 @@ async function handleGetRatings(env: Env): Promise<Response> {
       agg[sid].count += 1;
     }
   }
-
   const result: Record<string, { avg: number; count: number }> = {};
   for (const [sid, { sum, count }] of Object.entries(agg)) {
     result[sid] = { avg: Math.round((sum / count) * 10) / 10, count };
@@ -269,21 +156,15 @@ async function handleGetRatings(env: Env): Promise<Response> {
 
 async function handlePostReview(request: Request, env: Env): Promise<Response> {
   const body = await request.json() as {
-    stationId: string;
-    stationName: string;
-    rating: number;
-    text?: string;
-    author?: string;
+    stationId: string; stationName: string;
+    rating: number; text?: string; author?: string;
   };
-
   const { stationId, stationName, rating, text = '', author = 'Anónimo' } = body;
   if (!stationId || !rating || rating < 1 || rating > 5) {
     return apiError('stationId y rating (1-5) son requeridos');
   }
 
-  const dateStr = new Date().toLocaleDateString('es-GT', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  });
+  const dateStr = new Date().toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const res = await fetch(`${NOTION_API}/pages`, {
     method: 'POST',
@@ -301,61 +182,165 @@ async function handlePostReview(request: Request, env: Env): Promise<Response> {
     }),
   });
 
-  if (!res.ok) {
-    const err = await res.text();
-    console.error('Notion error:', err);
-    return apiError('Error guardando reseña en Notion', 502);
-  }
+  if (!res.ok) { console.error('Notion error:', await res.text()); return apiError('Error guardando reseña', 502); }
 
   const created = await res.json() as { id: string };
-
-  // Fire-and-forget: update station's Rating Promedio + Total Reseñas
-  env.ASSETS.fetch.bind(env); // keep env in scope (CF Workers pattern)
+  // fire-and-forget stats update
   (async () => { try { await updateStationStats(stationId, env); } catch {} })();
-
   return json({ id: created.id, ok: true }, 201);
 }
 
-async function handlePostPhoto(request: Request, env: Env): Promise<Response> {
-  const body = await request.json() as {
-    stationId: string;
-    stationName: string;
-    imageBase64: string;
-    mimeType?: string;
-    filename?: string;
-  };
-
-  const {
-    stationId,
-    stationName,
-    imageBase64,
-    mimeType = 'image/jpeg',
-    filename = `${stationId}_${Date.now()}.jpg`,
-  } = body;
-
-  if (!stationId || !imageBase64) {
-    return apiError('stationId e imageBase64 son requeridos');
+async function handleUpdateReview(id: string, request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as { rating?: number; text?: string };
+  const properties: Record<string, unknown> = {};
+  if (body.rating) {
+    if (body.rating < 1 || body.rating > 5) return apiError('Rating debe ser 1-5');
+    properties['Rating'] = { number: body.rating };
+  }
+  if (body.text !== undefined) {
+    properties['Reseña'] = { rich_text: [{ text: { content: body.text } }] };
   }
 
-  // Find station page
+  const res = await fetch(`${NOTION_API}/pages/${id}`, {
+    method: 'PATCH',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({ properties }),
+  });
+  if (!res.ok) return apiError('Error actualizando reseña', 502);
+
+  // fire-and-forget: we don't have stationId here but ratings will refresh on next load
+  return json({ ok: true });
+}
+
+async function handleDeleteReview(id: string, env: Env): Promise<Response> {
+  const res = await fetch(`${NOTION_API}/pages/${id}`, {
+    method: 'PATCH',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({ archived: true }),
+  });
+  if (!res.ok) return apiError('Error eliminando reseña', 502);
+  return json({ ok: true });
+}
+
+// ─── Photo helpers ────────────────────────────────────────────────────────────
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const b64 = base64.includes(',') ? base64.split(',')[1] : base64;
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function photoUrl(request: Request, photoId: string): string {
+  return `${new URL(request.url).origin}/api/photo/${photoId}`;
+}
+
+async function getStationFotos(pageId: string, env: Env): Promise<NotionFile[]> {
+  const res = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
+  if (!res.ok) return [];
+  const page = await res.json() as { properties: Record<string, NotionProp> };
+  return page.properties['Fotos']?.files ?? [];
+}
+
+async function updateStationFotos(pageId: string, files: unknown[], env: Env): Promise<void> {
+  await fetch(`${NOTION_API}/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({ properties: { Fotos: { files } } }),
+  });
+}
+
+// ─── Photo handlers ───────────────────────────────────────────────────────────
+
+async function handleGetPhotos(stationId: string, env: Env): Promise<Response> {
+  const pageId = await findStationPageId(stationId, env);
+  if (!pageId) return json([]);
+
+  const files = await getStationFotos(pageId, env);
+  const photos = files
+    .filter(f => f.type === 'external' && f.external?.url?.includes('/api/photo/'))
+    .map(f => {
+      const url = f.external!.url;
+      const id = url.split('/api/photo/').pop() ?? '';
+      return { id, url: `/api/photo/${id}` };
+    });
+  return json(photos);
+}
+
+async function handleGetPhoto(photoId: string, env: Env): Promise<Response> {
+  if (!env.PHOTOS) {
+    return new Response('KV no configurado. Crea el namespace con: npx wrangler kv namespace create PHOTOS', { status: 503 });
+  }
+  const result = await env.PHOTOS.getWithMetadata<{ contentType: string }>(photoId, { type: 'arrayBuffer' });
+  if (!result.value) return new Response('Foto no encontrada', { status: 404 });
+
+  return new Response(result.value, {
+    headers: {
+      'Content-Type': result.metadata?.contentType ?? 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+}
+
+async function handlePostPhoto(request: Request, env: Env): Promise<Response> {
+  if (!env.PHOTOS) {
+    return apiError('Almacenamiento de fotos no configurado. Configura KV namespace PHOTOS.', 503);
+  }
+
+  const body = await request.json() as {
+    stationId: string; stationName: string;
+    imageBase64: string; mimeType?: string; filename?: string;
+  };
+  const { stationId, imageBase64, mimeType = 'image/jpeg' } = body;
+  if (!stationId || !imageBase64) return apiError('stationId e imageBase64 son requeridos');
+
+  // Decode and store binary in KV
+  const bytes = base64ToUint8Array(imageBase64);
+  const photoId = `${stationId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  await env.PHOTOS.put(photoId, bytes.buffer, {
+    metadata: { contentType: mimeType },
+  });
+
+  // Get station page and append photo URL to Fotos
+  const pUrl = photoUrl(request, photoId);
   const pageId = await findStationPageId(stationId, env);
   if (!pageId) {
-    return apiError(`No se encontró página para la estación ${stationId}`, 404);
+    await env.PHOTOS.delete(photoId);
+    return apiError(`Estación ${stationId} no encontrada`, 404);
   }
 
-  // Upload to Notion
-  const fileUploadId = await uploadPhotoToNotion(imageBase64, mimeType, filename, env);
-  if (!fileUploadId) {
-    return apiError('No se pudo subir la foto a Notion', 502);
+  const existing = await getStationFotos(pageId, env);
+  const kept = existing
+    .filter(f => f.type === 'external' && f.external?.url)
+    .map(f => ({ name: f.name ?? 'foto', type: 'external', external: { url: f.external!.url } }));
+
+  await updateStationFotos(pageId, [...kept, { name: 'foto', type: 'external', external: { url: pUrl } }], env);
+
+  return json({ photoId, url: `/api/photo/${photoId}` }, 201);
+}
+
+async function handleDeletePhoto(url: URL, env: Env): Promise<Response> {
+  const photoId = url.searchParams.get('photoId');
+  const stationId = url.searchParams.get('stationId');
+  if (!photoId || !stationId) return apiError('photoId y stationId requeridos');
+
+  // Delete from KV
+  if (env.PHOTOS) await env.PHOTOS.delete(photoId);
+
+  // Remove from Notion Fotos
+  const pageId = await findStationPageId(stationId, env);
+  if (pageId) {
+    const existing = await getStationFotos(pageId, env);
+    const filtered = existing
+      .filter(f => !(f.type === 'external' && f.external?.url?.includes(photoId)))
+      .filter(f => f.type === 'external' && f.external?.url)
+      .map(f => ({ name: f.name ?? 'foto', type: 'external', external: { url: f.external!.url } }));
+    await updateStationFotos(pageId, filtered, env);
   }
 
-  // Attach to station page
-  const ok = await appendPhotoToStation(pageId, fileUploadId, env);
-  if (!ok) {
-    return apiError('No se pudo adjuntar la foto a la estación', 502);
-  }
-
-  return json({ ok: true, fileUploadId }, 201);
+  return json({ ok: true });
 }
 
 // ─── Main fetch handler ───────────────────────────────────────────────────────
@@ -368,30 +353,48 @@ export default {
       return new Response(null, {
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
         },
       });
     }
 
     if (url.pathname.startsWith('/api/')) {
-      const path = url.pathname.slice(5); // remove '/api/'
+      const path = url.pathname.slice(5); // strip '/api/'
 
+      // Reviews CRUD
       if (path === 'reviews') {
         if (request.method === 'GET') {
-          const stationId = url.searchParams.get('stationId');
-          if (!stationId) return apiError('stationId requerido');
-          return handleGetReviews(stationId, env);
+          const sid = url.searchParams.get('stationId');
+          return sid ? handleGetReviews(sid, env) : apiError('stationId requerido');
         }
         if (request.method === 'POST') return handlePostReview(request, env);
       }
 
-      if (path === 'ratings' && request.method === 'GET') {
-        return handleGetRatings(env);
+      // Individual review edit/delete: /api/reviews/:id
+      const reviewMatch = path.match(/^reviews\/([a-zA-Z0-9-]+)$/);
+      if (reviewMatch) {
+        const id = reviewMatch[1];
+        if (request.method === 'PATCH') return handleUpdateReview(id, request, env);
+        if (request.method === 'DELETE') return handleDeleteReview(id, env);
       }
 
-      if (path === 'photos' && request.method === 'POST') {
-        return handlePostPhoto(request, env);
+      if (path === 'ratings' && request.method === 'GET') return handleGetRatings(env);
+
+      // Photos list + upload
+      if (path === 'photos') {
+        if (request.method === 'GET') {
+          const sid = url.searchParams.get('stationId');
+          return sid ? handleGetPhotos(sid, env) : apiError('stationId requerido');
+        }
+        if (request.method === 'POST') return handlePostPhoto(request, env);
+        if (request.method === 'DELETE') return handleDeletePhoto(url, env);
+      }
+
+      // Serve individual photo binary: /api/photo/:id
+      const photoMatch = path.match(/^photo\/(.+)$/);
+      if (photoMatch) {
+        if (request.method === 'GET') return handleGetPhoto(photoMatch[1], env);
       }
 
       return apiError('Ruta no encontrada', 404);
