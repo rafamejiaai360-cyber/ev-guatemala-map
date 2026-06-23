@@ -4,6 +4,16 @@ import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } 
 import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo } from '../types';
 import { getAllRatings } from '../utils/reviewsApi';
 
+async function fetchDynamicStations(): Promise<ChargerStation[]> {
+  try {
+    const res = await fetch('/api/stations/dynamic');
+    if (!res.ok) return [];
+    return await res.json() as ChargerStation[];
+  } catch {
+    return [];
+  }
+}
+
 const STORAGE_KEY = 'ev_gt_status_overrides';
 const CUSTOM_KEY = 'ev_gt_custom_stations';
 
@@ -54,9 +64,14 @@ interface AppState {
   statusOverrides: Record<string, ChargerStatus>;
   setStationStatus: (id: string, status: ChargerStatus) => void;
 
-  // Custom stations (added via scan)
+  // Custom stations (legacy localStorage-only)
   customStations: ChargerStation[];
   addCustomStation: (station: ChargerStation) => void;
+
+  // Dynamic stations from Notion (added via scan, shared across all users)
+  dynamicStations: ChargerStation[];
+  addDynamicStation: (station: ChargerStation) => void;
+  loadDynamicStations: () => Promise<void>;
 
   // Filters
   filters: Filters;
@@ -91,6 +106,16 @@ interface AppState {
   scanModalOpen: boolean;
   setScanModalOpen: (open: boolean) => void;
 
+  // Add station modal
+  addStationModalOpen: boolean;
+  setAddStationModalOpen: (open: boolean) => void;
+
+  // Admin auth
+  isAdminAuthenticated: boolean;
+  setAdminAuthenticated: (val: boolean) => void;
+  adminLoginOpen: boolean;
+  setAdminLoginOpen: (open: boolean) => void;
+
   // Ratings (loaded from Worker API)
   ratings: Record<string, RatingInfo>;
   loadRatings: () => Promise<void>;
@@ -121,6 +146,17 @@ function computeFiltered(
 const initialOverrides = loadOverrides();
 const initialCustom = loadCustomStations();
 const allInitial = applyOverrides([...chargerStations, ...initialCustom], initialOverrides);
+
+function buildAllStations(
+  overrides: Record<string, ChargerStatus>,
+  custom: ChargerStation[],
+  dynamic: ChargerStation[],
+): ChargerStation[] {
+  // Merge, excluding dynamic IDs already present in chargerStations
+  const staticIds = new Set(chargerStations.map(s => s.id));
+  const dedupedDynamic = dynamic.filter(d => !staticIds.has(d.id));
+  return applyOverrides([...chargerStations, ...custom, ...dedupedDynamic], overrides);
+}
 const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all' };
 
 export const useStore = create<AppState>((set, get) => ({
@@ -130,7 +166,7 @@ export const useStore = create<AppState>((set, get) => ({
   setStationStatus: (id, status) => {
     const overrides = { ...get().statusOverrides, [id]: status };
     saveOverrides(overrides);
-    const stations = applyOverrides([...chargerStations, ...get().customStations], overrides);
+    const stations = buildAllStations(overrides, get().customStations, get().dynamicStations);
     const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
     set({ statusOverrides: overrides, stations, filteredStations });
   },
@@ -139,9 +175,24 @@ export const useStore = create<AppState>((set, get) => ({
   addCustomStation: (station) => {
     const custom = [...get().customStations, station];
     saveCustomStations(custom);
-    const stations = applyOverrides([...chargerStations, ...custom], get().statusOverrides);
+    const stations = buildAllStations(get().statusOverrides, custom, get().dynamicStations);
     const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
     set({ customStations: custom, stations, filteredStations });
+  },
+
+  dynamicStations: [],
+  addDynamicStation: (station) => {
+    const dynamic = [...get().dynamicStations.filter(d => d.id !== station.id), station];
+    const stations = buildAllStations(get().statusOverrides, get().customStations, dynamic);
+    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
+    set({ dynamicStations: dynamic, stations, filteredStations });
+  },
+  loadDynamicStations: async () => {
+    const dynamic = await fetchDynamicStations();
+    if (!dynamic.length) return;
+    const stations = buildAllStations(get().statusOverrides, get().customStations, dynamic);
+    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
+    set({ dynamicStations: dynamic, stations, filteredStations });
   },
 
   filters: initialFilters,
@@ -177,7 +228,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ statusCheckLoading: true, statusCheckError: null });
     try {
       const ocmData = await fetchGTStations();
-      const allStations = [...chargerStations, ...get().customStations];
+      const allStations = buildAllStations(get().statusOverrides, get().customStations, get().dynamicStations);
       const newOverrides = { ...get().statusOverrides };
 
       let matched = 0;
@@ -194,7 +245,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       saveOverrides(newOverrides);
-      const stations = applyOverrides(allStations, newOverrides);
+      const stations = buildAllStations(newOverrides, get().customStations, get().dynamicStations);
       const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
       set({
         statusOverrides: newOverrides,
@@ -214,6 +265,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   scanModalOpen: false,
   setScanModalOpen: (open) => set({ scanModalOpen: open }),
+
+  addStationModalOpen: false,
+  setAddStationModalOpen: (open) => set({ addStationModalOpen: open }),
+
+  isAdminAuthenticated: localStorage.getItem('ev_admin_auth') === '1',
+  setAdminAuthenticated: (val) => {
+    if (val) localStorage.setItem('ev_admin_auth', '1');
+    else localStorage.removeItem('ev_admin_auth');
+    set({ isAdminAuthenticated: val });
+  },
+  adminLoginOpen: false,
+  setAdminLoginOpen: (open) => set({ adminLoginOpen: open }),
 
   ratings: {},
   loadRatings: async () => {

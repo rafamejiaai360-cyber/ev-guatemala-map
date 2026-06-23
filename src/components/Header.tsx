@@ -1,16 +1,6 @@
-import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import VehicleSelector from './VehicleSelector';
 import FilterBar from './FilterBar';
-
-function formatLastCheck(date: Date | null): string {
-  if (!date) return '';
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'actualizado ahora';
-  if (diffMin === 1) return 'hace 1 min';
-  return `hace ${diffMin} min`;
-}
 
 export default function Header() {
   const {
@@ -19,21 +9,12 @@ export default function Header() {
     filteredStations,
     sidebarOpen,
     setSidebarOpen,
-    lastStatusCheck,
-    statusCheckLoading,
-    statusCheckError,
-    refreshStatus,
     setScanModalOpen,
+    setAddStationModalOpen,
+    isAdminAuthenticated,
+    setAdminAuthenticated,
+    setAdminLoginOpen,
   } = useStore();
-
-  const [visibleError, setVisibleError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!statusCheckError) { setVisibleError(null); return; }
-    setVisibleError(statusCheckError);
-    const t = setTimeout(() => setVisibleError(null), 5000);
-    return () => clearTimeout(t);
-  }, [statusCheckError]);
 
   const activeCount = stations.filter((s) => s.status === 'active').length;
   const compatibleCount = selectedVehicle ? filteredStations.length : null;
@@ -82,51 +63,57 @@ export default function Header() {
           {/* Divider */}
           <div className="w-px h-5 bg-gray-200" />
 
-          {/* Refresh status button */}
-          <div className="flex flex-col items-center">
+          {/* Add station button — visible only when authenticated */}
+          {isAdminAuthenticated && (
             <button
-              onClick={() => refreshStatus()}
-              disabled={statusCheckLoading}
-              title="Actualizar estado de cargadores"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors disabled:opacity-50"
+              onClick={() => setAddStationModalOpen(true)}
+              title="Agregar nueva estación"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
             >
-              {statusCheckLoading ? (
-                <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10" />
-                </svg>
-              ) : (
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              )}
-              <span className="hidden sm:inline">
-                {statusCheckLoading ? 'Actualizando…' : lastStatusCheck ? formatLastCheck(lastStatusCheck) : 'Estado en vivo'}
-              </span>
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              <span className="hidden sm:inline">Agregar</span>
             </button>
-            {visibleError && (
-              <span className="flex items-center gap-1 text-[10px] text-red-500 leading-tight bg-red-50 border border-red-200 rounded px-1.5 py-0.5 max-w-[140px]">
-                <span className="truncate">Sin conexión</span>
-                <button onClick={() => setVisibleError(null)} className="flex-shrink-0 hover:text-red-700 transition-colors">
-                  <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </span>
-            )}
-          </div>
+          )}
 
-          {/* Scan for new chargers button */}
+          {/* Scan for new chargers button — visible only when authenticated */}
+          {isAdminAuthenticated && (
+            <button
+              onClick={() => setScanModalOpen(true)}
+              title="Buscar cargadores nuevos"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+            >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="11" cy="11" r="8" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 8v6M8 11h6" />
+              </svg>
+              <span className="hidden sm:inline">Explorar red</span>
+            </button>
+          )}
+
+          {/* Admin lock button */}
           <button
-            onClick={() => setScanModalOpen(true)}
-            title="Buscar cargadores nuevos"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+            onClick={() => isAdminAuthenticated ? setAdminAuthenticated(false) : setAdminLoginOpen(true)}
+            title={isAdminAuthenticated ? 'Cerrar sesión de administrador' : 'Acceso de administrador'}
+            className={`p-1.5 rounded-lg transition-colors ${
+              isAdminAuthenticated
+                ? 'text-green-600 hover:bg-green-50'
+                : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'
+            }`}
           >
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <circle cx="11" cy="11" r="8" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 8v6M8 11h6" />
-            </svg>
-            <span className="hidden sm:inline">Explorar red</span>
+            {isAdminAuthenticated ? (
+              /* Unlocked */
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+              </svg>
+            ) : (
+              /* Locked */
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+              </svg>
+            )}
           </button>
         </div>
       </div>

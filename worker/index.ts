@@ -3,7 +3,9 @@ export interface Env {
   NOTION_TOKEN: string;
   NOTION_REVIEWS_DB_ID: string;
   NOTION_STATIONS_DB_ID: string;
-  PHOTOS?: KVNamespace; // set up with: npx wrangler kv namespace create PHOTOS
+  PHOTOS?: KVNamespace;
+  OCM_API_KEY?: string;
+  ADMIN_PASSWORD?: string;
 }
 
 const NOTION_API = 'https://api.notion.com/v1';
@@ -36,9 +38,11 @@ interface NotionPage {
 }
 
 interface NotionProp {
-  number?: number;
+  number?: number | null;
   rich_text?: { text: { content: string } }[];
+  title?: { text: { content: string } }[];
   files?: NotionFile[];
+  select?: { name: string } | null;
 }
 
 interface NotionFile {
@@ -109,6 +113,384 @@ async function updateStationStats(stationId: string, env: Env): Promise<void> {
       },
     }),
   });
+}
+
+// ─── Geo helpers ──────────────────────────────────────────────────────────────
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function isNearExisting(lat: number, lng: number, existing: { lat: number; lng: number }[], thresholdKm = 0.4): boolean {
+  return existing.some(e => haversineKm(lat, lng, e.lat, e.lng) < thresholdKm);
+}
+
+async function getAllNotionStationCoords(env: Env): Promise<{ lat: number; lng: number; stationId: string }[]> {
+  const results: { lat: number; lng: number; stationId: string }[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const body: Record<string, unknown> = { page_size: 100 };
+    if (cursor) body.start_cursor = cursor;
+
+    const res = await fetch(`${NOTION_API}/databases/${env.NOTION_STATIONS_DB_ID}/query`, {
+      method: 'POST',
+      headers: notionHeaders(env.NOTION_TOKEN),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) break;
+
+    const data = await res.json() as { results: NotionPage[]; has_more: boolean; next_cursor?: string };
+
+    for (const page of data.results) {
+      const lat = page.properties['Latitud']?.number ?? null;
+      const lng = page.properties['Longitud']?.number ?? null;
+      const stationId = richText(page.properties['Station ID']);
+      if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+        results.push({ lat, lng, stationId });
+      }
+    }
+
+    cursor = data.has_more ? data.next_cursor : undefined;
+  } while (cursor);
+
+  return results;
+}
+
+// ─── Scan types ───────────────────────────────────────────────────────────────
+
+interface OCMConnection {
+  ConnectionType?: { ID?: number; FormalName?: string } | null;
+  PowerKW?: number | null;
+}
+
+interface OCMStationRaw {
+  ID: number;
+  AddressInfo: {
+    Title: string;
+    AddressLine1?: string | null;
+    Town?: string | null;
+    Latitude: number;
+    Longitude: number;
+  };
+  StatusType?: { ID: number; IsOperational: boolean | null } | null;
+  Connections?: OCMConnection[] | null;
+  OperatorInfo?: { Title?: string } | null;
+}
+
+export interface StationCandidate {
+  id: string;
+  name: string;
+  address: string;
+  zone: string;
+  lat: number;
+  lng: number;
+  network: string;
+  status: string;
+  connectors: Array<{ type: string; power_kw: number; level: string }>;
+  source: string;
+  sourceId: string;
+}
+
+// ─── OCM helpers ──────────────────────────────────────────────────────────────
+
+const CONN_MAP: Record<number, string> = {
+  1: 'J1772', 2: 'CHAdeMO', 3: 'GBT',
+  25: 'Type2', 30: 'Type2',
+  32: 'CCS1', 33: 'CCS2',
+};
+
+function ocmConnType(conn: OCMConnection): string {
+  const id = conn.ConnectionType?.ID;
+  if (id && CONN_MAP[id]) return CONN_MAP[id];
+  const name = conn.ConnectionType?.FormalName ?? '';
+  if (name.includes('CHAdeMO')) return 'CHAdeMO';
+  if (name.includes('CCS') && name.includes('2')) return 'CCS2';
+  if (name.includes('CCS') && name.includes('1')) return 'CCS1';
+  if (name.includes('J1772')) return 'J1772';
+  if (name.includes('GB/T')) return 'GBT';
+  return 'Type2';
+}
+
+function ocmStatusToLocal(s: OCMStationRaw): string {
+  const op = s.StatusType?.IsOperational;
+  const id = s.StatusType?.ID ?? 0;
+  if (op === true || id === 10 || id === 50) return 'active';
+  if (op === false || id === 100 || id === 200) return 'offline';
+  if (id === 75 || id === 20 || id === 30) return 'maintenance';
+  return 'active';
+}
+
+function mapOCMConnectors(conns: OCMConnection[]): Array<{ type: string; power_kw: number; level: string }> {
+  const result = conns
+    .filter(c => c.ConnectionType)
+    .slice(0, 4)
+    .map(c => ({
+      type: ocmConnType(c),
+      power_kw: c.PowerKW ?? 7.4,
+      level: (c.PowerKW ?? 0) > 22 ? 'DC' : 'L2',
+    }));
+  return result.length > 0 ? result : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }];
+}
+
+// ─── Scan handlers ────────────────────────────────────────────────────────────
+
+async function scanOCM(
+  existing: { lat: number; lng: number }[],
+  apiKey?: string,
+): Promise<{ candidates: StationCandidate[]; scraped: boolean; error?: string }> {
+  try {
+    const url = new URL('https://api.openchargemap.io/v3/poi/');
+    url.searchParams.set('output', 'json');
+    url.searchParams.set('countrycode', 'GT');
+    url.searchParams.set('maxresults', '500');
+    url.searchParams.set('compact', 'false');
+    url.searchParams.set('verbose', 'false');
+    url.searchParams.set('includecomments', 'false');
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'EV-Guatemala-Map/1.0 (community charger map; contact: admin@evgt.app)',
+    };
+    if (apiKey) headers['X-API-Key'] = apiKey;
+
+    const res = await fetch(url.toString(), { headers });
+    if (!res.ok) {
+      return { candidates: [], scraped: false, error: `OCM respondió con error ${res.status}` };
+    }
+
+    const stations = await res.json() as OCMStationRaw[];
+    const candidates: StationCandidate[] = stations
+      .filter(s => !isNearExisting(s.AddressInfo.Latitude, s.AddressInfo.Longitude, existing))
+      .map(s => ({
+        id: `ocm-${s.ID}`,
+        name: s.AddressInfo.Title,
+        address: [s.AddressInfo.AddressLine1, s.AddressInfo.Town].filter(Boolean).join(', '),
+        zone: s.AddressInfo.Town ?? 'Guatemala',
+        lat: s.AddressInfo.Latitude,
+        lng: s.AddressInfo.Longitude,
+        network: s.OperatorInfo?.Title ?? 'Desconocido',
+        status: ocmStatusToLocal(s),
+        connectors: mapOCMConnectors(s.Connections ?? []),
+        source: 'OCM',
+        sourceId: String(s.ID),
+      }));
+
+    return { candidates, scraped: true };
+  } catch (e) {
+    return { candidates: [], scraped: false, error: String(e) };
+  }
+}
+
+async function scanElectronPower(
+  existing: { lat: number; lng: number }[],
+): Promise<{ candidates: StationCandidate[]; scraped: boolean; error?: string }> {
+  try {
+    const res = await fetch('https://electronpower.com/red-de-carga/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; EV-Guatemala-Map/1.0)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return { candidates: [], scraped: false, error: `HTTP ${res.status}` };
+
+    const html = await res.text();
+
+    // Look for coordinate patterns in embedded JSON/JS (lat/lng)
+    const candidates: StationCandidate[] = [];
+    const seen = new Set<string>();
+
+    // Pattern: {"lat": 14.xxx, ... "lng": -90.xxx ...} or similar variations
+    const patterns = [
+      /["']?lat(?:itude)?["']?\s*[=:]\s*(-?\d{1,2}\.\d{3,8})[^;,\n]*?["']?l(?:ng|on|ongitude)["']?\s*[=:]\s*(-?\d{2,3}\.\d{3,8})/gi,
+      /["']?l(?:ng|on|ongitude)["']?\s*[=:]\s*(-?\d{2,3}\.\d{3,8})[^;,\n]*?["']?lat(?:itude)?["']?\s*[=:]\s*(-?\d{1,2}\.\d{3,8})/gi,
+    ];
+
+    for (const pattern of patterns) {
+      const isLatFirst = pattern.source.startsWith('["\'');
+      for (const match of html.matchAll(pattern)) {
+        let lat: number, lng: number;
+        if (isLatFirst) {
+          lat = parseFloat(match[1]);
+          lng = parseFloat(match[2]);
+        } else {
+          lng = parseFloat(match[1]);
+          lat = parseFloat(match[2]);
+        }
+        // Guatemala bounding box
+        if (lat < 13.7 || lat > 17.9 || lng < -92.3 || lng > -88.2) continue;
+        const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (isNearExisting(lat, lng, existing)) continue;
+        candidates.push({
+          id: `ep-${lat.toFixed(4)}x${lng.toFixed(4)}`.replace('-', 'n'),
+          name: 'Cargador Electron Power',
+          address: '',
+          zone: 'Guatemala',
+          lat, lng,
+          network: 'Electron Power',
+          status: 'active',
+          connectors: [{ type: 'CCS2', power_kw: 50, level: 'DC' }],
+          source: 'Electron Power',
+          sourceId: key,
+        });
+      }
+    }
+
+    return { candidates, scraped: true };
+  } catch (e) {
+    return { candidates: [], scraped: false, error: 'Página usa renderizado dinámico (JavaScript). Verifica manualmente.' };
+  }
+}
+
+async function handleGetScan(env: Env): Promise<Response> {
+  // Load all existing station coords from Notion (source of truth)
+  const existing = await getAllNotionStationCoords(env);
+
+  // Scan sources in parallel
+  const [ocmResult, epResult] = await Promise.all([
+    scanOCM(existing, env.OCM_API_KEY),
+    scanElectronPower(existing),
+  ]);
+
+  return json({
+    sources: [
+      {
+        id: 'ocm',
+        name: 'OpenChargeMap',
+        url: 'https://openchargemap.org/site/poi/list#!?country=GT',
+        description: 'Base de datos global de cargadores, colaborativa y de código abierto',
+        ...ocmResult,
+      },
+      {
+        id: 'electron-power',
+        name: 'Electron Power',
+        url: 'https://electronpower.com/red-de-carga/',
+        description: 'Red de carga eléctrica de Guatemala',
+        ...epResult,
+      },
+    ],
+    existingCount: existing.length,
+    scannedAt: new Date().toISOString(),
+    manualSources: [
+      { name: 'BAC Ruta Eléctrica', url: 'https://www.baccredomatic.com/es-gt/personas/landing/ruta-electrica', description: 'Red de BAC en Guatemala' },
+      { name: 'PlugShare', url: 'https://www.plugshare.com/?latitude=14.64&longitude=-90.51&zoomLevel=10', description: 'Mapa global colaborativo' },
+      { name: 'AMEGUA', url: 'https://www.amegua.org/cargadores-elctricos', description: 'Asociación Movilidad Eléctrica Guatemala' },
+    ],
+  });
+}
+
+async function handlePostStation(request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as {
+    id: string; name: string; address?: string;
+    zone?: string; lat: number; lng: number;
+    network?: string; status?: string;
+    connectors?: Array<{ type: string; power_kw: number; level: string }>;
+    access?: string; source?: string;
+  };
+
+  if (!body.id || !body.name || body.lat == null || body.lng == null) {
+    return apiError('id, name, lat y lng son requeridos');
+  }
+
+  // Ensure no duplicate by checking ID
+  const existing = await findStationPageId(body.id, env);
+  if (existing) return apiError('Esta estación ya existe en la base de datos', 409);
+
+  const res = await fetch(`${NOTION_API}/pages`, {
+    method: 'POST',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({
+      parent: { database_id: env.NOTION_STATIONS_DB_ID },
+      properties: {
+        'Nombre': { title: [{ text: { content: body.name } }] },
+        'Station ID': { rich_text: [{ text: { content: body.id } }] },
+        'Latitud': { number: body.lat },
+        'Longitud': { number: body.lng },
+        'Zona': { rich_text: [{ text: { content: body.zone ?? 'Guatemala' } }] },
+        'Red': { rich_text: [{ text: { content: body.network ?? 'Desconocido' } }] },
+        'Dirección': { rich_text: [{ text: { content: body.address ?? '' } }] },
+        'Conectores': { rich_text: [{ text: { content: JSON.stringify(body.connectors ?? []) } }] },
+        'Acceso': { rich_text: [{ text: { content: body.access ?? 'public' } }] },
+        'Fuente': { rich_text: [{ text: { content: body.source ?? 'Manual' } }] },
+        'Estado': { select: { name: 'Activo' } },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    console.error('Notion create station error:', await res.text());
+    return apiError('Error guardando estación en Notion', 502);
+  }
+
+  const page = await res.json() as { id: string };
+  return json({ ok: true, notionId: page.id }, 201);
+}
+
+async function handleGetDynamicStations(env: Env): Promise<Response> {
+  // Query Notion for stations added via scan (Fuente is not empty)
+  const results: unknown[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const body: Record<string, unknown> = {
+      page_size: 100,
+      filter: {
+        and: [
+          { property: 'Fuente', rich_text: { is_not_empty: true } },
+          { property: 'Estado', select: { equals: 'Activo' } },
+        ],
+      },
+    };
+    if (cursor) body.start_cursor = cursor;
+
+    const res = await fetch(`${NOTION_API}/databases/${env.NOTION_STATIONS_DB_ID}/query`, {
+      method: 'POST',
+      headers: notionHeaders(env.NOTION_TOKEN),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return apiError('Error consultando Notion', 502);
+
+    const data = await res.json() as { results: NotionPage[]; has_more: boolean; next_cursor?: string };
+
+    for (const page of data.results) {
+      const lat = page.properties['Latitud']?.number;
+      const lng = page.properties['Longitud']?.number;
+      if (lat == null || lng == null) continue;
+
+      let connectors: unknown[] = [];
+      try {
+        const raw = richText(page.properties['Conectores']);
+        if (raw) connectors = JSON.parse(raw);
+      } catch {}
+
+      const access = richText(page.properties['Acceso']) || 'public';
+
+      results.push({
+        id: richText(page.properties['Station ID']),
+        name: page.properties['Nombre']?.title?.[0]?.text?.content ?? 'Estación',
+        address: richText(page.properties['Dirección']),
+        zone: richText(page.properties['Zona']) || 'Guatemala',
+        lat,
+        lng,
+        status: page.properties['Estado']?.select?.name === 'Activo' ? 'active' : 'maintenance',
+        connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
+        network: richText(page.properties['Red']) || 'Desconocido',
+        access: ['public', 'semi-public', 'private'].includes(access) ? access : 'public',
+      });
+    }
+
+    cursor = data.has_more ? data.next_cursor : undefined;
+  } while (cursor);
+
+  return json(results);
 }
 
 // ─── Review handlers ──────────────────────────────────────────────────────────
@@ -185,7 +567,6 @@ async function handlePostReview(request: Request, env: Env): Promise<Response> {
   if (!res.ok) { console.error('Notion error:', await res.text()); return apiError('Error guardando reseña', 502); }
 
   const created = await res.json() as { id: string };
-  // fire-and-forget stats update
   (async () => { try { await updateStationStats(stationId, env); } catch {} })();
   return json({ id: created.id, ok: true }, 201);
 }
@@ -207,8 +588,6 @@ async function handleUpdateReview(id: string, request: Request, env: Env): Promi
     body: JSON.stringify({ properties }),
   });
   if (!res.ok) return apiError('Error actualizando reseña', 502);
-
-  // fire-and-forget: we don't have stationId here but ratings will refresh on next load
   return json({ ok: true });
 }
 
@@ -270,7 +649,7 @@ async function handleGetPhotos(stationId: string, env: Env): Promise<Response> {
 
 async function handleGetPhoto(photoId: string, env: Env): Promise<Response> {
   if (!env.PHOTOS) {
-    return new Response('KV no configurado. Crea el namespace con: npx wrangler kv namespace create PHOTOS', { status: 503 });
+    return new Response('KV no configurado', { status: 503 });
   }
   const result = await env.PHOTOS.getWithMetadata<{ contentType: string }>(photoId, { type: 'arrayBuffer' });
   if (!result.value) return new Response('Foto no encontrada', { status: 404 });
@@ -286,7 +665,7 @@ async function handleGetPhoto(photoId: string, env: Env): Promise<Response> {
 
 async function handlePostPhoto(request: Request, env: Env): Promise<Response> {
   if (!env.PHOTOS) {
-    return apiError('Almacenamiento de fotos no configurado. Configura KV namespace PHOTOS.', 503);
+    return apiError('Almacenamiento de fotos no configurado.', 503);
   }
 
   const body = await request.json() as {
@@ -296,14 +675,10 @@ async function handlePostPhoto(request: Request, env: Env): Promise<Response> {
   const { stationId, imageBase64, mimeType = 'image/jpeg' } = body;
   if (!stationId || !imageBase64) return apiError('stationId e imageBase64 son requeridos');
 
-  // Decode and store binary in KV
   const bytes = base64ToUint8Array(imageBase64);
   const photoId = `${stationId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  await env.PHOTOS.put(photoId, bytes.buffer, {
-    metadata: { contentType: mimeType },
-  });
+  await env.PHOTOS.put(photoId, bytes.buffer, { metadata: { contentType: mimeType } });
 
-  // Get station page and append photo URL to Fotos
   const pUrl = photoUrl(request, photoId);
   const pageId = await findStationPageId(stationId, env);
   if (!pageId) {
@@ -326,10 +701,8 @@ async function handleDeletePhoto(url: URL, env: Env): Promise<Response> {
   const stationId = url.searchParams.get('stationId');
   if (!photoId || !stationId) return apiError('photoId y stationId requeridos');
 
-  // Delete from KV
   if (env.PHOTOS) await env.PHOTOS.delete(photoId);
 
-  // Remove from Notion Fotos
   const pageId = await findStationPageId(stationId, env);
   if (pageId) {
     const existing = await getStationFotos(pageId, env);
@@ -361,6 +734,51 @@ export default {
 
     if (url.pathname.startsWith('/api/')) {
       const path = url.pathname.slice(5); // strip '/api/'
+
+      // Admin login: POST /api/admin/login
+      if (path === 'admin/login' && request.method === 'POST') {
+        const { password } = await request.json() as { password?: string };
+        if (!env.ADMIN_PASSWORD) return apiError('Administración no configurada en el servidor', 503);
+        if (!password || password !== env.ADMIN_PASSWORD) return apiError('Contraseña incorrecta', 401);
+        return json({ ok: true });
+      }
+
+      // Scan: GET /api/scan
+      if (path === 'scan' && request.method === 'GET') return handleGetScan(env);
+
+      // Resolve Google Maps URL → coordinates: GET /api/resolve-location?url=...
+      if (path === 'resolve-location' && request.method === 'GET') {
+        const mapsUrl = url.searchParams.get('url');
+        if (!mapsUrl) return apiError('url requerido');
+        try {
+          const res = await fetch(mapsUrl, {
+            redirect: 'follow',
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EV-Guatemala-Map/1.0)' },
+            signal: AbortSignal.timeout(8000),
+          });
+          const finalUrl = res.url;
+
+          // Pattern 1: !3d{lat}!4d{lng} (place pin)
+          const pinMatch = finalUrl.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/);
+          if (pinMatch) return json({ lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) });
+
+          // Pattern 2: /search/{lat},+{lng}
+          const searchMatch = finalUrl.match(/\/search\/(-?\d+\.?\d+),\+?(-?\d+\.?\d+)/);
+          if (searchMatch) return json({ lat: parseFloat(searchMatch[1]), lng: parseFloat(searchMatch[2]) });
+
+          // Pattern 3: /@{lat},{lng},{zoom}z
+          const atMatch = finalUrl.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+),[\d.]+z/);
+          if (atMatch) return json({ lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) });
+
+          return apiError('No se pudieron extraer coordenadas del URL de Google Maps');
+        } catch (e) {
+          return apiError('Error resolviendo URL: ' + String(e));
+        }
+      }
+
+      // Dynamic stations: GET /api/stations/dynamic, POST /api/stations
+      if (path === 'stations/dynamic' && request.method === 'GET') return handleGetDynamicStations(env);
+      if (path === 'stations' && request.method === 'POST') return handlePostStation(request, env);
 
       // Reviews CRUD
       if (path === 'reviews') {

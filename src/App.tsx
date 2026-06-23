@@ -3,20 +3,23 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import AdminPanel from './components/AdminPanel';
 import ScanModal from './components/ScanModal';
+import AddStationModal from './components/AddStationModal';
+import AdminLoginModal from './components/AdminLoginModal';
 import { useStore } from './store/useStore';
 
 const EVMap = lazy(() => import('./components/Map'));
 
-const isAdmin =
-  window.location.pathname === '/admin' ||
-  new URLSearchParams(window.location.search).get('admin') === 'true';
+const isAdminPanel = window.location.pathname === '/admin';
 
 export default function App() {
-  const { scanModalOpen, loadRatings } = useStore();
+  const { scanModalOpen, addStationModalOpen, adminLoginOpen, loadRatings, loadDynamicStations } = useStore();
 
-  useEffect(() => { loadRatings(); }, []);
+  useEffect(() => {
+    loadRatings();
+    loadDynamicStations();
+  }, []);
 
-  if (isAdmin) return <AdminPanel />;
+  if (isAdminPanel) return <AdminPanel />;
 
   return (
     <div className="flex flex-col h-screen bg-[#FAFAFA]">
@@ -49,6 +52,12 @@ export default function App() {
 
       {/* Scan modal */}
       {scanModalOpen && <ScanModal />}
+
+      {/* Add station modal */}
+      {addStationModalOpen && <AddStationModal />}
+
+      {/* Admin login modal */}
+      {adminLoginOpen && <AdminLoginModal />}
     </div>
   );
 }

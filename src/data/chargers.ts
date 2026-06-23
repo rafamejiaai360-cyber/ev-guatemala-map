@@ -481,10 +481,10 @@ export const chargerStations: ChargerStation[] = [
   {
     id: 'vn-metrosur',
     name: 'Metrosur',
-    address: 'Calzada Raúl Aguilar Batres, Villa Nueva',
+    address: 'Calzada Raúl Aguilar Batres, C.C. Metrosur, Villa Nueva',
     zone: 'Villa Nueva',
-    lat: 14.5630,
-    lng: -90.5660,
+    lat: 14.581526,
+    lng: -90.567586,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 7.4, level: 'L2' },
@@ -762,8 +762,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Plaza Magdalena',
     address: '1a Calle 15-12, Cobán, Alta Verapaz',
     zone: 'Cobán',
-    lat: 15.4700,
-    lng: -90.3760,
+    lat: 15.470200,
+    lng: -90.385077,
     status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
@@ -776,10 +776,10 @@ export const chargerStations: ChargerStation[] = [
   {
     id: 'str-sarita-la-isla',
     name: 'Sarita La Isla',
-    address: 'Km 72.5 Carretera a El Salvador, Comercial La Isla, Cuilapa, Santa Rosa',
+    address: 'Km 72.5 Carretera a El Salvador CA-1, Comercial La Isla, Cuilapa, Santa Rosa',
     zone: 'Santa Rosa',
-    lat: 14.2820,
-    lng: -90.2968,
+    lat: 14.255203,
+    lng: -90.2265924,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 22, level: 'L2' },
@@ -792,10 +792,10 @@ export const chargerStations: ChargerStation[] = [
   {
     id: 'elp-sarita-el-rancho',
     name: 'Sarita El Rancho',
-    address: 'Km 84.5 Carretera al Atlántico, El Rancho, Guastatoya',
+    address: 'Km 84.5 Carretera al Atlántico CA-9, El Rancho, San Agustín Acasaguastlán, El Progreso',
     zone: 'El Progreso',
-    lat: 14.9850,
-    lng: -90.0820,
+    lat: 14.9237362,
+    lng: -90.0164689,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 22, level: 'L2' },
@@ -896,6 +896,38 @@ export const chargerStations: ChargerStation[] = [
     network: 'EV Network GT',
     access: 'public',
     notes: 'Corredor logístico hacia Honduras.',
+  },
+  // ── Zacapa ────────────────────────────────────────────────────────────
+  {
+    id: 'zac-maxidespensa',
+    name: 'Maxidespensa Zacapa',
+    address: 'Zacapa, Zacapa',
+    zone: 'Zacapa',
+    lat: 14.9743524,
+    lng: -89.5298123,
+    status: 'active',
+    connectors: [
+      { type: 'Type2', power_kw: 22, level: 'L2' },
+    ],
+    network: 'Desconocido',
+    access: 'public',
+    notes: 'Reportado por usuario. Verificar tipo de conector y red en PlugShare: plugshare.com/location/1818460',
+  },
+  // ── Esquipulas ────────────────────────────────────────────────────────
+  {
+    id: 'chiq-pc-esquipulas',
+    name: 'Pollo Campero Esquipulas',
+    address: 'Esquipulas, Chiquimula',
+    zone: 'Chiquimula',
+    lat: 14.562137,
+    lng: -89.351754,
+    status: 'active',
+    connectors: [
+      { type: 'Type2', power_kw: 22, level: 'L2' },
+    ],
+    network: 'Desconocido',
+    access: 'public',
+    notes: 'Reportado por usuario. Tipo de conector y red pendientes de verificar.',
   },
   // ── Petén ─────────────────────────────────────────────────────────────
   {
