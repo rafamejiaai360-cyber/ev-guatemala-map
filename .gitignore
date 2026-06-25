@@ -15,6 +15,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Wrangler local dev state (KV cache, miniflare DB — not for version control)
+.wrangler/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
