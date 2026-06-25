@@ -7,10 +7,11 @@ const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
 
 interface ConnectorRow {
   type: ConnectorType;
-  power_kw: number;
+  power_kw: number | null;
 }
 
-function levelFromKw(kw: number): ChargerLevel {
+function levelFromKw(kw: number | null): ChargerLevel | null {
+  if (kw == null) return null;
   return kw > 22 ? 'DC' : kw >= 11 ? 'L2' : 'L1';
 }
 
@@ -34,13 +35,13 @@ export default function AddStationModal() {
   const [network, setNetwork] = useState('');
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
-  const [connectors, setConnectors] = useState<ConnectorRow[]>([{ type: 'Type2', power_kw: 22 }]);
+  const [connectors, setConnectors] = useState<ConnectorRow[]>([{ type: 'Type2', power_kw: null }]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   function addConnector() {
-    setConnectors(prev => [...prev, { type: 'Type2', power_kw: 22 }]);
+    setConnectors(prev => [...prev, { type: 'Type2', power_kw: null }]);
   }
 
   function removeConnector(i: number) {
@@ -49,7 +50,7 @@ export default function AddStationModal() {
 
   function updateConnector(i: number, field: keyof ConnectorRow, value: string) {
     setConnectors(prev => prev.map((c, idx) =>
-      idx === i ? { ...c, [field]: field === 'power_kw' ? Number(value) : value } : c
+      idx === i ? { ...c, [field]: field === 'power_kw' ? (value === '' ? null : Number(value)) : value } : c
     ));
   }
 
@@ -107,8 +108,7 @@ export default function AddStationModal() {
           status: 'active',
           connectors: connectors.map(c => ({
             type: c.type,
-            power_kw: c.power_kw,
-            level: levelFromKw(c.power_kw),
+            ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }),
           })),
           access,
           source: 'Manual',
@@ -134,7 +134,7 @@ export default function AddStationModal() {
     setName(''); setAddress(''); setZone('');
     setMapsUrl(''); setLat(null); setLng(null); setResolveError(null);
     setNetwork(''); setNotes(''); setAccess('public');
-    setConnectors([{ type: 'Type2', power_kw: 22 }]);
+    setConnectors([{ type: 'Type2', power_kw: null }]);
     setSuccess(false); setError(null);
   }
 
@@ -304,14 +304,15 @@ export default function AddStationModal() {
                         {CONNECTOR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                       <select
-                        value={c.power_kw}
+                        value={c.power_kw ?? ''}
                         onChange={e => updateConnector(i, 'power_kw', e.target.value)}
                         className="w-28 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400 bg-white"
                       >
+                        <option value="">— kW</option>
                         {POWER_OPTIONS.map(p => <option key={p} value={p}>{p} kW</option>)}
                       </select>
                       <span className="text-[10px] font-medium text-gray-400 w-7 text-center flex-shrink-0">
-                        {levelFromKw(c.power_kw)}
+                        {levelFromKw(c.power_kw) ?? '—'}
                       </span>
                       {connectors.length > 1 && (
                         <button type="button" onClick={() => removeConnector(i)} className="text-gray-300 hover:text-red-400 transition-colors">

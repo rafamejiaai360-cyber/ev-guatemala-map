@@ -5,8 +5,8 @@ import type { ChargerStation, ConnectorType, ChargerLevel } from '../types/index
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
 
-interface ConnectorRow { type: ConnectorType; power_kw: number; }
-function levelFromKw(kw: number): ChargerLevel { return kw > 22 ? 'DC' : kw >= 11 ? 'L2' : 'L1'; }
+interface ConnectorRow { type: ConnectorType; power_kw: number | null; }
+function levelFromKw(kw: number | null): ChargerLevel | null { if (kw == null) return null; return kw > 22 ? 'DC' : kw >= 11 ? 'L2' : 'L1'; }
 
 interface Props {
   station: ChargerStation;
@@ -30,7 +30,7 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
   const [lat, setLat] = useState(String(station.lat));
   const [lng, setLng] = useState(String(station.lng));
   const [connectors, setConnectors] = useState<ConnectorRow[]>(
-    station.connectors.map(c => ({ type: c.type as ConnectorType, power_kw: c.power_kw }))
+    station.connectors.map(c => ({ type: c.type as ConnectorType, power_kw: c.power_kw ?? null }))
   );
   const [notes, setNotes] = useState((station as unknown as Record<string, unknown>).notes as string ?? '');
   const [submitting, setSubmitting] = useState(false);
@@ -40,7 +40,7 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
   function addConnector() { setConnectors(p => [...p, { type: 'Type2', power_kw: 22 }]); }
   function removeConnector(i: number) { setConnectors(p => p.filter((_, idx) => idx !== i)); }
   function updateConnector(i: number, field: keyof ConnectorRow, value: string) {
-    setConnectors(p => p.map((c, idx) => idx === i ? { ...c, [field]: field === 'power_kw' ? Number(value) : value } : c));
+    setConnectors(p => p.map((c, idx) => idx === i ? { ...c, [field]: field === 'power_kw' ? (value === '' ? null : Number(value)) : value } : c));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -59,7 +59,7 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
         body: JSON.stringify({
           name: name.trim(), address: address.trim(), zone: zone.trim(),
           network: network.trim(), access, status, lat: latNum, lng: lngNum,
-          connectors: connectors.map(c => ({ type: c.type, power_kw: c.power_kw, level: levelFromKw(c.power_kw) })),
+          connectors: connectors.map(c => ({ type: c.type, ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }) })),
           notes: notes.trim() || undefined,
         }),
       });
@@ -192,11 +192,12 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
                     className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-green-400">
                     {CONNECTOR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  <select value={c.power_kw} onChange={e => updateConnector(i, 'power_kw', e.target.value)}
+                  <select value={c.power_kw ?? ''} onChange={e => updateConnector(i, 'power_kw', e.target.value)}
                     className="w-24 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-green-400">
+                    <option value="">— kW</option>
                     {POWER_OPTIONS.map(p => <option key={p} value={p}>{p} kW</option>)}
                   </select>
-                  <span className="text-xs text-gray-400 w-7 text-center flex-shrink-0">{levelFromKw(c.power_kw)}</span>
+                  <span className="text-xs text-gray-400 w-7 text-center flex-shrink-0">{levelFromKw(c.power_kw) ?? '—'}</span>
                   {connectors.length > 1 && (
                     <button type="button" onClick={() => removeConnector(i)} className="text-gray-300 hover:text-red-400 transition-colors">
                       <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

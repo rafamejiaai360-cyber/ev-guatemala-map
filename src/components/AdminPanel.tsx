@@ -27,8 +27,8 @@ const STATUS_OPTIONS: { value: ChargerStatus; label: string; color: string }[] =
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
 
-interface ConnectorRow { type: ConnectorType; power_kw: number; }
-function levelFromKw(kw: number): ChargerLevel { return kw > 22 ? 'DC' : kw >= 11 ? 'L2' : 'L1'; }
+interface ConnectorRow { type: ConnectorType; power_kw: number | null; }
+function levelFromKw(kw: number | null): ChargerLevel | null { if (kw == null) return null; return kw > 22 ? 'DC' : kw >= 11 ? 'L2' : 'L1'; }
 
 function generateId(name: string, zone: string): string {
   const z = zone.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '').slice(0, 4);
@@ -52,14 +52,14 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
   const [network, setNetwork] = useState('');
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
-  const [connectors, setConnectors] = useState<ConnectorRow[]>([{ type: 'Type2', power_kw: 22 }]);
+  const [connectors, setConnectors] = useState<ConnectorRow[]>([{ type: 'Type2', power_kw: null }]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function addConnector() { setConnectors(p => [...p, { type: 'Type2', power_kw: 22 }]); }
+  function addConnector() { setConnectors(p => [...p, { type: 'Type2', power_kw: null }]); }
   function removeConnector(i: number) { setConnectors(p => p.filter((_, idx) => idx !== i)); }
   function updateConnector(i: number, field: keyof ConnectorRow, value: string) {
-    setConnectors(p => p.map((c, idx) => idx === i ? { ...c, [field]: field === 'power_kw' ? Number(value) : value } : c));
+    setConnectors(p => p.map((c, idx) => idx === i ? { ...c, [field]: field === 'power_kw' ? (value === '' ? null : Number(value)) : value } : c));
   }
 
   async function resolveLocation() {
@@ -91,7 +91,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
           id: generateId(name, zone), name: name.trim(), address: address.trim(),
           zone: zone.trim() || 'Guatemala', lat, lng,
           network: network.trim() || 'Desconocido', status: 'active',
-          connectors: connectors.map(c => ({ type: c.type, power_kw: c.power_kw, level: levelFromKw(c.power_kw) })),
+          connectors: connectors.map(c => ({ type: c.type, ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }) })),
           access, source: 'Manual', ...(notes.trim() && { notes: notes.trim() }),
         }),
       });
@@ -99,7 +99,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
       await loadDynamicStations();
       const savedName = name.trim();
       setName(''); setAddress(''); setZone(''); setMapsUrl(''); setLat(null); setLng(null);
-      setNetwork(''); setNotes(''); setAccess('public'); setConnectors([{ type: 'Type2', power_kw: 22 }]);
+      setNetwork(''); setNotes(''); setAccess('public'); setConnectors([{ type: 'Type2', power_kw: null }]);
       onSuccess(savedName);
     } catch (e) { setError(e instanceof Error ? e.message : 'Error al guardar'); }
     finally { setSubmitting(false); }
@@ -183,11 +183,12 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
                 className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-green-400">
                 {CONNECTOR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
-              <select value={c.power_kw} onChange={e => updateConnector(i, 'power_kw', e.target.value)}
+              <select value={c.power_kw ?? ''} onChange={e => updateConnector(i, 'power_kw', e.target.value)}
                 className="w-24 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-green-400">
+                <option value="">— kW</option>
                 {POWER_OPTIONS.map(p => <option key={p} value={p}>{p} kW</option>)}
               </select>
-              <span className="text-xs text-gray-400 w-7 text-center">{levelFromKw(c.power_kw)}</span>
+              <span className="text-xs text-gray-400 w-7 text-center">{levelFromKw(c.power_kw) ?? '—'}</span>
               {connectors.length > 1 && (
                 <button type="button" onClick={() => removeConnector(i)} className="text-gray-300 hover:text-red-400 transition-colors">
                   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
