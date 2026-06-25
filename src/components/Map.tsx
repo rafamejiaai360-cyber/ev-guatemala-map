@@ -121,13 +121,13 @@ function StationPopupContent({ station }: { station: ChargerStation }) {
     ? haversineKm(userLocation.lat, userLocation.lng, station.lat, station.lng)
     : null;
 
-  const destination = encodeURIComponent(`${station.name}, ${station.address}, Guatemala`);
+  const destination = encodeURIComponent(`${station.name}, ${station.address}, ${station.zone || 'Guatemala'}`);
   const mapsUrl = userLocation
     ? `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${destination}&travelmode=driving`
     : `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
 
   function copyAddress() {
-    navigator.clipboard?.writeText(`${station.name}\n${station.address}\nGuatemala`);
+    navigator.clipboard?.writeText(`${station.name}\n${station.address}\n${station.zone || 'Guatemala'}`);
   }
 
   const statusColor = {
@@ -204,7 +204,7 @@ function StationPopupContent({ station }: { station: ChargerStation }) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Dirección</p>
-            <p className="text-xs text-gray-700 leading-relaxed">{station.address}</p>
+            <p className="text-xs text-gray-700 leading-relaxed">{station.address}{station.zone ? `, ${station.zone}` : ''}</p>
             <p className="text-[10px] text-gray-400 mt-0.5">Guatemala</p>
           </div>
           <button
