@@ -71,6 +71,16 @@ export default function Header() {
           {/* Admin actions — visible for admin users (JWT or legacy) */}
           {(isAdminAuthenticated || currentUser?.role === 'admin') && (
             <>
+              <a
+                href="/admin"
+                title="Panel de administrador"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200"
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0H3" />
+                </svg>
+                <span className="hidden sm:inline">Panel</span>
+              </a>
               <button
                 onClick={() => setAddStationModalOpen(true)}
                 title="Agregar nueva estación"

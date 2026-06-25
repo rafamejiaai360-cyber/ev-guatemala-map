@@ -727,7 +727,9 @@ function b64url(data: ArrayBuffer | Uint8Array): string {
 }
 
 function parseB64url(str: string): Uint8Array {
-  return Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+  return Uint8Array.from(atob(padded), c => c.charCodeAt(0));
 }
 
 async function signJWT(payload: Record<string, unknown>, secret: string): Promise<string> {

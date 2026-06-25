@@ -420,7 +420,7 @@ function UsersTab() {
 // ─── Main Admin Panel ─────────────────────────────────────────────────────────
 
 export default function AdminPanel() {
-  const { currentUser, logoutUser, authToken, loadCurrentUser } = useStore();
+  const { currentUser, logoutUser, authToken, loadCurrentUser, isAdminAuthenticated } = useStore();
   const [tab, setTab] = useState<Tab>('stations');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -434,7 +434,7 @@ export default function AdminPanel() {
     setTab('stations');
   }
 
-  // Still loading auth from server
+  // Still loading auth from server (token exists but user data not fetched yet)
   if (authToken && !currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -446,7 +446,10 @@ export default function AdminPanel() {
     );
   }
 
-  if (!currentUser || currentUser.role !== 'admin') {
+  // Access: admin via JWT role OR via legacy admin flag (set on login)
+  const hasAdminAccess = currentUser?.role === 'admin' || isAdminAuthenticated;
+
+  if (!hasAdminAccess) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-sm w-full text-center">
@@ -481,7 +484,7 @@ export default function AdminPanel() {
                 <span className="text-sm font-semibold text-gray-900">⚡ EV Guatemala</span>
                 <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Admin</span>
               </div>
-              <p className="text-[11px] text-gray-400">Panel de administración · {currentUser.name}</p>
+              <p className="text-[11px] text-gray-400">Panel de administración · {currentUser?.name ?? 'Administrador'}</p>
             </div>
           </div>
           <button onClick={logoutUser}
