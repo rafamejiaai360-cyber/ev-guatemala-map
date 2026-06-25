@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { ChargerStatus, ConnectorType, ChargerLevel } from '../types';
+import type { ChargerStation } from '../types';
+import EditStationModal from './EditStationModal';
 
 // ─── Status editor ────────────────────────────────────────────────────────────
 
@@ -306,13 +308,20 @@ function AddStationForm({ onSuccess }: { onSuccess: () => void }) {
 // ─── Main Admin Panel ─────────────────────────────────────────────────────────
 
 export default function AdminPanel() {
-  const { stations, setStationStatus } = useStore();
+  const { stations, setStationStatus, currentUser } = useStore();
   const [showForm, setShowForm] = useState(false);
   const [lastAdded, setLastAdded] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [editStation, setEditStation] = useState<ChargerStation | null>(null);
 
   function handleSuccess() {
     setShowForm(false);
+    setLastAdded(new Date().toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }));
+    setTimeout(() => setLastAdded(null), 5000);
+  }
+
+  function handleEditSaved() {
+    setEditStation(null);
     setLastAdded(new Date().toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }));
     setTimeout(() => setLastAdded(null), 5000);
   }
@@ -418,9 +427,22 @@ export default function AdminPanel() {
                 ))}
               </div>
 
-              <span className="text-xs text-gray-400 w-28 text-right flex-shrink-0 hidden sm:block">
+              <span className="text-xs text-gray-400 w-20 text-right flex-shrink-0 hidden sm:block">
                 {STATUS_OPTIONS.find((o) => o.value === station.status)?.label}
               </span>
+
+              {/* Edit button — only for stations from Notion (dynamic), requires JWT admin */}
+              {currentUser?.role === 'admin' && (
+                <button
+                  onClick={() => setEditStation(station)}
+                  title="Editar estación"
+                  className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                  </svg>
+                </button>
+              )}
             </div>
           ))}
 
@@ -445,7 +467,21 @@ export default function AdminPanel() {
             ← Volver al mapa
           </a>
         </div>
+
+        {!currentUser && (
+          <p className="mt-4 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+            Inicia sesión con tu cuenta de administrador para poder editar y eliminar estaciones.
+          </p>
+        )}
       </div>
+
+      {editStation && (
+        <EditStationModal
+          station={editStation}
+          onClose={() => setEditStation(null)}
+          onSaved={handleEditSaved}
+        />
+      )}
     </div>
   );
 }

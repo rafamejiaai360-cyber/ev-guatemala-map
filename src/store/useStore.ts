@@ -110,11 +110,21 @@ interface AppState {
   addStationModalOpen: boolean;
   setAddStationModalOpen: (open: boolean) => void;
 
-  // Admin auth
+  // Admin auth (legacy)
   isAdminAuthenticated: boolean;
   setAdminAuthenticated: (val: boolean) => void;
   adminLoginOpen: boolean;
   setAdminLoginOpen: (open: boolean) => void;
+
+  // User auth (JWT system)
+  currentUser: { email: string; name: string; role: 'admin' | 'user'; subscriptionEnd?: string } | null;
+  authToken: string | null;
+  authModalOpen: boolean;
+  setAuthModalOpen: (open: boolean) => void;
+  loginUser: (email: string, password: string) => Promise<void>;
+  registerUser: (email: string, password: string, name: string) => Promise<void>;
+  logoutUser: () => void;
+  loadCurrentUser: () => Promise<void>;
 
   // Ratings (loaded from Worker API)
   ratings: Record<string, RatingInfo>;
@@ -277,6 +287,64 @@ export const useStore = create<AppState>((set, get) => ({
   },
   adminLoginOpen: false,
   setAdminLoginOpen: (open) => set({ adminLoginOpen: open }),
+
+  currentUser: null,
+  authToken: localStorage.getItem('ev_auth_token'),
+  authModalOpen: false,
+  setAuthModalOpen: (open) => set({ authModalOpen: open }),
+
+  loginUser: async (email, password) => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json() as { token?: string; user?: { email: string; name: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
+    if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al iniciar sesión');
+    localStorage.setItem('ev_auth_token', data.token);
+    if (data.user.role === 'admin') {
+      localStorage.setItem('ev_admin_auth', '1');
+      set({ isAdminAuthenticated: true });
+    }
+    set({ authToken: data.token, currentUser: data.user });
+  },
+
+  registerUser: async (email, password, name) => {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, name }),
+    });
+    const data = await res.json() as { token?: string; user?: { email: string; name: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
+    if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al registrarse');
+    localStorage.setItem('ev_auth_token', data.token);
+    if (data.user.role === 'admin') {
+      localStorage.setItem('ev_admin_auth', '1');
+      set({ isAdminAuthenticated: true });
+    }
+    set({ authToken: data.token, currentUser: data.user });
+  },
+
+  logoutUser: () => {
+    localStorage.removeItem('ev_auth_token');
+    localStorage.removeItem('ev_admin_auth');
+    set({ authToken: null, currentUser: null, isAdminAuthenticated: false });
+  },
+
+  loadCurrentUser: async () => {
+    const token = localStorage.getItem('ev_auth_token');
+    if (!token) return;
+    try {
+      const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { localStorage.removeItem('ev_auth_token'); set({ authToken: null, currentUser: null }); return; }
+      const user = await res.json() as { email: string; name: string; role: 'admin' | 'user'; subscriptionEnd?: string };
+      if (user.role === 'admin') {
+        localStorage.setItem('ev_admin_auth', '1');
+        set({ isAdminAuthenticated: true });
+      }
+      set({ currentUser: user, authToken: token });
+    } catch { /* silently fail */ }
+  },
 
   ratings: {},
   loadRatings: async () => {

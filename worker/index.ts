@@ -6,6 +6,8 @@ export interface Env {
   PHOTOS?: KVNamespace;
   OCM_API_KEY?: string;
   ADMIN_PASSWORD?: string;
+  JWT_SECRET?: string;
+  ADMIN_EMAIL?: string;
 }
 
 const NOTION_API = 'https://api.notion.com/v1';
@@ -716,6 +718,226 @@ async function handleDeletePhoto(url: URL, env: Env): Promise<Response> {
   return json({ ok: true });
 }
 
+// ─── Crypto / JWT / Auth utilities ───────────────────────────────────────────
+
+function b64url(data: ArrayBuffer | Uint8Array): string {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function parseB64url(str: string): Uint8Array {
+  return Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+}
+
+async function signJWT(payload: Record<string, unknown>, secret: string): Promise<string> {
+  const enc = new TextEncoder();
+  const header = b64url(enc.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
+  const body = b64url(enc.encode(JSON.stringify(payload)));
+  const data = `${header}.${body}`;
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(data));
+  return `${data}.${b64url(sig)}`;
+}
+
+async function verifyJWT(token: string, secret: string): Promise<Record<string, unknown> | null> {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [header, body, sig] = parts;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const valid = await crypto.subtle.verify('HMAC', key, parseB64url(sig), enc.encode(`${header}.${body}`));
+    if (!valid) return null;
+    const payload = JSON.parse(new TextDecoder().decode(parseB64url(body))) as Record<string, unknown>;
+    if (typeof payload.exp === 'number' && Date.now() / 1000 > payload.exp) return null;
+    return payload;
+  } catch { return null; }
+}
+
+async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+  const salt = b64url(saltBytes);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: saltBytes, iterations: 100_000, hash: 'SHA-256' }, key, 256);
+  return { hash: b64url(bits), salt };
+}
+
+async function verifyPassword(password: string, hash: string, salt: string): Promise<boolean> {
+  const saltBytes = parseB64url(salt);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: saltBytes, iterations: 100_000, hash: 'SHA-256' }, key, 256);
+  return b64url(bits) === hash;
+}
+
+// ─── User model (stored in PHOTOS KV with "user:" prefix) ────────────────────
+
+interface UserRecord {
+  email: string;
+  name: string;
+  passwordHash: string;
+  salt: string;
+  role: 'admin' | 'user';
+  createdAt: string;
+  subscriptionEnd?: string;
+}
+
+async function getUser(email: string, env: Env): Promise<UserRecord | null> {
+  if (!env.PHOTOS) return null;
+  const raw = await env.PHOTOS.get(`user:${email.toLowerCase().trim()}`);
+  return raw ? JSON.parse(raw) as UserRecord : null;
+}
+
+async function saveUser(user: UserRecord, env: Env): Promise<void> {
+  if (!env.PHOTOS) return;
+  await env.PHOTOS.put(`user:${user.email.toLowerCase().trim()}`, JSON.stringify(user));
+}
+
+function getAuthToken(request: Request): string | null {
+  const header = request.headers.get('Authorization');
+  return header?.startsWith('Bearer ') ? header.slice(7) : null;
+}
+
+async function getUserFromToken(request: Request, env: Env): Promise<UserRecord | null> {
+  const token = getAuthToken(request);
+  if (!token || !env.JWT_SECRET) return null;
+  const payload = await verifyJWT(token, env.JWT_SECRET);
+  if (!payload || typeof payload.sub !== 'string') return null;
+  return getUser(payload.sub, env);
+}
+
+// ─── Auth handlers ────────────────────────────────────────────────────────────
+
+async function handleRegister(request: Request, env: Env): Promise<Response> {
+  if (!env.JWT_SECRET) return apiError('Autenticación no configurada en el servidor', 503);
+  const body = await request.json() as { email?: string; password?: string; name?: string };
+  const email = body.email?.toLowerCase().trim() ?? '';
+  const password = body.password ?? '';
+  const name = body.name?.trim() ?? '';
+  if (!email || !email.includes('@')) return apiError('Email inválido');
+  if (password.length < 6) return apiError('La contraseña debe tener al menos 6 caracteres');
+  if (!name) return apiError('El nombre es requerido');
+
+  const existing = await getUser(email, env);
+  if (existing) return apiError('Este email ya está registrado', 409);
+
+  const { hash: passwordHash, salt } = await hashPassword(password);
+  const role: 'admin' | 'user' = env.ADMIN_EMAIL && email === env.ADMIN_EMAIL.toLowerCase().trim() ? 'admin' : 'user';
+
+  const user: UserRecord = { email, name, passwordHash, salt, role, createdAt: new Date().toISOString() };
+  await saveUser(user, env);
+
+  const token = await signJWT({ sub: email, name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
+  return json({ token, user: { email: user.email, name: user.name, role: user.role, subscriptionEnd: user.subscriptionEnd } }, 201);
+}
+
+async function handleLogin(request: Request, env: Env): Promise<Response> {
+  if (!env.JWT_SECRET) return apiError('Autenticación no configurada en el servidor', 503);
+  const body = await request.json() as { email?: string; password?: string };
+  const email = body.email?.toLowerCase().trim() ?? '';
+  const password = body.password ?? '';
+  if (!email || !password) return apiError('Email y contraseña son requeridos');
+
+  const user = await getUser(email, env);
+  if (!user) return apiError('Email o contraseña incorrectos', 401);
+
+  const ok = await verifyPassword(password, user.passwordHash, user.salt);
+  if (!ok) return apiError('Email o contraseña incorrectos', 401);
+
+  const token = await signJWT({ sub: email, name: user.name, role: user.role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
+  return json({ token, user: { email: user.email, name: user.name, role: user.role, subscriptionEnd: user.subscriptionEnd } });
+}
+
+async function handleGetMe(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('No autenticado', 401);
+  return json({ email: user.email, name: user.name, role: user.role, subscriptionEnd: user.subscriptionEnd });
+}
+
+async function handleChangePassword(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('No autenticado', 401);
+  const body = await request.json() as { currentPassword?: string; newPassword?: string };
+  if (!body.currentPassword || !body.newPassword) return apiError('currentPassword y newPassword son requeridos');
+  if (body.newPassword.length < 6) return apiError('La nueva contraseña debe tener al menos 6 caracteres');
+  const ok = await verifyPassword(body.currentPassword, user.passwordHash, user.salt);
+  if (!ok) return apiError('Contraseña actual incorrecta', 401);
+  const { hash, salt } = await hashPassword(body.newPassword);
+  await saveUser({ ...user, passwordHash: hash, salt }, env);
+  return json({ ok: true });
+}
+
+async function handleSetSubscription(request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores pueden gestionar suscripciones', 403);
+  const body = await request.json() as { email?: string; subscriptionEnd?: string | null };
+  if (!body.email) return apiError('email requerido');
+  const target = await getUser(body.email, env);
+  if (!target) return apiError('Usuario no encontrado', 404);
+  await saveUser({ ...target, subscriptionEnd: body.subscriptionEnd ?? undefined }, env);
+  return json({ ok: true });
+}
+
+// ─── Station PATCH handler ────────────────────────────────────────────────────
+
+async function handlePatchStation(stationId: string, request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user || user.role !== 'admin') return apiError('Solo administradores pueden editar estaciones', 403);
+
+  const pageId = await findStationPageId(stationId, env);
+  if (!pageId) return apiError('Estación no encontrada', 404);
+
+  const body = await request.json() as Record<string, unknown>;
+  const properties: Record<string, unknown> = {};
+
+  if (typeof body.name === 'string' && body.name.trim())
+    properties['Nombre'] = { title: [{ text: { content: body.name.trim() } }] };
+  if (typeof body.address === 'string')
+    properties['Dirección'] = { rich_text: [{ text: { content: body.address.trim() } }] };
+  if (typeof body.zone === 'string' && body.zone.trim())
+    properties['Zona'] = { rich_text: [{ text: { content: body.zone.trim() } }] };
+  if (typeof body.network === 'string')
+    properties['Red'] = { rich_text: [{ text: { content: body.network.trim() } }] };
+  if (typeof body.access === 'string' && ['public', 'semi-public', 'private'].includes(body.access))
+    properties['Acceso'] = { rich_text: [{ text: { content: body.access } }] };
+  if (typeof body.status === 'string' && ['active', 'maintenance', 'offline'].includes(body.status))
+    properties['Estado'] = { select: { name: body.status === 'active' ? 'Activo' : body.status === 'maintenance' ? 'Mantenimiento' : 'Inactivo' } };
+  if (Array.isArray(body.connectors))
+    properties['Conectores'] = { rich_text: [{ text: { content: JSON.stringify(body.connectors) } }] };
+  if (typeof body.lat === 'number')
+    properties['Latitud'] = { number: body.lat };
+  if (typeof body.lng === 'number')
+    properties['Longitud'] = { number: body.lng };
+  if (typeof body.notes === 'string')
+    properties['Notas'] = { rich_text: [{ text: { content: body.notes.trim() } }] };
+
+  if (Object.keys(properties).length === 0) return apiError('Nada que actualizar');
+
+  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({ properties }),
+  });
+  if (!res.ok) return apiError('Error actualizando estación en Notion', 502);
+  return json({ ok: true });
+}
+
+async function handleDeleteStation(stationId: string, request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user || user.role !== 'admin') return apiError('Solo administradores pueden eliminar estaciones', 403);
+
+  const pageId = await findStationPageId(stationId, env);
+  if (!pageId) return apiError('Estación no encontrada', 404);
+
+  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({ archived: true }),
+  });
+  if (!res.ok) return apiError('Error eliminando estación en Notion', 502);
+  return json({ ok: true });
+}
+
 // ─── Main fetch handler ───────────────────────────────────────────────────────
 
 export default {
@@ -727,7 +949,7 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         },
       });
     }
@@ -735,13 +957,20 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       const path = url.pathname.slice(5); // strip '/api/'
 
-      // Admin login: POST /api/admin/login
+      // Admin login (legacy): POST /api/admin/login
       if (path === 'admin/login' && request.method === 'POST') {
         const { password } = await request.json() as { password?: string };
         if (!env.ADMIN_PASSWORD) return apiError('Administración no configurada en el servidor', 503);
         if (!password || password !== env.ADMIN_PASSWORD) return apiError('Contraseña incorrecta', 401);
         return json({ ok: true });
       }
+
+      // Auth endpoints
+      if (path === 'auth/register' && request.method === 'POST') return handleRegister(request, env);
+      if (path === 'auth/login' && request.method === 'POST') return handleLogin(request, env);
+      if (path === 'auth/me' && request.method === 'GET') return handleGetMe(request, env);
+      if (path === 'auth/change-password' && request.method === 'POST') return handleChangePassword(request, env);
+      if (path === 'auth/set-subscription' && request.method === 'POST') return handleSetSubscription(request, env);
 
       // Scan: GET /api/scan
       if (path === 'scan' && request.method === 'GET') return handleGetScan(env);
@@ -753,24 +982,50 @@ export default {
         try {
           const res = await fetch(mapsUrl, {
             redirect: 'follow',
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EV-Guatemala-Map/1.0)' },
-            signal: AbortSignal.timeout(8000),
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'es-GT,es;q=0.9,en-US;q=0.8',
+            },
+            signal: AbortSignal.timeout(10000),
           });
           const finalUrl = res.url;
 
-          // Pattern 1: !3d{lat}!4d{lng} (place pin)
+          // URL patterns (fast path — no body needed)
           const pinMatch = finalUrl.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/);
           if (pinMatch) return json({ lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) });
 
-          // Pattern 2: /search/{lat},+{lng}
           const searchMatch = finalUrl.match(/\/search\/(-?\d+\.?\d+),\+?(-?\d+\.?\d+)/);
           if (searchMatch) return json({ lat: parseFloat(searchMatch[1]), lng: parseFloat(searchMatch[2]) });
 
-          // Pattern 3: /@{lat},{lng},{zoom}z
           const atMatch = finalUrl.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+),[\d.]+z/);
           if (atMatch) return json({ lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) });
 
-          return apiError('No se pudieron extraer coordenadas del URL de Google Maps');
+          // Fallback: parse HTML body (handles JS-redirect shortened links like maps.app.goo.gl)
+          const body = await res.text();
+
+          const bodyPinMatch = body.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/);
+          if (bodyPinMatch) return json({ lat: parseFloat(bodyPinMatch[1]), lng: parseFloat(bodyPinMatch[2]) });
+
+          const bodyAtMatch = body.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+),[\d.]+z/);
+          if (bodyAtMatch) return json({ lat: parseFloat(bodyAtMatch[1]), lng: parseFloat(bodyAtMatch[2]) });
+
+          // Canonical URL in HTML head
+          const canonicalMatch = body.match(/rel="canonical"[^>]+href="[^"]*\/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+          if (canonicalMatch) return json({ lat: parseFloat(canonicalMatch[1]), lng: parseFloat(canonicalMatch[2]) });
+
+          // Redirect URL embedded in JS (maps.app.goo.gl pages often contain the destination URL in a script)
+          const redirectMatch = body.match(/(?:href|url|location)\s*[=:]\s*["']https?:\/\/(?:www\.)?google\.com\/maps[^"']*\/@(-?\d+\.?\d+),(-?\d+\.?\d+)/i);
+          if (redirectMatch) return json({ lat: parseFloat(redirectMatch[1]), lng: parseFloat(redirectMatch[2]) });
+
+          // Coordinates JSON pattern (lat/lng as numbers in body)
+          const coordMatch = body.match(/[-"](-1?\d{1,2}\.\d{4,10})[", ]+(-?\d{2,3}\.\d{4,10})[-"]/);
+          if (coordMatch) {
+            const a = parseFloat(coordMatch[1]), b = parseFloat(coordMatch[2]);
+            if (a >= 13 && a <= 18 && b >= -93 && b <= -88) return json({ lat: a, lng: b });
+          }
+
+          return apiError('No se pudieron extraer coordenadas de la URL de Google Maps');
         } catch (e) {
           return apiError('Error resolviendo URL: ' + String(e));
         }
@@ -779,6 +1034,14 @@ export default {
       // Dynamic stations: GET /api/stations/dynamic, POST /api/stations
       if (path === 'stations/dynamic' && request.method === 'GET') return handleGetDynamicStations(env);
       if (path === 'stations' && request.method === 'POST') return handlePostStation(request, env);
+
+      // Station edit / delete: PATCH|DELETE /api/stations/:id
+      const stationMatch = path.match(/^stations\/([^/]+)$/);
+      if (stationMatch) {
+        const sid = stationMatch[1];
+        if (request.method === 'PATCH') return handlePatchStation(sid, request, env);
+        if (request.method === 'DELETE') return handleDeleteStation(sid, request, env);
+      }
 
       // Reviews CRUD
       if (path === 'reviews') {
