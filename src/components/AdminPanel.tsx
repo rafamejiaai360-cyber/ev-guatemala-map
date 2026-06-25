@@ -420,14 +420,30 @@ function UsersTab() {
 // ─── Main Admin Panel ─────────────────────────────────────────────────────────
 
 export default function AdminPanel() {
-  const { currentUser, logoutUser } = useStore();
+  const { currentUser, logoutUser, authToken, loadCurrentUser } = useStore();
   const [tab, setTab] = useState<Tab>('stations');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadCurrentUser();
+  }, []);
 
   function handleStationAdded(name: string) {
     setSuccessMsg(`"${name}" guardada correctamente`);
     setTimeout(() => setSuccessMsg(null), 5000);
     setTab('stations');
+  }
+
+  // Still loading auth from server
+  if (authToken && !currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-gray-500">Cargando panel…</span>
+        </div>
+      </div>
+    );
   }
 
   if (!currentUser || currentUser.role !== 'admin') {
