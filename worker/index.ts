@@ -878,6 +878,22 @@ async function handleSetSubscription(request: Request, env: Env): Promise<Respon
   return json({ ok: true });
 }
 
+async function handleListUsers(request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.PHOTOS) return json([]);
+  const list = await env.PHOTOS.list({ prefix: 'user:' });
+  const users: { email: string; name: string; role: string; createdAt: string; subscriptionEnd?: string }[] = [];
+  for (const key of list.keys) {
+    const raw = await env.PHOTOS.get(key.name);
+    if (raw) {
+      const u = JSON.parse(raw) as UserRecord;
+      users.push({ email: u.email, name: u.name, role: u.role, createdAt: u.createdAt, subscriptionEnd: u.subscriptionEnd });
+    }
+  }
+  return json(users);
+}
+
 // ─── Station PATCH handler ────────────────────────────────────────────────────
 
 async function handlePatchStation(stationId: string, request: Request, env: Env): Promise<Response> {
@@ -971,6 +987,7 @@ export default {
       if (path === 'auth/me' && request.method === 'GET') return handleGetMe(request, env);
       if (path === 'auth/change-password' && request.method === 'POST') return handleChangePassword(request, env);
       if (path === 'auth/set-subscription' && request.method === 'POST') return handleSetSubscription(request, env);
+      if (path === 'auth/users' && request.method === 'GET') return handleListUsers(request, env);
 
       // Scan: GET /api/scan
       if (path === 'scan' && request.method === 'GET') return handleGetScan(env);

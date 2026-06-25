@@ -68,34 +68,32 @@ export default function Header() {
           {/* Divider */}
           <div className="w-px h-5 bg-gray-200" />
 
-          {/* Add station button — visible only when authenticated */}
-          {isAdminAuthenticated && (
-            <button
-              onClick={() => setAddStationModalOpen(true)}
-              title="Agregar nueva estación"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
-            >
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="hidden sm:inline">Agregar</span>
-            </button>
-          )}
-
-          {/* Scan for new chargers button — visible only when authenticated */}
-          {isAdminAuthenticated && (
-            <button
-              onClick={() => setScanModalOpen(true)}
-              title="Buscar cargadores nuevos"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
-            >
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <circle cx="11" cy="11" r="8" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 8v6M8 11h6" />
-              </svg>
-              <span className="hidden sm:inline">Explorar red</span>
-            </button>
+          {/* Admin actions — visible for admin users (JWT or legacy) */}
+          {(isAdminAuthenticated || currentUser?.role === 'admin') && (
+            <>
+              <button
+                onClick={() => setAddStationModalOpen(true)}
+                title="Agregar nueva estación"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden sm:inline">Agregar</span>
+              </button>
+              <button
+                onClick={() => setScanModalOpen(true)}
+                title="Buscar cargadores nuevos"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="11" cy="11" r="8" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 8v6M8 11h6" />
+                </svg>
+                <span className="hidden sm:inline">Explorar red</span>
+              </button>
+            </>
           )}
 
           {/* User auth area */}
