@@ -846,8 +846,12 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   const ok = await verifyPassword(password, user.passwordHash, user.salt);
   if (!ok) return apiError('Email o contraseña incorrectos', 401);
 
-  const token = await signJWT({ sub: email, name: user.name, role: user.role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
-  return json({ token, user: { email: user.email, name: user.name, role: user.role, subscriptionEnd: user.subscriptionEnd } });
+  // Always grant admin role if email matches ADMIN_EMAIL, even if KV record says 'user'
+  const role: 'admin' | 'user' = (env.ADMIN_EMAIL && email === env.ADMIN_EMAIL.toLowerCase().trim()) ? 'admin' : user.role;
+  if (role !== user.role) await saveUser({ ...user, role }, env);
+
+  const token = await signJWT({ sub: email, name: user.name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
+  return json({ token, user: { email: user.email, name: user.name, role, subscriptionEnd: user.subscriptionEnd } });
 }
 
 async function handleGetMe(request: Request, env: Env): Promise<Response> {
