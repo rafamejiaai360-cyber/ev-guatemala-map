@@ -402,9 +402,17 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
     return apiError('id, name, lat y lng son requeridos');
   }
 
+  // Check who is submitting
+  const requester = await getUserFromToken(request, env);
+  const isAdmin = requester?.role === 'admin';
+  const submittedBy = requester?.email ?? 'anónimo';
+
   // Ensure no duplicate by checking ID
   const existing = await findStationPageId(body.id, env);
   if (existing) return apiError('Esta estación ya existe en la base de datos', 409);
+
+  // Admins publish directly; regular users create a pending proposal
+  const estado = isAdmin ? 'Activo' : 'Pendiente';
 
   const res = await fetch(`${NOTION_API}/pages`, {
     method: 'POST',
@@ -422,7 +430,8 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
         'Conectores': { rich_text: [{ text: { content: JSON.stringify(body.connectors ?? []) } }] },
         'Acceso': { rich_text: [{ text: { content: body.access ?? 'public' } }] },
         'Fuente': { rich_text: [{ text: { content: body.source ?? 'Manual' } }] },
-        'Estado': { select: { name: 'Activo' } },
+        'SubmittedBy': { rich_text: [{ text: { content: submittedBy } }] },
+        'Estado': { select: { name: estado } },
       },
     }),
   });
@@ -433,7 +442,95 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
   }
 
   const page = await res.json() as { id: string };
-  return json({ ok: true, notionId: page.id }, 201);
+  return json({ ok: true, notionId: page.id, pending: !isAdmin }, 201);
+}
+
+async function handleGetPendingStations(request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+
+  const results: unknown[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const body: Record<string, unknown> = {
+      page_size: 100,
+      filter: { property: 'Estado', select: { equals: 'Pendiente' } },
+      sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
+    };
+    if (cursor) body.start_cursor = cursor;
+
+    const res = await fetch(`${NOTION_API}/databases/${env.NOTION_STATIONS_DB_ID}/query`, {
+      method: 'POST',
+      headers: notionHeaders(env.NOTION_TOKEN),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return apiError('Error consultando Notion', 502);
+
+    const data = await res.json() as { results: NotionPage[]; has_more: boolean; next_cursor?: string };
+
+    for (const page of data.results) {
+      const lat = page.properties['Latitud']?.number;
+      const lng = page.properties['Longitud']?.number;
+      if (lat == null || lng == null) continue;
+
+      let connectors: unknown[] = [];
+      try {
+        const raw = richText(page.properties['Conectores']);
+        if (raw) connectors = JSON.parse(raw);
+      } catch {}
+
+      results.push({
+        notionId: page.id,
+        id: richText(page.properties['Station ID']),
+        name: page.properties['Nombre']?.title?.[0]?.text?.content ?? 'Estación',
+        address: richText(page.properties['Dirección']),
+        zone: richText(page.properties['Zona']) || 'Guatemala',
+        lat, lng,
+        connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
+        network: richText(page.properties['Red']) || 'Desconocido',
+        access: richText(page.properties['Acceso']) || 'public',
+        submittedBy: richText(page.properties['SubmittedBy']) || 'anónimo',
+        createdAt: page.created_time,
+      });
+    }
+
+    cursor = data.has_more ? data.next_cursor : undefined;
+  } while (cursor);
+
+  return json(results);
+}
+
+async function handleStationApprove(stationId: string, request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+
+  const pageId = await findStationPageId(stationId, env);
+  if (!pageId) return apiError('Estación no encontrada', 404);
+
+  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({ properties: { 'Estado': { select: { name: 'Activo' } } } }),
+  });
+  if (!res.ok) return apiError('Error actualizando estación en Notion', 502);
+  return json({ ok: true });
+}
+
+async function handleStationReject(stationId: string, request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+
+  const pageId = await findStationPageId(stationId, env);
+  if (!pageId) return apiError('Estación no encontrada', 404);
+
+  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({ archived: true }),
+  });
+  if (!res.ok) return apiError('Error eliminando estación en Notion', 502);
+  return json({ ok: true });
 }
 
 async function handleGetDynamicStations(env: Env): Promise<Response> {
@@ -1056,7 +1153,16 @@ export default {
 
       // Dynamic stations: GET /api/stations/dynamic, POST /api/stations
       if (path === 'stations/dynamic' && request.method === 'GET') return handleGetDynamicStations(env);
+      if (path === 'stations/pending' && request.method === 'GET') return handleGetPendingStations(request, env);
       if (path === 'stations' && request.method === 'POST') return handlePostStation(request, env);
+
+      // Station approve/reject: POST /api/stations/:id/approve|reject
+      const stationActionMatch = path.match(/^stations\/([^/]+)\/(approve|reject)$/);
+      if (stationActionMatch && request.method === 'POST') {
+        const [, sid, action] = stationActionMatch;
+        if (action === 'approve') return handleStationApprove(sid, request, env);
+        if (action === 'reject') return handleStationReject(sid, request, env);
+      }
 
       // Station edit / delete: PATCH|DELETE /api/stations/:id
       const stationMatch = path.match(/^stations\/([^/]+)$/);

@@ -6,7 +6,7 @@ import EditStationModal from './EditStationModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'stations' | 'add' | 'users';
+type Tab = 'stations' | 'add' | 'pending' | 'users';
 
 interface UserInfo {
   email: string;
@@ -14,6 +14,21 @@ interface UserInfo {
   role: 'admin' | 'user';
   createdAt: string;
   subscriptionEnd?: string;
+}
+
+interface PendingStation {
+  notionId: string;
+  id: string;
+  name: string;
+  address: string;
+  zone: string;
+  lat: number;
+  lng: number;
+  connectors: Array<{ type: string; power_kw: number; level: string }>;
+  network: string;
+  access: string;
+  submittedBy: string;
+  createdAt: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -306,6 +321,133 @@ function StationsTab() {
   );
 }
 
+// ─── Pending Stations Tab ─────────────────────────────────────────────────────
+
+function PendingTab() {
+  const { authToken, loadDynamicStations } = useStore();
+  const [stations, setStations] = useState<PendingStation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [processing, setProcessing] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/stations/pending', { headers: { Authorization: `Bearer ${authToken}` } })
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setStations(data as PendingStation[]); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [authToken]);
+
+  async function handleAction(station: PendingStation, action: 'approve' | 'reject') {
+    setProcessing(station.id);
+    try {
+      const res = await fetch(`/api/stations/${station.id}/${action}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) throw new Error('Error en la acción');
+      setStations(prev => prev.filter(s => s.id !== station.id));
+      if (action === 'approve') {
+        await loadDynamicStations();
+        setActionMsg(`"${station.name}" aprobada y publicada en el mapa`);
+      } else {
+        setActionMsg(`"${station.name}" rechazada y eliminada`);
+      }
+      setTimeout(() => setActionMsg(null), 5000);
+    } catch {
+      setActionMsg('Error procesando la acción');
+      setTimeout(() => setActionMsg(null), 4000);
+    } finally {
+      setProcessing(null);
+    }
+  }
+
+  if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Cargando propuestas…</p>;
+
+  return (
+    <div>
+      {actionMsg && (
+        <div className="mb-3 text-xs text-green-700 bg-green-50 border border-green-100 rounded-xl px-4 py-2">
+          ✓ {actionMsg}
+        </div>
+      )}
+
+      {stations.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-10 text-center">
+          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="text-gray-400">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+          </div>
+          <p className="text-sm font-medium text-gray-700">Sin propuestas pendientes</p>
+          <p className="text-xs text-gray-400 mt-1">Cuando los usuarios propongan estaciones aparecerán aquí</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {stations.map(station => (
+            <div key={station.id} className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+              <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                  <span className="text-xs font-medium text-amber-700">Pendiente de revisión</span>
+                </div>
+                <span className="text-[10px] text-gray-400">
+                  {new Date(station.createdAt).toLocaleDateString('es-GT')} · por {station.submittedBy}
+                </span>
+              </div>
+              <div className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{station.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {[station.address, station.zone].filter(Boolean).join(' · ')}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Red: {station.network} · Acceso: {station.access}
+                    </p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {station.connectors.map((c, i) => (
+                        <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                          {c.type}{c.power_kw ? ` ${c.power_kw}kW` : ''}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1 font-mono">
+                      {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => handleAction(station, 'approve')}
+                      disabled={processing === station.id}
+                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5">
+                      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                      Aprobar
+                    </button>
+                    <button
+                      onClick={() => handleAction(station, 'reject')}
+                      disabled={processing === station.id}
+                      className="px-3 py-1.5 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-500 text-xs font-medium rounded-lg border border-red-100 transition-colors flex items-center gap-1.5">
+                      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-gray-400 mt-3">
+        {stations.length} propuesta{stations.length !== 1 ? 's' : ''} pendiente{stations.length !== 1 ? 's' : ''}
+      </p>
+    </div>
+  );
+}
+
 // ─── Users Tab ────────────────────────────────────────────────────────────────
 
 function UsersTab() {
@@ -319,7 +461,8 @@ function UsersTab() {
 
   useEffect(() => {
     fetch('/api/auth/users', { headers: { Authorization: `Bearer ${authToken}` } })
-      .then(r => r.json()).then(data => { setUsers(data as UserInfo[]); setLoading(false); })
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setUsers(data as UserInfo[]); setLoading(false); })
       .catch(() => setLoading(false));
   }, [authToken]);
 
@@ -503,7 +646,8 @@ export default function AdminPanel() {
         <div className="max-w-3xl mx-auto flex gap-0">
           {([
             { id: 'stations', label: 'Estaciones', icon: 'M17.657 16.657 13.414 20.9a1.998 1.998 0 0 1-2.827 0l-4.244-4.243a8 8 0 1 1 11.314 0z' },
-            { id: 'add', label: 'Agregar estación', icon: 'M12 4v16m8-8H4' },
+            { id: 'add', label: 'Agregar', icon: 'M12 4v16m8-8H4' },
+            { id: 'pending', label: 'Pendientes', icon: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' },
             { id: 'users', label: 'Usuarios', icon: 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z' },
           ] as const).map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -539,6 +683,14 @@ export default function AdminPanel() {
             <h2 className="text-sm font-semibold text-gray-900 mb-1">Nueva estación de carga</h2>
             <p className="text-xs text-gray-400 mb-5">Se guarda en Notion y aparece en el mapa para todos los usuarios</p>
             <AddStationForm onSuccess={handleStationAdded} />
+          </div>
+        )}
+
+        {tab === 'pending' && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900 mb-1">Propuestas pendientes</h2>
+            <p className="text-xs text-gray-400 mb-5">Revisa y aprueba o rechaza las estaciones propuestas por usuarios</p>
+            <PendingTab />
           </div>
         )}
 

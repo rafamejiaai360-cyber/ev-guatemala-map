@@ -22,7 +22,8 @@ function generateId(name: string, zone: string): string {
 }
 
 export default function AddStationModal() {
-  const { setAddStationModalOpen, loadDynamicStations } = useStore();
+  const { setAddStationModalOpen, loadDynamicStations, authToken, currentUser } = useStore();
+  const isAdmin = currentUser?.role === 'admin';
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -39,6 +40,7 @@ export default function AddStationModal() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState(false);
 
   function addConnector() {
     setConnectors(prev => [...prev, { type: 'Type2', power_kw: null }]);
@@ -96,7 +98,7 @@ export default function AddStationModal() {
     try {
       const res = await fetch('/api/stations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
         body: JSON.stringify({
           id: generateId(name, zone),
           name: name.trim(),
@@ -121,8 +123,13 @@ export default function AddStationModal() {
         throw new Error(err.error ?? `Error ${res.status}`);
       }
 
-      setSuccess(true);
-      await loadDynamicStations();
+      const result = await res.json() as { pending?: boolean };
+      if (result.pending) {
+        setPendingApproval(true);
+      } else {
+        setSuccess(true);
+        await loadDynamicStations();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al guardar');
     } finally {
@@ -135,7 +142,7 @@ export default function AddStationModal() {
     setMapsUrl(''); setLat(null); setLng(null); setResolveError(null);
     setNetwork(''); setNotes(''); setAccess('public');
     setConnectors([{ type: 'Type2', power_kw: null }]);
-    setSuccess(false); setError(null);
+    setSuccess(false); setPendingApproval(false); setError(null);
   }
 
   return (
@@ -148,8 +155,14 @@ export default function AddStationModal() {
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-shrink-0">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900">Agregar estación de carga</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Se guarda en Notion y aparece en el mapa para todos</p>
+            <h2 className="text-sm font-semibold text-gray-900">
+              {isAdmin ? 'Agregar estación de carga' : 'Proponer estación de carga'}
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {isAdmin
+                ? 'Se guarda en Notion y aparece en el mapa para todos'
+                : 'Tu propuesta será revisada por el administrador antes de publicarse'}
+            </p>
           </div>
           <button onClick={() => setAddStationModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1 transition-colors">
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -158,7 +171,7 @@ export default function AddStationModal() {
           </button>
         </div>
 
-        {/* Success state */}
+        {/* Success state (admin) */}
         {success ? (
           <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center gap-4">
             <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
@@ -171,16 +184,31 @@ export default function AddStationModal() {
               <p className="text-xs text-gray-500 mt-1">Ya aparece en el mapa y en Notion.</p>
             </div>
             <div className="flex gap-3">
-              <button
-                onClick={handleAddAnother}
-                className="text-sm px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors"
-              >
+              <button onClick={handleAddAnother} className="text-sm px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors">
                 Agregar otra
               </button>
-              <button
-                onClick={() => setAddStationModalOpen(false)}
-                className="text-sm px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors"
-              >
+              <button onClick={() => setAddStationModalOpen(false)} className="text-sm px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        ) : pendingApproval ? (
+          /* Pending approval state (regular user) */
+          <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center">
+              <svg className="text-amber-500" width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">¡Propuesta enviada!</p>
+              <p className="text-xs text-gray-500 mt-1 max-w-xs">Tu estación está pendiente de revisión. El administrador la validará antes de que aparezca en el mapa.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={handleAddAnother} className="text-sm px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-colors">
+                Proponer otra
+              </button>
+              <button onClick={() => setAddStationModalOpen(false)} className="text-sm px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors">
                 Cerrar
               </button>
             </div>
@@ -350,7 +378,7 @@ export default function AddStationModal() {
                 disabled={submitting}
                 className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
               >
-                {submitting ? 'Guardando…' : 'Guardar en mapa y Notion'}
+                {submitting ? 'Enviando…' : isAdmin ? 'Guardar en mapa y Notion' : 'Enviar propuesta para revisión'}
               </button>
             </div>
           </form>
