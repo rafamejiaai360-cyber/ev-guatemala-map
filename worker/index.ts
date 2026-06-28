@@ -1123,53 +1123,110 @@ export default {
       if (path === 'resolve-location' && request.method === 'GET') {
         const mapsUrl = url.searchParams.get('url');
         if (!mapsUrl) return apiError('url requerido');
+
+        // Helper: extract Guatemala-bounded coords from a URL string
+        function extractCoordsFromUrl(u: string): { lat: number; lng: number } | null {
+          const pin = u.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/);
+          if (pin) return { lat: parseFloat(pin[1]), lng: parseFloat(pin[2]) };
+          const at = u.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)[,z/]/);
+          if (at) return { lat: parseFloat(at[1]), lng: parseFloat(at[2]) };
+          const search = u.match(/\/search\/(-?\d+\.?\d+),\+?(-?\d+\.?\d+)/);
+          if (search) return { lat: parseFloat(search[1]), lng: parseFloat(search[2]) };
+          const q = u.match(/[?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+          if (q) return { lat: parseFloat(q[1]), lng: parseFloat(q[2]) };
+          return null;
+        }
+
+        // Helper: extract Guatemala-bounded coords from HTML body
+        function extractCoordsFromBody(body: string): { lat: number; lng: number } | null {
+          // !3d / !4d encoded coords
+          const pin = body.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/);
+          if (pin) return { lat: parseFloat(pin[1]), lng: parseFloat(pin[2]) };
+
+          // @lat,lng,Xz pattern
+          const at = body.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+),[\d.]+z/);
+          if (at) return { lat: parseFloat(at[1]), lng: parseFloat(at[2]) };
+
+          // canonical URL
+          const canon = body.match(/rel=["']canonical["'][^>]+href=["'][^"']*\/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+          if (canon) return { lat: parseFloat(canon[1]), lng: parseFloat(canon[2]) };
+
+          // coords inside any google maps href/url/location in JS
+          const jsUrl = body.match(/["'](https?:\/\/(?:www\.)?(?:maps\.app\.goo\.gl|google\.com\/maps|maps\.google\.com)[^"']{10,})["']/g);
+          if (jsUrl) {
+            for (const raw of jsUrl) {
+              const u = raw.replace(/^["']|["']$/g, '');
+              const c = extractCoordsFromUrl(u);
+              if (c) return c;
+            }
+          }
+
+          // "ll=lat,lng" or "center=lat,lng"
+          const ll = body.match(/(?:ll|center)=(-?\d{1,2}\.\d{4,}),(-?\d{2,3}\.\d{4,})/);
+          if (ll) return { lat: parseFloat(ll[1]), lng: parseFloat(ll[2]) };
+
+          // Bare coordinate pair in Guatemala bounding box
+          const bare = body.match(/\b(1[3-7]\.\d{5,})\b[^\d-]{1,10}\b(-9[0-3]\.\d{5,})\b/);
+          if (bare) return { lat: parseFloat(bare[1]), lng: parseFloat(bare[2]) };
+
+          return null;
+        }
+
+        const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1';
+        const desktopUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
         try {
+          // — First attempt: follow HTTP redirects with mobile UA —
           const res = await fetch(mapsUrl, {
             redirect: 'follow',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-              'Accept-Language': 'es-GT,es;q=0.9,en-US;q=0.8',
-            },
+            headers: { 'User-Agent': mobileUA, 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9', 'Accept-Language': 'es-GT,es;q=0.9,en-US;q=0.8' },
             signal: AbortSignal.timeout(10000),
           });
           const finalUrl = res.url;
 
-          // URL patterns (fast path — no body needed)
-          const pinMatch = finalUrl.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/);
-          if (pinMatch) return json({ lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) });
+          // Fast-path: coords in the resolved URL itself
+          const fromUrl = extractCoordsFromUrl(finalUrl);
+          if (fromUrl) return json(fromUrl);
 
-          const searchMatch = finalUrl.match(/\/search\/(-?\d+\.?\d+),\+?(-?\d+\.?\d+)/);
-          if (searchMatch) return json({ lat: parseFloat(searchMatch[1]), lng: parseFloat(searchMatch[2]) });
-
-          const atMatch = finalUrl.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+),[\d.]+z/);
-          if (atMatch) return json({ lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) });
-
-          // Fallback: parse HTML body (handles JS-redirect shortened links like maps.app.goo.gl)
+          // Parse body
           const body = await res.text();
+          const fromBody = extractCoordsFromBody(body);
+          if (fromBody) return json(fromBody);
 
-          const bodyPinMatch = body.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/);
-          if (bodyPinMatch) return json({ lat: parseFloat(bodyPinMatch[1]), lng: parseFloat(bodyPinMatch[2]) });
+          // — Second attempt: follow JS redirect via meta refresh or window.location —
+          // Extract any maps URL embedded in the body and follow it
+          const metaRefresh = body.match(/content=["']0;\s*url=([^"']+)["']/i);
+          const windowLoc = body.match(/(?:window\.location(?:\.replace)?|location\.href)\s*[=(]\s*["']([^"']+maps[^"']+)["']/i);
+          const fallbackUrl = metaRefresh?.[1] || windowLoc?.[1];
 
-          const bodyAtMatch = body.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+),[\d.]+z/);
-          if (bodyAtMatch) return json({ lat: parseFloat(bodyAtMatch[1]), lng: parseFloat(bodyAtMatch[2]) });
-
-          // Canonical URL in HTML head
-          const canonicalMatch = body.match(/rel="canonical"[^>]+href="[^"]*\/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
-          if (canonicalMatch) return json({ lat: parseFloat(canonicalMatch[1]), lng: parseFloat(canonicalMatch[2]) });
-
-          // Redirect URL embedded in JS (maps.app.goo.gl pages often contain the destination URL in a script)
-          const redirectMatch = body.match(/(?:href|url|location)\s*[=:]\s*["']https?:\/\/(?:www\.)?google\.com\/maps[^"']*\/@(-?\d+\.?\d+),(-?\d+\.?\d+)/i);
-          if (redirectMatch) return json({ lat: parseFloat(redirectMatch[1]), lng: parseFloat(redirectMatch[2]) });
-
-          // Coordinates JSON pattern (lat/lng as numbers in body)
-          const coordMatch = body.match(/[-"](-1?\d{1,2}\.\d{4,10})[", ]+(-?\d{2,3}\.\d{4,10})[-"]/);
-          if (coordMatch) {
-            const a = parseFloat(coordMatch[1]), b = parseFloat(coordMatch[2]);
-            if (a >= 13 && a <= 18 && b >= -93 && b <= -88) return json({ lat: a, lng: b });
+          if (fallbackUrl) {
+            const res2 = await fetch(fallbackUrl, {
+              redirect: 'follow',
+              headers: { 'User-Agent': desktopUA, 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9' },
+              signal: AbortSignal.timeout(8000),
+            });
+            const fromUrl2 = extractCoordsFromUrl(res2.url);
+            if (fromUrl2) return json(fromUrl2);
+            const body2 = await res2.text();
+            const fromBody2 = extractCoordsFromBody(body2);
+            if (fromBody2) return json(fromBody2);
           }
 
-          return apiError('No se pudieron extraer coordenadas de la URL de Google Maps');
+          // — Third attempt: retry with desktop UA (some short links expand differently) —
+          if (mapsUrl.includes('goo.gl') || mapsUrl.includes('maps.app')) {
+            const res3 = await fetch(mapsUrl, {
+              redirect: 'follow',
+              headers: { 'User-Agent': desktopUA, 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9' },
+              signal: AbortSignal.timeout(8000),
+            });
+            const fromUrl3 = extractCoordsFromUrl(res3.url);
+            if (fromUrl3) return json(fromUrl3);
+            const body3 = await res3.text();
+            const fromBody3 = extractCoordsFromBody(body3);
+            if (fromBody3) return json(fromBody3);
+          }
+
+          return apiError('No se pudieron extraer coordenadas. Intenta abrir el link en el navegador, presionar "Compartir" → "Copiar enlace" y pegar ese link aquí.');
         } catch (e) {
           return apiError('Error resolviendo URL: ' + String(e));
         }
