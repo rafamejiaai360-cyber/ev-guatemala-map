@@ -892,6 +892,23 @@ async function saveUser(user: UserRecord, env: Env): Promise<void> {
   await env.PHOTOS.put(`user:${user.email.toLowerCase().trim()}`, JSON.stringify(user));
 }
 
+async function addToUsersIndex(email: string, env: Env): Promise<void> {
+  if (!env.PHOTOS) return;
+  const raw = await env.PHOTOS.get('users_index');
+  const emails: string[] = raw ? JSON.parse(raw) : [];
+  const normalized = email.toLowerCase().trim();
+  if (!emails.includes(normalized)) {
+    emails.push(normalized);
+    await env.PHOTOS.put('users_index', JSON.stringify(emails));
+  }
+}
+
+async function getUsersIndex(env: Env): Promise<string[]> {
+  if (!env.PHOTOS) return [];
+  const raw = await env.PHOTOS.get('users_index');
+  return raw ? JSON.parse(raw) as string[] : [];
+}
+
 function getAuthToken(request: Request): string | null {
   const header = request.headers.get('Authorization');
   return header?.startsWith('Bearer ') ? header.slice(7) : null;
@@ -925,6 +942,7 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
 
   const user: UserRecord = { email, name, passwordHash, salt, role, createdAt: new Date().toISOString() };
   await saveUser(user, env);
+  await addToUsersIndex(email, env);
 
   const token = await signJWT({ sub: email, name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
   return json({ token, user: { email: user.email, name: user.name, role: user.role, subscriptionEnd: user.subscriptionEnd } }, 201);
@@ -946,6 +964,8 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   // Always grant admin role if email matches ADMIN_EMAIL, even if KV record says 'user'
   const role: 'admin' | 'user' = (env.ADMIN_EMAIL && email === env.ADMIN_EMAIL.toLowerCase().trim()) ? 'admin' : user.role;
   if (role !== user.role) await saveUser({ ...user, role }, env);
+  // Backfill index for users registered before the index existed
+  await addToUsersIndex(email, env);
 
   const token = await signJWT({ sub: email, name: user.name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
   return json({ token, user: { email: user.email, name: user.name, role, subscriptionEnd: user.subscriptionEnd } });
@@ -985,15 +1005,19 @@ async function handleListUsers(request: Request, env: Env): Promise<Response> {
   const requester = await getUserFromToken(request, env);
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
   if (!env.PHOTOS) return json([]);
-  const list = await env.PHOTOS.list({ prefix: 'user:' });
+
+  // Use point reads via the index to avoid KV list() eventual consistency lag
+  const emails = await getUsersIndex(env);
+
+  // Always include the requester in case they registered before the index existed
+  if (!emails.includes(requester.email)) emails.push(requester.email);
+
   const users: { email: string; name: string; role: string; createdAt: string; subscriptionEnd?: string }[] = [];
-  for (const key of list.keys) {
-    const raw = await env.PHOTOS.get(key.name);
-    if (raw) {
-      const u = JSON.parse(raw) as UserRecord;
-      users.push({ email: u.email, name: u.name, role: u.role, createdAt: u.createdAt, subscriptionEnd: u.subscriptionEnd });
-    }
+  for (const email of emails) {
+    const u = await getUser(email, env);
+    if (u) users.push({ email: u.email, name: u.name, role: u.role, createdAt: u.createdAt, subscriptionEnd: u.subscriptionEnd });
   }
+
   return json(users);
 }
 
