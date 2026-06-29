@@ -405,14 +405,22 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
   // Check who is submitting
   const requester = await getUserFromToken(request, env);
   const isAdmin = requester?.role === 'admin';
-  const submittedBy = requester?.email ?? 'anónimo';
+  const submittedBy = requester?.email ?? '';
 
   // Ensure no duplicate by checking ID
   const existing = await findStationPageId(body.id, env);
   if (existing) return apiError('Esta estación ya existe en la base de datos', 409);
 
-  // Admins publish directly; regular users create a pending proposal
-  const estado = isAdmin ? 'Activo' : 'Pendiente';
+  // Admins publish directly; logged-in users create a pending proposal;
+  // anonymous users also publish directly (no account to validate against)
+  const isPending = !isAdmin && !!submittedBy;
+  const estado = isPending ? 'Pendiente' : 'Activo';
+
+  // Combine notes with submitter info if pending
+  const notesContent = [
+    body.notes ?? '',
+    isPending ? `[Propuesta por: ${submittedBy}]` : '',
+  ].filter(Boolean).join(' · ');
 
   const res = await fetch(`${NOTION_API}/pages`, {
     method: 'POST',
@@ -430,7 +438,7 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
         'Conectores': { rich_text: [{ text: { content: JSON.stringify(body.connectors ?? []) } }] },
         'Acceso': { rich_text: [{ text: { content: body.access ?? 'public' } }] },
         'Fuente': { rich_text: [{ text: { content: body.source ?? 'Manual' } }] },
-        'SubmittedBy': { rich_text: [{ text: { content: submittedBy } }] },
+        ...(notesContent ? { 'Notas': { rich_text: [{ text: { content: notesContent } }] } } : {}),
         'Estado': { select: { name: estado } },
       },
     }),
@@ -490,7 +498,7 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
         connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
         network: richText(page.properties['Red']) || 'Desconocido',
         access: richText(page.properties['Acceso']) || 'public',
-        submittedBy: richText(page.properties['SubmittedBy']) || 'anónimo',
+        submittedBy: (richText(page.properties['Notas']).match(/\[Propuesta por: ([^\]]+)\]/) || [])[1] || 'anónimo',
         createdAt: page.created_time,
       });
     }

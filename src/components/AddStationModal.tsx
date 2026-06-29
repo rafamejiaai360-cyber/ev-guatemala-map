@@ -33,6 +33,8 @@ export default function AddStationModal() {
   const [lng, setLng] = useState<number | null>(null);
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [geoLocating, setGeoLocating] = useState(false);
+  const [locationMethod, setLocationMethod] = useState<'url' | 'manual' | null>(null);
   const [network, setNetwork] = useState('');
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
@@ -75,11 +77,45 @@ export default function AddStationModal() {
       }
       setLat(data.lat);
       setLng(data.lng);
+      setLocationMethod('url');
     } catch {
       setResolveError('Error de red al resolver la ubicación');
     } finally {
       setResolving(false);
     }
+  }
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setResolveError('Tu dispositivo no soporta geolocalización');
+      return;
+    }
+    setGeoLocating(true);
+    setResolveError(null);
+    setLat(null);
+    setLng(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        if (latitude < 13 || latitude > 18 || longitude < -93 || longitude > -88) {
+          setResolveError('Ubicación fuera de Guatemala. Verifica que el GPS esté activo.');
+          setGeoLocating(false);
+          return;
+        }
+        setLat(latitude);
+        setLng(longitude);
+        setLocationMethod('url');
+        setGeoLocating(false);
+      },
+      (err) => {
+        const msg = err.code === 1
+          ? 'Permiso de ubicación denegado. Actívalo en la configuración del navegador.'
+          : 'No se pudo obtener la ubicación. Intenta de nuevo o usa el link de Google Maps.';
+        setResolveError(msg);
+        setGeoLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -143,6 +179,7 @@ export default function AddStationModal() {
     setNetwork(''); setNotes(''); setAccess('public');
     setConnectors([{ type: 'Type2', power_kw: null }]);
     setSuccess(false); setPendingApproval(false); setError(null);
+    setLocationMethod(null);
   }
 
   return (
@@ -254,18 +291,44 @@ export default function AddStationModal() {
                 </div>
               </div>
 
-              {/* Location from Google Maps URL */}
+              {/* Location */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-0.5">Ubicación *</label>
-                <p className="text-[10px] text-gray-400 mb-1.5">
-                  Copia el link de Google Maps del lugar y presiona "Resolver"
-                </p>
+                <label className="block text-xs font-medium text-gray-700 mb-2">Ubicación *</label>
+
+                {/* Option 1: GPS button */}
+                <button
+                  type="button"
+                  onClick={useMyLocation}
+                  disabled={geoLocating}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 mb-2 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 border border-blue-200 text-blue-700 text-sm font-medium rounded-xl transition-colors"
+                >
+                  {geoLocating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      Obteniendo ubicación…
+                    </>
+                  ) : (
+                    <>
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                      </svg>
+                      Usar mi ubicación actual (GPS)
+                    </>
+                  )}
+                </button>
+
+                {/* Option 2: Google Maps URL */}
+                <div className="relative mb-2">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+                  <div className="relative flex justify-center"><span className="px-2 bg-white text-[10px] text-gray-400">o pega un link de Google Maps</span></div>
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="url"
                     value={mapsUrl}
-                    onChange={e => { setMapsUrl(e.target.value); setLat(null); setLng(null); setResolveError(null); }}
-                    placeholder="https://maps.app.goo.gl/..."
+                    onChange={e => { setMapsUrl(e.target.value); setLat(null); setLng(null); setResolveError(null); setLocationMethod(null); }}
+                    placeholder="https://maps.app.goo.gl/… o maps.google.com/…"
                     className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400 min-w-0"
                   />
                   <button
@@ -277,12 +340,49 @@ export default function AddStationModal() {
                     {resolving ? 'Buscando…' : 'Resolver'}
                   </button>
                 </div>
+
+                {/* Option 3: Manual coords */}
+                {locationMethod === null && !lat && (
+                  <button
+                    type="button"
+                    onClick={() => setLocationMethod('manual')}
+                    className="mt-1.5 text-[11px] text-gray-400 hover:text-gray-600 underline"
+                  >
+                    Ingresar coordenadas manualmente
+                  </button>
+                )}
+                {locationMethod === 'manual' && (
+                  <div className="flex gap-2 mt-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-gray-500 mb-1">Latitud</label>
+                      <input
+                        type="number" step="0.000001"
+                        value={lat ?? ''}
+                        onChange={e => setLat(e.target.value ? parseFloat(e.target.value) : null)}
+                        placeholder="14.6349"
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-gray-500 mb-1">Longitud</label>
+                      <input
+                        type="number" step="0.000001"
+                        value={lng ?? ''}
+                        onChange={e => setLng(e.target.value ? parseFloat(e.target.value) : null)}
+                        placeholder="-90.5069"
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {resolveError && (
-                  <p className="text-[11px] text-red-500 mt-1">{resolveError}</p>
+                  <p className="text-[11px] text-red-500 mt-1.5 leading-snug">{resolveError}</p>
                 )}
                 {lat != null && lng != null && (
-                  <p className="text-[11px] text-green-600 mt-1 font-mono">
-                    ✓ {lat.toFixed(6)}, {lng.toFixed(6)}
+                  <p className="text-[11px] text-green-600 mt-1.5 font-mono flex items-center gap-1">
+                    <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
+                    {lat.toFixed(6)}, {lng.toFixed(6)}
                   </p>
                 )}
               </div>
