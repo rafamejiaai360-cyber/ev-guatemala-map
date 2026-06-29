@@ -106,6 +106,20 @@ export default function Header() {
             </>
           )}
 
+          {/* Propose station — visible for logged-in non-admin users */}
+          {currentUser && currentUser.role !== 'admin' && (
+            <button
+              onClick={() => setAddStationModalOpen(true)}
+              title="Proponer nueva estación"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
+            >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              <span className="hidden sm:inline">Proponer</span>
+            </button>
+          )}
+
           {/* User auth area */}
           {currentUser ? (
             <div className="relative">
