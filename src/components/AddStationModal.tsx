@@ -34,7 +34,7 @@ export default function AddStationModal() {
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [geoLocating, setGeoLocating] = useState(false);
-  const [locationMethod, setLocationMethod] = useState<'url' | 'manual' | null>(null);
+  const [locationMethod, setLocationMethod] = useState<'gps' | 'gmaps' | 'browser' | 'manual' | null>(null);
   const [network, setNetwork] = useState('');
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
@@ -77,7 +77,6 @@ export default function AddStationModal() {
       }
       setLat(data.lat);
       setLng(data.lng);
-      setLocationMethod('url');
     } catch {
       setResolveError('Error de red al resolver la ubicación');
     } finally {
@@ -104,7 +103,6 @@ export default function AddStationModal() {
         }
         setLat(latitude);
         setLng(longitude);
-        setLocationMethod('url');
         setGeoLocating(false);
       },
       (err) => {
@@ -295,64 +293,106 @@ export default function AddStationModal() {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-2">Ubicación *</label>
 
-                {/* Option 1: GPS button */}
-                <button
-                  type="button"
-                  onClick={useMyLocation}
-                  disabled={geoLocating}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 mb-2 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 border border-blue-200 text-blue-700 text-sm font-medium rounded-xl transition-colors"
-                >
-                  {geoLocating ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                      Obteniendo ubicación…
-                    </>
-                  ) : (
-                    <>
-                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                {/* 4 option selector */}
+                <div className="grid grid-cols-2 gap-1.5 mb-3">
+                  {([
+                    { key: 'gps', label: 'Ubicación actual', sublabel: 'GPS', icon: (
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
                       </svg>
-                      Usar mi ubicación actual (GPS)
-                    </>
-                  )}
-                </button>
-
-                {/* Option 2: Google Maps URL */}
-                <div className="relative mb-2">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-                  <div className="relative flex justify-center"><span className="px-2 bg-white text-[10px] text-gray-400">o pega un link de Google Maps</span></div>
+                    )},
+                    { key: 'gmaps', label: 'Link de Maps', sublabel: 'App de teléfono', icon: (
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3" />
+                      </svg>
+                    )},
+                    { key: 'browser', label: 'Link del navegador', sublabel: 'google.com/maps', icon: (
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253M3 12a8.959 8.959 0 0 0 .284 2.253" />
+                      </svg>
+                    )},
+                    { key: 'manual', label: 'Coordenadas', sublabel: 'lat / lng manual', icon: (
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
+                      </svg>
+                    )},
+                  ] as { key: 'gps' | 'gmaps' | 'browser' | 'manual'; label: string; sublabel: string; icon: React.ReactNode }[]).map(opt => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => {
+                        setLocationMethod(opt.key);
+                        setLat(null); setLng(null); setResolveError(null); setMapsUrl('');
+                        if (opt.key === 'gps') useMyLocation();
+                      }}
+                      className={`flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                        locationMethod === opt.key
+                          ? 'border-green-400 bg-green-50 text-green-700'
+                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 font-medium text-xs">{opt.icon}{opt.label}</span>
+                      <span className="text-[10px] text-gray-400 pl-[22px]">{opt.sublabel}</span>
+                    </button>
+                  ))}
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={mapsUrl}
-                    onChange={e => { setMapsUrl(e.target.value); setLat(null); setLng(null); setResolveError(null); setLocationMethod(null); }}
-                    placeholder="https://maps.app.goo.gl/… o maps.google.com/…"
-                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400 min-w-0"
-                  />
-                  <button
-                    type="button"
-                    onClick={resolveLocation}
-                    disabled={resolving || !mapsUrl.trim()}
-                    className="flex-shrink-0 px-3 py-2.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 transition-colors whitespace-nowrap"
-                  >
-                    {resolving ? 'Buscando…' : 'Resolver'}
-                  </button>
-                </div>
 
-                {/* Option 3: Manual coords */}
-                {locationMethod === null && !lat && (
-                  <button
-                    type="button"
-                    onClick={() => setLocationMethod('manual')}
-                    className="mt-1.5 text-[11px] text-gray-400 hover:text-gray-600 underline"
-                  >
-                    Ingresar coordenadas manualmente
-                  </button>
+                {/* GPS: spinner while locating */}
+                {locationMethod === 'gps' && geoLocating && (
+                  <div className="flex items-center gap-2 text-sm text-blue-600 py-2">
+                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    Obteniendo ubicación GPS…
+                  </div>
                 )}
+
+                {/* Link de Maps (maps.app.goo.gl) */}
+                {locationMethod === 'gmaps' && (
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={mapsUrl}
+                      onChange={e => { setMapsUrl(e.target.value); setLat(null); setLng(null); setResolveError(null); }}
+                      placeholder="https://maps.app.goo.gl/…"
+                      className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400 min-w-0"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={resolveLocation}
+                      disabled={resolving || !mapsUrl.trim()}
+                      className="flex-shrink-0 px-3 py-2.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 transition-colors whitespace-nowrap"
+                    >
+                      {resolving ? 'Buscando…' : 'Resolver'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Link del navegador (full URL) */}
+                {locationMethod === 'browser' && (
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={mapsUrl}
+                      onChange={e => { setMapsUrl(e.target.value); setLat(null); setLng(null); setResolveError(null); }}
+                      placeholder="https://www.google.com/maps/place/…"
+                      className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400 min-w-0"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={resolveLocation}
+                      disabled={resolving || !mapsUrl.trim()}
+                      className="flex-shrink-0 px-3 py-2.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 transition-colors whitespace-nowrap"
+                    >
+                      {resolving ? 'Buscando…' : 'Resolver'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Manual coords */}
                 {locationMethod === 'manual' && (
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex gap-2">
                     <div className="flex-1">
                       <label className="block text-[10px] text-gray-500 mb-1">Latitud</label>
                       <input
@@ -361,6 +401,7 @@ export default function AddStationModal() {
                         onChange={e => setLat(e.target.value ? parseFloat(e.target.value) : null)}
                         placeholder="14.6349"
                         className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400"
+                        autoFocus
                       />
                     </div>
                     <div className="flex-1">
