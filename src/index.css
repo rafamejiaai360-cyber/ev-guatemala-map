@@ -13,6 +13,15 @@ html, body, #root {
   color: #111827;
 }
 
+/* iOS Safari zooms the page when a focused input/select/textarea has a
+   computed font-size below 16px. Force 16px on touch-sized viewports so
+   tapping search boxes or the vehicle selector doesn't trigger that zoom. */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Leaflet overrides */
 .leaflet-container {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
