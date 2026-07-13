@@ -29,6 +29,10 @@ interface PendingStation {
   access: string;
   submittedBy: string;
   createdAt: string;
+  kind: 'new' | 'correction';
+  proposedLat?: number | null;
+  proposedLng?: number | null;
+  proposedVerification?: 'pending' | 'verified' | 'error';
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -346,11 +350,15 @@ function PendingTab() {
       });
       if (!res.ok) throw new Error('Error en la acción');
       setStations(prev => prev.filter(s => s.id !== station.id));
+      await loadDynamicStations();
       if (action === 'approve') {
-        await loadDynamicStations();
-        setActionMsg(`"${station.name}" aprobada y publicada en el mapa`);
+        setActionMsg(station.kind === 'correction'
+          ? `Corrección de "${station.name}" aplicada`
+          : `"${station.name}" aprobada y publicada en el mapa`);
       } else {
-        setActionMsg(`"${station.name}" rechazada y eliminada`);
+        setActionMsg(station.kind === 'correction'
+          ? `Corrección de "${station.name}" descartada`
+          : `"${station.name}" rechazada y eliminada`);
       }
       setTimeout(() => setActionMsg(null), 5000);
     } catch {
@@ -388,7 +396,9 @@ function PendingTab() {
               <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
-                  <span className="text-xs font-medium text-amber-700">Pendiente de revisión</span>
+                  <span className="text-xs font-medium text-amber-700">
+                    {station.kind === 'correction' ? 'Corrección de ubicación pendiente' : 'Estación nueva pendiente de revisión'}
+                  </span>
                 </div>
                 <span className="text-[10px] text-gray-400">
                   {new Date(station.createdAt).toLocaleDateString('es-GT')} · por {station.submittedBy}
@@ -401,19 +411,37 @@ function PendingTab() {
                     <p className="text-xs text-gray-500 mt-0.5">
                       {[station.address, station.zone].filter(Boolean).join(' · ')}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Red: {station.network} · Acceso: {station.access}
-                    </p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {station.connectors.map((c, i) => (
-                        <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
-                          {c.type}{c.power_kw ? ` ${c.power_kw}kW` : ''}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1 font-mono">
-                      {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
-                    </p>
+                    {station.kind === 'correction' ? (
+                      <div className="mt-2 space-y-1">
+                        {station.proposedVerification === 'error' && (
+                          <p className="text-[11px] text-red-600 font-medium">⚠ Reportada como ubicación errónea</p>
+                        )}
+                        <p className="text-[10px] text-gray-400 font-mono">
+                          Actual: {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
+                        </p>
+                        {station.proposedLat != null && station.proposedLng != null && (
+                          <p className="text-[10px] text-blue-600 font-mono">
+                            Propuesta: {station.proposedLat.toFixed(5)}, {station.proposedLng.toFixed(5)}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Red: {station.network} · Acceso: {station.access}
+                        </p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {station.connectors.map((c, i) => (
+                            <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                              {c.type}{c.power_kw ? ` ${c.power_kw}kW` : ''}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1 font-mono">
+                          {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
+                        </p>
+                      </>
+                    )}
                   </div>
                   <div className="flex flex-col gap-2 flex-shrink-0">
                     <button

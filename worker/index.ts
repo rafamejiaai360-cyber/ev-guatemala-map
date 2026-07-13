@@ -446,6 +446,7 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
         'Acceso': { rich_text: [{ text: { content: body.access ?? 'public' } }] },
         'Fuente': { rich_text: [{ text: { content: body.source ?? 'Manual' } }] },
         ...(notesContent ? { 'Notas': { rich_text: [{ text: { content: notesContent } }] } } : {}),
+        ...(isPending ? { 'Propuesta Por': { rich_text: [{ text: { content: submittedBy } }] } } : {}),
         'Estado': { select: { name: estado } },
         'Verificacion': { select: { name: 'Pendiente' } },
       },
@@ -471,7 +472,12 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
   do {
     const body: Record<string, unknown> = {
       page_size: 100,
-      filter: { property: 'Estado', select: { equals: 'Pendiente' } },
+      filter: {
+        or: [
+          { property: 'Estado', select: { equals: 'Pendiente' } },
+          { property: 'Propuesta Por', rich_text: { is_not_empty: true } },
+        ],
+      },
       sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
     };
     if (cursor) body.start_cursor = cursor;
@@ -490,11 +496,17 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
       const lng = page.properties['Longitud']?.number;
       if (lat == null || lng == null) continue;
 
+      const isNewStation = page.properties['Estado']?.select?.name === 'Pendiente';
+
       let connectors: unknown[] = [];
       try {
         const raw = richText(page.properties['Conectores']);
         if (raw) connectors = JSON.parse(raw);
       } catch {}
+
+      const propuestaLat = page.properties['Propuesta Lat']?.number;
+      const propuestaLng = page.properties['Propuesta Lng']?.number;
+      const propuestaVerificacion = page.properties['Propuesta Verificacion']?.select?.name;
 
       results.push({
         notionId: page.id,
@@ -506,8 +518,16 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
         connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
         network: richText(page.properties['Red']) || 'Desconocido',
         access: richText(page.properties['Acceso']) || 'public',
-        submittedBy: (richText(page.properties['Notas']).match(/\[Propuesta por: ([^\]]+)\]/) || [])[1] || 'anónimo',
+        submittedBy: richText(page.properties['Propuesta Por'])
+          || (richText(page.properties['Notas']).match(/\[Propuesta por: ([^\]]+)\]/) || [])[1]
+          || 'anónimo',
         createdAt: page.created_time,
+        kind: isNewStation ? 'new' : 'correction',
+        ...(isNewStation ? {} : {
+          proposedLat: propuestaLat ?? null,
+          proposedLng: propuestaLng ?? null,
+          proposedVerification: verificationFromSelect(propuestaVerificacion),
+        }),
       });
     }
 
@@ -524,12 +544,61 @@ async function handleStationApprove(stationId: string, request: Request, env: En
   const pageId = await findStationPageId(stationId, env);
   if (!pageId) return apiError('Estación no encontrada', 404);
 
+  const pageRes = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
+  if (!pageRes.ok) return apiError('Estación no encontrada', 404);
+  const page = await pageRes.json() as NotionPage;
+
+  const isNewStation = page.properties['Estado']?.select?.name === 'Pendiente';
+
+  if (isNewStation) {
+    const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: notionHeaders(env.NOTION_TOKEN),
+      body: JSON.stringify({ properties: { 'Estado': { select: { name: 'Activo' } } } }),
+    });
+    if (!res.ok) return apiError('Error actualizando estación en Notion', 502);
+    return json({ ok: true });
+  }
+
+  // Correction proposal on an already-active station: apply the proposed
+  // fields to the live ones, then clear the proposal so it stops appearing
+  // as pending.
+  const propuestaLat = page.properties['Propuesta Lat']?.number;
+  const propuestaLng = page.properties['Propuesta Lng']?.number;
+  const propuestaVerificacion = page.properties['Propuesta Verificacion']?.select?.name;
+  const propuestaPor = richText(page.properties['Propuesta Por']);
+  if (!propuestaVerificacion && propuestaLat == null) return apiError('No hay ninguna propuesta pendiente para esta estación');
+
+  const today = new Date().toISOString().slice(0, 10);
+  const action = propuestaLat != null ? 'Ubicación corregida y verificada (aprobado por admin)' : 'Verificado en sitio (aprobado por admin)';
+  const currentNotas = richText(page.properties['Notas']);
+  const attribution = propuestaVerificacion === 'Erróneo'
+    ? `[Ubicación reportada errónea por: ${propuestaPor}, aprobado ${today}]`
+    : `[${action} — propuesto por: ${propuestaPor}]`;
+
+  const properties: Record<string, unknown> = {
+    'Notas': { rich_text: [{ text: { content: [currentNotas, attribution].filter(Boolean).join(' · ') } }] },
+    'Propuesta Lat': { number: null },
+    'Propuesta Lng': { number: null },
+    'Propuesta Verificacion': { select: null },
+    'Propuesta Por': { rich_text: [] },
+    'Propuesta Fecha': { rich_text: [] },
+  };
+  if (propuestaVerificacion) {
+    properties['Verificacion'] = { select: { name: propuestaVerificacion } };
+  }
+  if (propuestaLat != null && propuestaLng != null) {
+    properties['Latitud'] = { number: propuestaLat };
+    properties['Longitud'] = { number: propuestaLng };
+    properties['Google Maps'] = { url: `https://www.google.com/maps/search/?api=1&query=${propuestaLat},${propuestaLng}` };
+  }
+
   const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
     method: 'PATCH',
     headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ properties: { 'Estado': { select: { name: 'Activo' } } } }),
+    body: JSON.stringify({ properties }),
   });
-  if (!res.ok) return apiError('Error actualizando estación en Notion', 502);
+  if (!res.ok) return apiError('Error aplicando la propuesta en Notion', 502);
   return json({ ok: true });
 }
 
@@ -540,12 +609,36 @@ async function handleStationReject(stationId: string, request: Request, env: Env
   const pageId = await findStationPageId(stationId, env);
   if (!pageId) return apiError('Estación no encontrada', 404);
 
+  const pageRes = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
+  if (!pageRes.ok) return apiError('Estación no encontrada', 404);
+  const page = await pageRes.json() as NotionPage;
+  const isNewStation = page.properties['Estado']?.select?.name === 'Pendiente';
+
+  if (isNewStation) {
+    const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: notionHeaders(env.NOTION_TOKEN),
+      body: JSON.stringify({ archived: true }),
+    });
+    if (!res.ok) return apiError('Error eliminando estación en Notion', 502);
+    return json({ ok: true });
+  }
+
+  // Correction proposal: just discard it, the live station stays untouched.
   const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
     method: 'PATCH',
     headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ archived: true }),
+    body: JSON.stringify({
+      properties: {
+        'Propuesta Lat': { number: null },
+        'Propuesta Lng': { number: null },
+        'Propuesta Verificacion': { select: null },
+        'Propuesta Por': { rich_text: [] },
+        'Propuesta Fecha': { rich_text: [] },
+      },
+    }),
   });
-  if (!res.ok) return apiError('Error eliminando estación en Notion', 502);
+  if (!res.ok) return apiError('Error descartando la propuesta en Notion', 502);
   return json({ ok: true });
 }
 
@@ -1084,11 +1177,13 @@ async function handlePatchStation(stationId: string, request: Request, env: Env)
   return json({ ok: true });
 }
 
-// Any logged-in user (not just admin) can confirm a station's real-world
-// location or flag it as wrong once they're physically there. Only touches
-// Verificacion, Latitud/Longitud (if the caller supplies a GPS fix), and an
-// attribution line appended to Notas — never the rest of the station's data,
-// so this can't be used to vandalize name/connectors/network etc.
+// Any logged-in user can confirm a station's real-world location or flag it
+// as wrong once they're physically there. Admins apply the change
+// immediately. Everyone else's submission is stored as a "Propuesta *" on
+// the same page — it never touches the live Verificacion/Latitud/Longitud
+// until an admin approves it via handleStationApprove. In both cases only
+// location/verification fields are ever touched, never name/connectors/
+// network, so this can't be used to vandalize listing data.
 async function handleVerifyStation(stationId: string, request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('Debes iniciar sesión para verificar una estación', 401);
@@ -1107,27 +1202,48 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
   const pageId = await findStationPageId(stationId, env);
   if (!pageId) return apiError('Estación no encontrada', 404);
 
-  // Read current Notas so the attribution line is appended, not overwritten.
-  const current = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
-  const currentNotas = current.ok
-    ? richText((await current.json() as NotionPage).properties['Notas'])
-    : '';
-
   const today = new Date().toISOString().slice(0, 10);
-  const action = body.status === 'verified'
-    ? (body.lat != null ? 'Ubicación corregida y verificada' : 'Verificado en sitio')
-    : 'Reportado con ubicación errónea';
-  const attribution = `[${action} por: ${user.email}, ${today}]`;
-  const notas = [currentNotas, attribution].filter(Boolean).join(' · ');
 
+  if (user.role === 'admin') {
+    // Read current Notas so the attribution line is appended, not overwritten.
+    const current = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
+    const currentNotas = current.ok
+      ? richText((await current.json() as NotionPage).properties['Notas'])
+      : '';
+    const action = body.status === 'verified'
+      ? (body.lat != null ? 'Ubicación corregida y verificada' : 'Verificado en sitio')
+      : 'Reportado con ubicación errónea';
+    const attribution = `[${action} por: ${user.email}, ${today}]`;
+    const notas = [currentNotas, attribution].filter(Boolean).join(' · ');
+
+    const properties: Record<string, unknown> = {
+      'Verificacion': { select: { name: body.status === 'verified' ? 'Verificado' : 'Erróneo' } },
+      'Notas': { rich_text: [{ text: { content: notas } }] },
+    };
+    if (body.status === 'verified' && body.lat != null && body.lng != null) {
+      properties['Latitud'] = { number: body.lat };
+      properties['Longitud'] = { number: body.lng };
+      properties['Google Maps'] = { url: `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}` };
+    }
+
+    const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: notionHeaders(env.NOTION_TOKEN),
+      body: JSON.stringify({ properties }),
+    });
+    if (!res.ok) return apiError('Error actualizando verificación en Notion', 502);
+    return json({ ok: true, applied: true });
+  }
+
+  // Non-admin: record as a pending proposal for an admin to review.
   const properties: Record<string, unknown> = {
-    'Verificacion': { select: { name: body.status === 'verified' ? 'Verificado' : 'Erróneo' } },
-    'Notas': { rich_text: [{ text: { content: notas } }] },
+    'Propuesta Verificacion': { select: { name: body.status === 'verified' ? 'Verificado' : 'Erróneo' } },
+    'Propuesta Por': { rich_text: [{ text: { content: user.email } }] },
+    'Propuesta Fecha': { rich_text: [{ text: { content: today } }] },
   };
   if (body.status === 'verified' && body.lat != null && body.lng != null) {
-    properties['Latitud'] = { number: body.lat };
-    properties['Longitud'] = { number: body.lng };
-    properties['Google Maps'] = { url: `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}` };
+    properties['Propuesta Lat'] = { number: body.lat };
+    properties['Propuesta Lng'] = { number: body.lng };
   }
 
   const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
@@ -1135,8 +1251,8 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
     headers: notionHeaders(env.NOTION_TOKEN),
     body: JSON.stringify({ properties }),
   });
-  if (!res.ok) return apiError('Error actualizando verificación en Notion', 502);
-  return json({ ok: true });
+  if (!res.ok) return apiError('Error guardando la propuesta en Notion', 502);
+  return json({ ok: true, applied: false, pending: true });
 }
 
 async function handleDeleteStation(stationId: string, request: Request, env: Env): Promise<Response> {

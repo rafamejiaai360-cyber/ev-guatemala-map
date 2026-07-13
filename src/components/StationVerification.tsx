@@ -36,7 +36,10 @@ export default function StationVerification({ stationId, verification }: Props) 
         const err = await res.json() as { error?: string };
         throw new Error(err.error ?? `Error ${res.status}`);
       }
-      setMessage(body.status === 'verified' ? '¡Gracias! Ubicación confirmada.' : 'Gracias, lo revisaremos.');
+      const data = await res.json() as { applied?: boolean };
+      setMessage(data.applied
+        ? (body.status === 'verified' ? '¡Gracias! Ubicación confirmada.' : 'Gracias, lo revisaremos.')
+        : 'Gracias — tu propuesta fue enviada y un administrador la revisará antes de publicarla.');
       await loadDynamicStations();
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Error al enviar');
