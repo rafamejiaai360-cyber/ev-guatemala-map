@@ -235,22 +235,6 @@ export const chargerStations: ChargerStation[] = [
     access: 'public',
     notes: 'Cortesía Grupo Los Tres. Ubicación corregida.',
   },
-  // ── Guatemala Ciudad — Zona 11 ────────────────────────────────────────
-  {
-    id: 'gt-z11-sarita-majadas',
-    name: 'Sarita Majadas',
-    address: 'Av. Periférico, C.C. Majadas, Zona 11',
-    zone: 'Zona 11',
-    lat: 14.5979,
-    lng: -90.5488,
-    status: 'active',
-    connectors: [
-      { type: 'Type2', power_kw: 22, level: 'L2' },
-    ],
-    network: 'Electron Power',
-    access: 'public',
-    notes: 'En Restaurante Sarita, C.C. Majadas.',
-  },
   // ── Guatemala Ciudad — Zona 15 ─────────────────────────────────────────
   {
     id: 'gt-z15-metro15',
