@@ -586,22 +586,6 @@ export const chargerStations: ChargerStation[] = [
     notes: 'Autódromo oficial de Guatemala. Ubicación corregida: está en el municipio de Alotenango, no Masagua.',
   },
   {
-    id: 'esc-shell-km58',
-    name: 'Shell Auto Km 58',
-    address: 'Km 58 CA-9, Escuintla',
-    zone: 'Escuintla',
-    lat: 14.3090,
-    lng: -90.8020,
-    status: 'active',
-    connectors: [
-      { type: 'CCS2', power_kw: 120, level: 'DC' },
-      { type: 'CHAdeMO', power_kw: 50, level: 'DC' },
-    ],
-    network: 'Shell Recharge',
-    access: 'public',
-    notes: 'Punto de carga ruta al Pacífico.',
-  },
-  {
     id: 'esc-sarita-escuintla',
     name: 'Sarita Escuintla',
     address: 'Autopista Palín–Escuintla, Escuintla',
