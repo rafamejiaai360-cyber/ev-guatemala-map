@@ -4,13 +4,13 @@ import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } 
 import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo } from '../types';
 import { getAllRatings } from '../utils/reviewsApi';
 
-async function fetchDynamicStations(): Promise<ChargerStation[]> {
+async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
   try {
     const res = await fetch('/api/stations/dynamic');
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     return await res.json() as ChargerStation[];
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -68,8 +68,9 @@ interface AppState {
   customStations: ChargerStation[];
   addCustomStation: (station: ChargerStation) => void;
 
-  // Dynamic stations from Notion (added via scan, shared across all users)
+  // Dynamic stations from Notion (source of truth once loaded; shared across all users)
   dynamicStations: ChargerStation[];
+  dynamicLoaded: boolean;
   addDynamicStation: (station: ChargerStation) => void;
   loadDynamicStations: () => Promise<void>;
 
@@ -161,11 +162,19 @@ function buildAllStations(
   overrides: Record<string, ChargerStatus>,
   custom: ChargerStation[],
   dynamic: ChargerStation[],
+  dynamicLoaded: boolean,
 ): ChargerStation[] {
-  // Merge, excluding dynamic IDs already present in chargerStations
-  const staticIds = new Set(chargerStations.map(s => s.id));
-  const dedupedDynamic = dynamic.filter(d => !staticIds.has(d.id));
-  return applyOverrides([...chargerStations, ...custom, ...dedupedDynamic], overrides);
+  // Notion is the source of truth for any station id it knows about: once the
+  // dynamic fetch has succeeded, a dynamic station overrides its static seed
+  // counterpart, and a static station missing from the dynamic list (deleted/
+  // archived in Notion) is dropped instead of falling back to stale seed data.
+  // Before the first successful fetch, show the static seed list so the map
+  // isn't empty on first paint.
+  const dynamicIds = new Set(dynamic.map(d => d.id));
+  const staticFallback = dynamicLoaded
+    ? chargerStations.filter(s => !dynamicIds.has(s.id))
+    : chargerStations;
+  return applyOverrides([...staticFallback, ...custom, ...dynamic], overrides);
 }
 const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all' };
 
@@ -176,7 +185,7 @@ export const useStore = create<AppState>((set, get) => ({
   setStationStatus: (id, status) => {
     const overrides = { ...get().statusOverrides, [id]: status };
     saveOverrides(overrides);
-    const stations = buildAllStations(overrides, get().customStations, get().dynamicStations);
+    const stations = buildAllStations(overrides, get().customStations, get().dynamicStations, get().dynamicLoaded);
     const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
     set({ statusOverrides: overrides, stations, filteredStations });
   },
@@ -185,24 +194,25 @@ export const useStore = create<AppState>((set, get) => ({
   addCustomStation: (station) => {
     const custom = [...get().customStations, station];
     saveCustomStations(custom);
-    const stations = buildAllStations(get().statusOverrides, custom, get().dynamicStations);
+    const stations = buildAllStations(get().statusOverrides, custom, get().dynamicStations, get().dynamicLoaded);
     const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
     set({ customStations: custom, stations, filteredStations });
   },
 
   dynamicStations: [],
+  dynamicLoaded: false,
   addDynamicStation: (station) => {
     const dynamic = [...get().dynamicStations.filter(d => d.id !== station.id), station];
-    const stations = buildAllStations(get().statusOverrides, get().customStations, dynamic);
+    const stations = buildAllStations(get().statusOverrides, get().customStations, dynamic, get().dynamicLoaded);
     const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
     set({ dynamicStations: dynamic, stations, filteredStations });
   },
   loadDynamicStations: async () => {
     const dynamic = await fetchDynamicStations();
-    if (!dynamic.length) return;
-    const stations = buildAllStations(get().statusOverrides, get().customStations, dynamic);
+    if (dynamic === null) return; // fetch failed — keep showing the static fallback
+    const stations = buildAllStations(get().statusOverrides, get().customStations, dynamic, true);
     const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
-    set({ dynamicStations: dynamic, stations, filteredStations });
+    set({ dynamicStations: dynamic, dynamicLoaded: true, stations, filteredStations });
   },
 
   filters: initialFilters,
@@ -238,7 +248,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ statusCheckLoading: true, statusCheckError: null });
     try {
       const ocmData = await fetchGTStations();
-      const allStations = buildAllStations(get().statusOverrides, get().customStations, get().dynamicStations);
+      const allStations = buildAllStations(get().statusOverrides, get().customStations, get().dynamicStations, get().dynamicLoaded);
       const newOverrides = { ...get().statusOverrides };
 
       let matched = 0;
@@ -255,7 +265,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       saveOverrides(newOverrides);
-      const stations = buildAllStations(newOverrides, get().customStations, get().dynamicStations);
+      const stations = buildAllStations(newOverrides, get().customStations, get().dynamicStations, get().dynamicLoaded);
       const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
       set({
         statusOverrides: newOverrides,
