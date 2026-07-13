@@ -507,6 +507,11 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
       const propuestaLat = page.properties['Propuesta Lat']?.number;
       const propuestaLng = page.properties['Propuesta Lng']?.number;
       const propuestaVerificacion = page.properties['Propuesta Verificacion']?.select?.name;
+      let proposedChanges: Record<string, unknown> | null = null;
+      try {
+        const raw = richText(page.properties['Propuesta Cambios']);
+        if (raw) proposedChanges = JSON.parse(raw);
+      } catch {}
 
       results.push({
         notionId: page.id,
@@ -523,10 +528,12 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
           || 'anónimo',
         createdAt: page.created_time,
         kind: isNewStation ? 'new' : 'correction',
+        notes: richText(page.properties['Notas']),
         ...(isNewStation ? {} : {
           proposedLat: propuestaLat ?? null,
           proposedLng: propuestaLng ?? null,
           proposedVerification: verificationFromSelect(propuestaVerificacion),
+          proposedChanges,
         }),
       });
     }
@@ -567,23 +574,39 @@ async function handleStationApprove(stationId: string, request: Request, env: En
   const propuestaLng = page.properties['Propuesta Lng']?.number;
   const propuestaVerificacion = page.properties['Propuesta Verificacion']?.select?.name;
   const propuestaPor = richText(page.properties['Propuesta Por']);
-  if (!propuestaVerificacion && propuestaLat == null) return apiError('No hay ninguna propuesta pendiente para esta estación');
+  let propuestaCambios: Record<string, unknown> | null = null;
+  try {
+    const raw = richText(page.properties['Propuesta Cambios']);
+    if (raw) propuestaCambios = JSON.parse(raw);
+  } catch {}
+  if (!propuestaVerificacion && propuestaLat == null && !propuestaCambios) {
+    return apiError('No hay ninguna propuesta pendiente para esta estación');
+  }
 
   const today = new Date().toISOString().slice(0, 10);
-  const action = propuestaLat != null ? 'Ubicación corregida y verificada (aprobado por admin)' : 'Verificado en sitio (aprobado por admin)';
+  const action = propuestaCambios
+    ? 'Datos corregidos (aprobado por admin)'
+    : propuestaLat != null ? 'Ubicación corregida y verificada (aprobado por admin)' : 'Verificado en sitio (aprobado por admin)';
   const currentNotas = richText(page.properties['Notas']);
   const attribution = propuestaVerificacion === 'Erróneo'
     ? `[Ubicación reportada errónea por: ${propuestaPor}, aprobado ${today}]`
     : `[${action} — propuesto por: ${propuestaPor}]`;
 
+  // Proposed general edits go first; the fields below (Notas attribution,
+  // proposal cleanup, location proposal) take precedence over them.
   const properties: Record<string, unknown> = {
-    'Notas': { rich_text: [{ text: { content: [currentNotas, attribution].filter(Boolean).join(' · ') } }] },
+    ...(propuestaCambios ? stationChangesToNotionProperties(propuestaCambios) : {}),
     'Propuesta Lat': { number: null },
     'Propuesta Lng': { number: null },
     'Propuesta Verificacion': { select: null },
     'Propuesta Por': { rich_text: [] },
     'Propuesta Fecha': { rich_text: [] },
+    'Propuesta Cambios': { rich_text: [] },
   };
+  const baseNotas = propuestaCambios && typeof propuestaCambios.notes === 'string'
+    ? propuestaCambios.notes
+    : currentNotas;
+  properties['Notas'] = { rich_text: [{ text: { content: [baseNotas, attribution].filter(Boolean).join(' · ') } }] };
   if (propuestaVerificacion) {
     properties['Verificacion'] = { select: { name: propuestaVerificacion } };
   }
@@ -635,6 +658,7 @@ async function handleStationReject(stationId: string, request: Request, env: Env
         'Propuesta Verificacion': { select: null },
         'Propuesta Por': { rich_text: [] },
         'Propuesta Fecha': { rich_text: [] },
+        'Propuesta Cambios': { rich_text: [] },
       },
     }),
   });
@@ -1135,46 +1159,97 @@ async function handleListUsers(request: Request, env: Env): Promise<Response> {
 
 // ─── Station PATCH handler ────────────────────────────────────────────────────
 
+// Normalize an incoming edit payload to the subset of fields users are
+// allowed to change. Shared by the direct admin edit and by user proposals,
+// so both paths accept exactly the same shape.
+function normalizeStationChanges(body: Record<string, unknown>): { changes: Record<string, unknown>; error?: string } {
+  const changes: Record<string, unknown> = {};
+  if (typeof body.name === 'string' && body.name.trim()) changes.name = body.name.trim();
+  if (typeof body.address === 'string') changes.address = body.address.trim();
+  if (typeof body.zone === 'string' && body.zone.trim()) changes.zone = body.zone.trim();
+  if (typeof body.network === 'string') changes.network = body.network.trim();
+  if (typeof body.access === 'string' && ['public', 'semi-public', 'private'].includes(body.access)) changes.access = body.access;
+  if (typeof body.status === 'string' && ['active', 'maintenance', 'offline'].includes(body.status)) changes.status = body.status;
+  if (Array.isArray(body.connectors)) changes.connectors = body.connectors;
+  if (typeof body.lat === 'number') {
+    if (body.lat < 13 || body.lat > 18) return { changes, error: 'lat fuera de rango para Guatemala' };
+    changes.lat = body.lat;
+  }
+  if (typeof body.lng === 'number') {
+    if (body.lng < -93 || body.lng > -88) return { changes, error: 'lng fuera de rango para Guatemala' };
+    changes.lng = body.lng;
+  }
+  if (typeof body.notes === 'string') changes.notes = body.notes.trim();
+  return { changes };
+}
+
+function stationChangesToNotionProperties(changes: Record<string, unknown>): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  if (typeof changes.name === 'string' && changes.name.trim())
+    properties['Nombre'] = { title: [{ text: { content: changes.name.trim() } }] };
+  if (typeof changes.address === 'string')
+    properties['Dirección'] = { rich_text: [{ text: { content: changes.address } }] };
+  if (typeof changes.zone === 'string' && changes.zone.trim())
+    properties['Zona'] = { rich_text: [{ text: { content: changes.zone.trim() } }] };
+  if (typeof changes.network === 'string')
+    properties['Red'] = { rich_text: [{ text: { content: changes.network } }] };
+  if (typeof changes.access === 'string')
+    properties['Acceso'] = { rich_text: [{ text: { content: changes.access } }] };
+  if (typeof changes.status === 'string')
+    properties['Estado'] = { select: { name: changes.status === 'active' ? 'Activo' : changes.status === 'maintenance' ? 'Mantenimiento' : 'Inactivo' } };
+  if (Array.isArray(changes.connectors))
+    properties['Conectores'] = { rich_text: [{ text: { content: JSON.stringify(changes.connectors) } }] };
+  if (typeof changes.lat === 'number')
+    properties['Latitud'] = { number: changes.lat };
+  if (typeof changes.lng === 'number')
+    properties['Longitud'] = { number: changes.lng };
+  if (typeof changes.lat === 'number' && typeof changes.lng === 'number')
+    properties['Google Maps'] = { url: `https://www.google.com/maps/search/?api=1&query=${changes.lat},${changes.lng}` };
+  if (typeof changes.notes === 'string')
+    properties['Notas'] = { rich_text: [{ text: { content: changes.notes } }] };
+  return properties;
+}
+
+// Admins edit the live listing directly. Any other logged-in user gets the
+// same form, but their edit is stored as a "Propuesta Cambios" proposal on
+// the page — it never touches the live data until an admin approves it via
+// handleStationApprove.
 async function handlePatchStation(stationId: string, request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
-  if (!user || user.role !== 'admin') return apiError('Solo administradores pueden editar estaciones', 403);
+  if (!user) return apiError('Debes iniciar sesión para editar estaciones', 401);
 
   const pageId = await findStationPageId(stationId, env);
   if (!pageId) return apiError('Estación no encontrada', 404);
 
   const body = await request.json() as Record<string, unknown>;
-  const properties: Record<string, unknown> = {};
+  const { changes, error } = normalizeStationChanges(body);
+  if (error) return apiError(error);
+  if (Object.keys(changes).length === 0) return apiError('Nada que actualizar');
 
-  if (typeof body.name === 'string' && body.name.trim())
-    properties['Nombre'] = { title: [{ text: { content: body.name.trim() } }] };
-  if (typeof body.address === 'string')
-    properties['Dirección'] = { rich_text: [{ text: { content: body.address.trim() } }] };
-  if (typeof body.zone === 'string' && body.zone.trim())
-    properties['Zona'] = { rich_text: [{ text: { content: body.zone.trim() } }] };
-  if (typeof body.network === 'string')
-    properties['Red'] = { rich_text: [{ text: { content: body.network.trim() } }] };
-  if (typeof body.access === 'string' && ['public', 'semi-public', 'private'].includes(body.access))
-    properties['Acceso'] = { rich_text: [{ text: { content: body.access } }] };
-  if (typeof body.status === 'string' && ['active', 'maintenance', 'offline'].includes(body.status))
-    properties['Estado'] = { select: { name: body.status === 'active' ? 'Activo' : body.status === 'maintenance' ? 'Mantenimiento' : 'Inactivo' } };
-  if (Array.isArray(body.connectors))
-    properties['Conectores'] = { rich_text: [{ text: { content: JSON.stringify(body.connectors) } }] };
-  if (typeof body.lat === 'number')
-    properties['Latitud'] = { number: body.lat };
-  if (typeof body.lng === 'number')
-    properties['Longitud'] = { number: body.lng };
-  if (typeof body.notes === 'string')
-    properties['Notas'] = { rich_text: [{ text: { content: body.notes.trim() } }] };
-
-  if (Object.keys(properties).length === 0) return apiError('Nada que actualizar');
+  if (user.role !== 'admin') {
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: notionHeaders(env.NOTION_TOKEN),
+      body: JSON.stringify({
+        properties: {
+          'Propuesta Cambios': { rich_text: [{ text: { content: JSON.stringify(changes) } }] },
+          'Propuesta Por': { rich_text: [{ text: { content: user.email } }] },
+          'Propuesta Fecha': { rich_text: [{ text: { content: today } }] },
+        },
+      }),
+    });
+    if (!res.ok) return apiError('Error guardando la propuesta en Notion', 502);
+    return json({ ok: true, applied: false, pending: true });
+  }
 
   const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
     method: 'PATCH',
     headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ properties }),
+    body: JSON.stringify({ properties: stationChangesToNotionProperties(changes) }),
   });
   if (!res.ok) return apiError('Error actualizando estación en Notion', 502);
-  return json({ ok: true });
+  return json({ ok: true, applied: true });
 }
 
 // Any logged-in user can confirm a station's real-world location or flag it

@@ -29,10 +29,54 @@ interface PendingStation {
   access: string;
   submittedBy: string;
   createdAt: string;
+  notes?: string;
   kind: 'new' | 'correction';
   proposedLat?: number | null;
   proposedLng?: number | null;
   proposedVerification?: 'pending' | 'verified' | 'error';
+  proposedChanges?: Record<string, unknown> | null;
+}
+
+const CHANGE_LABELS: Record<string, string> = {
+  name: 'Nombre',
+  address: 'Dirección',
+  zone: 'Zona',
+  network: 'Operador',
+  access: 'Acceso',
+  status: 'Estado',
+  lat: 'Latitud',
+  lng: 'Longitud',
+  connectors: 'Conectores',
+  notes: 'Notas',
+};
+
+function formatChangeValue(value: unknown): string {
+  if (value == null || value === '') return '—';
+  if (Array.isArray(value)) {
+    return value
+      .map(c => {
+        const conn = c as { type?: string; power_kw?: number };
+        return `${conn.type ?? '?'}${conn.power_kw ? ` ${conn.power_kw}kW` : ''}`;
+      })
+      .join(', ');
+  }
+  if (typeof value === 'number') return String(value);
+  return String(value);
+}
+
+function currentChangeValue(station: PendingStation, key: string): unknown {
+  switch (key) {
+    case 'name': return station.name;
+    case 'address': return station.address;
+    case 'zone': return station.zone;
+    case 'network': return station.network;
+    case 'access': return station.access;
+    case 'lat': return station.lat;
+    case 'lng': return station.lng;
+    case 'connectors': return station.connectors;
+    case 'notes': return station.notes;
+    default: return undefined;
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -397,7 +441,9 @@ function PendingTab() {
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
                   <span className="text-xs font-medium text-amber-700">
-                    {station.kind === 'correction' ? 'Corrección de ubicación pendiente' : 'Estación nueva pendiente de revisión'}
+                    {station.kind !== 'correction' ? 'Estación nueva pendiente de revisión'
+                      : station.proposedChanges ? 'Corrección de datos pendiente'
+                      : 'Corrección de ubicación pendiente'}
                   </span>
                 </div>
                 <span className="text-[10px] text-gray-400">
@@ -416,9 +462,23 @@ function PendingTab() {
                         {station.proposedVerification === 'error' && (
                           <p className="text-[11px] text-red-600 font-medium">⚠ Reportada como ubicación errónea</p>
                         )}
-                        <p className="text-[10px] text-gray-400 font-mono">
-                          Actual: {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
-                        </p>
+                        {station.proposedChanges && (
+                          <div className="space-y-0.5">
+                            {Object.entries(station.proposedChanges).map(([key, value]) => (
+                              <p key={key} className="text-[10px] leading-relaxed">
+                                <span className="text-gray-500 font-medium">{CHANGE_LABELS[key] ?? key}:</span>{' '}
+                                <span className="text-gray-400 line-through">{formatChangeValue(currentChangeValue(station, key))}</span>
+                                {' → '}
+                                <span className="text-blue-600 font-medium">{formatChangeValue(value)}</span>
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        {!station.proposedChanges && (
+                          <p className="text-[10px] text-gray-400 font-mono">
+                            Actual: {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
+                          </p>
+                        )}
                         {station.proposedLat != null && station.proposedLng != null && (
                           <p className="text-[10px] text-blue-600 font-mono">
                             Propuesta: {station.proposedLat.toFixed(5)}, {station.proposedLng.toFixed(5)}

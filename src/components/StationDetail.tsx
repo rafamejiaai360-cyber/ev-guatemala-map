@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import type { ChargerStation } from '../types';
+import { useStore } from '../store/useStore';
+import EditStationModal from './EditStationModal';
 import StationPhotos from './StationPhotos';
 import StationReviews from './StationReviews';
 import StationVerification from './StationVerification';
@@ -36,6 +39,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function StationDetail({ station, onBack }: Props) {
+  const { currentUser } = useStore();
+  const [showEdit, setShowEdit] = useState(false);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
+
   return (
     <div className="flex flex-col h-full">
       {/* Back header */}
@@ -82,6 +89,16 @@ export default function StationDetail({ station, onBack }: Props) {
           {station.notes && (
             <p className="text-[10px] text-gray-400 italic leading-relaxed">{station.notes}</p>
           )}
+
+          {currentUser && (
+            <button
+              onClick={() => { setEditMsg(null); setShowEdit(true); }}
+              className="text-[11px] px-2.5 py-1.5 rounded-lg bg-gray-50 text-gray-600 font-medium hover:bg-gray-100 transition-colors border border-gray-200"
+            >
+              ✏️ {currentUser.role === 'admin' ? 'Editar estación' : 'Sugerir corrección de datos'}
+            </button>
+          )}
+          {editMsg && <p className="text-[10px] text-green-600">{editMsg}</p>}
         </div>
 
         {/* Verification */}
@@ -93,6 +110,19 @@ export default function StationDetail({ station, onBack }: Props) {
         {/* Reviews + ratings */}
         <StationReviews stationId={station.id} stationName={station.name} />
       </div>
+
+      {showEdit && (
+        <EditStationModal
+          station={station}
+          onClose={() => setShowEdit(false)}
+          onSaved={(pending) => {
+            setShowEdit(false);
+            setEditMsg(pending
+              ? 'Gracias — tu propuesta fue enviada y un administrador la revisará antes de publicarla.'
+              : 'Cambios guardados.');
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -11,11 +11,12 @@ function levelFromKw(kw: number | null): ChargerLevel | null { if (kw == null) r
 interface Props {
   station: ChargerStation;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (pending?: boolean) => void;
 }
 
 export default function EditStationModal({ station, onClose, onSaved }: Props) {
-  const { authToken, loadDynamicStations } = useStore();
+  const { authToken, currentUser, loadDynamicStations } = useStore();
+  const isAdmin = currentUser?.role === 'admin';
 
   const [name, setName] = useState(station.name);
   const [address, setAddress] = useState(station.address ?? '');
@@ -51,24 +52,41 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
     if (isNaN(latNum) || isNaN(lngNum)) { setError('Coordenadas inválidas'); return; }
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
 
+    // Only send the fields that actually changed, so user proposals show a
+    // clean diff in the admin panel instead of every field.
+    const newConnectors = connectors.map(c => ({ type: c.type, ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }) }));
+    const payload: Record<string, unknown> = {};
+    if (name.trim() !== station.name) payload.name = name.trim();
+    if (address.trim() !== (station.address ?? '')) payload.address = address.trim();
+    if (zone.trim() !== (station.zone ?? '')) payload.zone = zone.trim();
+    if (network.trim() !== (station.network ?? '')) payload.network = network.trim();
+    if (access !== station.access) payload.access = access;
+    if (status !== station.status) payload.status = status;
+    if (latNum !== station.lat) payload.lat = latNum;
+    if (lngNum !== station.lng) payload.lng = lngNum;
+    if (JSON.stringify(newConnectors) !== JSON.stringify(station.connectors)) payload.connectors = newConnectors;
+    const origNotes = ((station as unknown as Record<string, unknown>).notes as string ?? '').trim();
+    if (notes.trim() !== origNotes) payload.notes = notes.trim();
+
+    if (Object.keys(payload).length === 0) {
+      setError('No hay ningún cambio que enviar');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch(`/api/stations/${station.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({
-          name: name.trim(), address: address.trim(), zone: zone.trim(),
-          network: network.trim(), access, status, lat: latNum, lng: lngNum,
-          connectors: connectors.map(c => ({ type: c.type, ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }) })),
-          notes: notes.trim() || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = await res.json() as { error?: string };
         throw new Error(err.error ?? `Error ${res.status}`);
       }
-      await loadDynamicStations();
-      onSaved();
+      const data = await res.json() as { pending?: boolean };
+      if (!data.pending) await loadDynamicStations();
+      onSaved(data.pending === true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al guardar');
     } finally {
@@ -106,8 +124,10 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-4">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900">Editar estación</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{station.id}</p>
+            <h2 className="text-sm font-semibold text-gray-900">{isAdmin ? 'Editar estación' : 'Sugerir corrección'}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {isAdmin ? station.id : 'Un administrador revisará tus cambios antes de publicarlos'}
+            </p>
           </div>
           <button onClick={onClose} className="text-gray-300 hover:text-gray-600 transition-colors p-1">
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -223,10 +243,10 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
           <div className="flex gap-2 pt-1">
             <button type="submit" disabled={submitting}
               className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
-              {submitting ? 'Guardando…' : 'Guardar cambios'}
+              {submitting ? 'Enviando…' : isAdmin ? 'Guardar cambios' : 'Enviar propuesta'}
             </button>
 
-            {!confirmDelete ? (
+            {isAdmin && (!confirmDelete ? (
               <button type="button" onClick={() => setConfirmDelete(true)}
                 className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-xl transition-colors border border-red-100">
                 Eliminar
@@ -236,7 +256,7 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
                 className="px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
                 ¿Confirmar?
               </button>
-            )}
+            ))}
           </div>
         </form>
       </div>
