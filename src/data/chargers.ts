@@ -86,8 +86,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Westin Camino Real',
     address: '14 Calle y Av. La Reforma, Zona 10',
     zone: 'Zona 10',
-    lat: 14.6045,
-    lng: -90.5144,
+    lat: 14.5979761,
+    lng: -90.5163561,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 22, level: 'L2' },
@@ -101,8 +101,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Centro Comercial Obelisco',
     address: '16 Calle 1-26, Zona 10',
     zone: 'Zona 10',
-    lat: 14.5989,
-    lng: -90.5132,
+    lat: 14.5952034,
+    lng: -90.5166626,
     status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
