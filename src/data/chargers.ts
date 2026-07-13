@@ -5,10 +5,10 @@ export const chargerStations: ChargerStation[] = [
   {
     id: 'gt-z1-hilton',
     name: 'Hilton Guatemala City',
-    address: 'Prolongación Blvd. Los Próceres, Km 9, Zona 15',
+    address: 'Km. 9.5, Carretera a El Salvador, Zona 15 / Santa Catarina Pinula',
     zone: 'Zona 15',
-    lat: 14.5665,
-    lng: -90.4840,
+    lat: 14.5725434,
+    lng: -90.4858506,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 22, level: 'L2' },
@@ -39,8 +39,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Toyota Liberación',
     address: 'Blvd. Liberación 4-59, Zona 9',
     zone: 'Zona 9',
-    lat: 14.6160,
-    lng: -90.5230,
+    lat: 14.5981949,
+    lng: -90.5232271,
     status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
@@ -160,10 +160,10 @@ export const chargerStations: ChargerStation[] = [
   {
     id: 'gt-z10-audi',
     name: 'Audi Guatemala',
-    address: '20 Calle 16-20, Zona 10',
+    address: '20 Calle, Villa de Guadalupe, Zona 10',
     zone: 'Zona 10',
-    lat: 14.5910,
-    lng: -90.5030,
+    lat: 14.587548,
+    lng: -90.5048512,
     status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 150, level: 'DC' },
@@ -302,10 +302,10 @@ export const chargerStations: ChargerStation[] = [
   {
     id: 'gt-z15-uvg',
     name: 'Universidad del Valle de Guatemala',
-    address: '18 Av. 11-95, Vista Hermosa III, Zona 15',
+    address: '16 Avenida, Residencial Vista Hermosa 3, Zona 15',
     zone: 'Zona 15',
-    lat: 14.6010,
-    lng: -90.4930,
+    lat: 14.6046992,
+    lng: -90.4895876,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 22, level: 'L2' },
@@ -320,8 +320,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Ciudad Cayalá Distrito Moda',
     address: 'Cayalá, Blvd. Rafael Landívar, Zona 16',
     zone: 'Zona 16',
-    lat: 14.5564,
-    lng: -90.4788,
+    lat: 14.609329,
+    lng: -90.4875154,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 22, level: 'L2' },
@@ -336,8 +336,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Ciudad Cayalá La Torre',
     address: 'Cayalá, Blvd. Rafael Landívar, Zona 16',
     zone: 'Zona 16',
-    lat: 14.5577,
-    lng: -90.4780,
+    lat: 14.6086271,
+    lng: -90.4881351,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 7.4, level: 'L2' },
@@ -366,15 +366,15 @@ export const chargerStations: ChargerStation[] = [
     name: 'CC Spazio',
     address: '15 Avenida, Vista Hermosa III, Zona 15',
     zone: 'Zona 15',
-    lat: 14.5920,
-    lng: -90.4920,
+    lat: 14.6052537,
+    lng: -90.4948059,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 7.4, level: 'L2' },
     ],
     network: 'Porsche Destination',
     access: 'public',
-    notes: 'Cortesía Grupo Los Tres. Dirección y zona confirmadas (Vista Hermosa III, Zona 15); coordenada estimada dentro de esa área.',
+    notes: 'Cortesía Grupo Los Tres. Coordenada verificada con Google Maps (pin confirmado por el usuario).',
   },
   // ── Santa Catarina Pinula ────────────────────────────────────────────
   {
@@ -382,8 +382,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Pradera Concepción',
     address: 'Km 15.5 Carretera a El Salvador, Santa Catarina Pinula',
     zone: 'Santa Catarina Pinula',
-    lat: 14.5560,
-    lng: -90.4720,
+    lat: 14.5522925,
+    lng: -90.4528115,
     status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
@@ -399,8 +399,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Metamercado Mixco San Juan',
     address: 'Calzada San Juan, Mixco',
     zone: 'Mixco',
-    lat: 14.6339,
-    lng: -90.5951,
+    lat: 14.6449,
+    lng: -90.5752,
     status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
@@ -476,8 +476,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Centro Comercial El Frutal',
     address: 'Blvd. El Frutal 14-00, Zona 5, Villa Nueva',
     zone: 'Villa Nueva',
-    lat: 14.5178,
-    lng: -90.5881,
+    lat: 14.5204662,
+    lng: -90.5644875,
     status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
@@ -509,8 +509,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Casa Santo Domingo Hotel',
     address: '3a Calle Oriente 28, Antigua Guatemala',
     zone: 'Antigua Guatemala',
-    lat: 14.5596,
-    lng: -90.7317,
+    lat: 14.5592976,
+    lng: -90.7283136,
     status: 'active',
     connectors: [
       { type: 'Type2', power_kw: 22, level: 'L2' },
@@ -672,8 +672,8 @@ export const chargerStations: ChargerStation[] = [
     name: 'Universidad Da Vinci',
     address: '7a Calle 13-70, El Terrero, Zona 4, Huehuetenango',
     zone: 'Huehuetenango',
-    lat: 15.317550,
-    lng: -91.483280,
+    lat: 15.3303029,
+    lng: -91.4850967,
     status: 'active',
     connectors: [
       { type: 'J1772', power_kw: 7.4, level: 'L2' },
