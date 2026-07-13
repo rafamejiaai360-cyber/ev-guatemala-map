@@ -601,6 +601,21 @@ export const chargerStations: ChargerStation[] = [
     access: 'public',
     notes: 'Punto de carga ruta al Pacífico.',
   },
+  {
+    id: 'esc-sarita-escuintla',
+    name: 'Sarita Escuintla',
+    address: 'Autopista Palín–Escuintla, Escuintla',
+    zone: 'Escuintla',
+    lat: 14.3312317,
+    lng: -90.7991903,
+    status: 'active',
+    connectors: [
+      { type: 'Type2', power_kw: 22, level: 'L2' },
+    ],
+    network: 'Electron Power',
+    access: 'public',
+    notes: 'En Restaurante Sarita, autopista Palín–Escuintla.',
+  },
   // ── Puerto San José / La Barrita ─────────────────────────────────────
   {
     id: 'psj-marina-del-sur',
