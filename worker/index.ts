@@ -45,6 +45,7 @@ interface NotionProp {
   title?: { text: { content: string } }[];
   files?: NotionFile[];
   select?: { name: string } | null;
+  url?: string | null;
 }
 
 interface NotionFile {
@@ -56,6 +57,12 @@ interface NotionFile {
 
 function richText(prop: NotionProp | undefined): string {
   return prop?.rich_text?.[0]?.text?.content ?? '';
+}
+
+function verificationFromSelect(name: string | undefined): 'pending' | 'verified' | 'error' {
+  if (name === 'Verificado') return 'verified';
+  if (name === 'Erróneo') return 'error';
+  return 'pending';
 }
 
 function pageToReview(page: NotionPage) {
@@ -395,7 +402,7 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
     zone?: string; lat: number; lng: number;
     network?: string; status?: string;
     connectors?: Array<{ type: string; power_kw: number; level: string }>;
-    access?: string; source?: string;
+    access?: string; source?: string; notes?: string;
   };
 
   if (!body.id || !body.name || body.lat == null || body.lng == null) {
@@ -440,6 +447,7 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
         'Fuente': { rich_text: [{ text: { content: body.source ?? 'Manual' } }] },
         ...(notesContent ? { 'Notas': { rich_text: [{ text: { content: notesContent } }] } } : {}),
         'Estado': { select: { name: estado } },
+        'Verificacion': { select: { name: 'Pendiente' } },
       },
     }),
   });
@@ -591,6 +599,9 @@ async function handleGetDynamicStations(env: Env): Promise<Response> {
         connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
         network: richText(page.properties['Red']) || 'Desconocido',
         access: ['public', 'semi-public', 'private'].includes(access) ? access : 'public',
+        notes: richText(page.properties['Notas']) || undefined,
+        verification: verificationFromSelect(page.properties['Verificacion']?.select?.name),
+        googleMapsUrl: page.properties['Google Maps']?.url ?? undefined,
       });
     }
 
@@ -1073,6 +1084,61 @@ async function handlePatchStation(stationId: string, request: Request, env: Env)
   return json({ ok: true });
 }
 
+// Any logged-in user (not just admin) can confirm a station's real-world
+// location or flag it as wrong once they're physically there. Only touches
+// Verificacion, Latitud/Longitud (if the caller supplies a GPS fix), and an
+// attribution line appended to Notas — never the rest of the station's data,
+// so this can't be used to vandalize name/connectors/network etc.
+async function handleVerifyStation(stationId: string, request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('Debes iniciar sesión para verificar una estación', 401);
+
+  const body = await request.json() as { status?: string; lat?: number; lng?: number };
+  if (body.status !== 'verified' && body.status !== 'error') {
+    return apiError('status debe ser "verified" o "error"');
+  }
+  if (body.lat != null && (typeof body.lat !== 'number' || body.lat < 13 || body.lat > 18)) {
+    return apiError('lat fuera de rango para Guatemala');
+  }
+  if (body.lng != null && (typeof body.lng !== 'number' || body.lng < -93 || body.lng > -88)) {
+    return apiError('lng fuera de rango para Guatemala');
+  }
+
+  const pageId = await findStationPageId(stationId, env);
+  if (!pageId) return apiError('Estación no encontrada', 404);
+
+  // Read current Notas so the attribution line is appended, not overwritten.
+  const current = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
+  const currentNotas = current.ok
+    ? richText((await current.json() as NotionPage).properties['Notas'])
+    : '';
+
+  const today = new Date().toISOString().slice(0, 10);
+  const action = body.status === 'verified'
+    ? (body.lat != null ? 'Ubicación corregida y verificada' : 'Verificado en sitio')
+    : 'Reportado con ubicación errónea';
+  const attribution = `[${action} por: ${user.email}, ${today}]`;
+  const notas = [currentNotas, attribution].filter(Boolean).join(' · ');
+
+  const properties: Record<string, unknown> = {
+    'Verificacion': { select: { name: body.status === 'verified' ? 'Verificado' : 'Erróneo' } },
+    'Notas': { rich_text: [{ text: { content: notas } }] },
+  };
+  if (body.status === 'verified' && body.lat != null && body.lng != null) {
+    properties['Latitud'] = { number: body.lat };
+    properties['Longitud'] = { number: body.lng };
+    properties['Google Maps'] = { url: `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}` };
+  }
+
+  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: notionHeaders(env.NOTION_TOKEN),
+    body: JSON.stringify({ properties }),
+  });
+  if (!res.ok) return apiError('Error actualizando verificación en Notion', 502);
+  return json({ ok: true });
+}
+
 async function handleDeleteStation(stationId: string, request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user || user.role !== 'admin') return apiError('Solo administradores pueden eliminar estaciones', 403);
@@ -1251,6 +1317,12 @@ export default {
         const [, sid, action] = stationActionMatch;
         if (action === 'approve') return handleStationApprove(sid, request, env);
         if (action === 'reject') return handleStationReject(sid, request, env);
+      }
+
+      // Field verification: POST /api/stations/:id/verify (any logged-in user)
+      const stationVerifyMatch = path.match(/^stations\/([^/]+)\/verify$/);
+      if (stationVerifyMatch && request.method === 'POST') {
+        return handleVerifyStation(stationVerifyMatch[1], request, env);
       }
 
       // Station edit / delete: PATCH|DELETE /api/stations/:id

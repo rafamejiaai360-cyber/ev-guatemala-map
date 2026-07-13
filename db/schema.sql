@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS stations (
   google_maps_url TEXT,
   submitted_by TEXT,                          -- email de quien propuso la estación
   approval_status TEXT NOT NULL DEFAULT 'active', -- active | pending | rejected
+  verification_status TEXT NOT NULL DEFAULT 'pending', -- pending | verified | error (confirmado en sitio por usuario/admin)
+  verified_by TEXT,                           -- email de quien verificó/reportó por última vez
+  verified_at TEXT,
   rating_avg REAL,
   rating_count INTEGER NOT NULL DEFAULT 0,
   notion_page_id TEXT,                        -- referencia al registro editorial en Notion

@@ -10,6 +10,8 @@ export interface Connector {
   level: ChargerLevel;
 }
 
+export type VerificationStatus = 'pending' | 'verified' | 'error';
+
 export interface ChargerStation {
   id: string;
   name: string;
@@ -23,6 +25,8 @@ export interface ChargerStation {
   access: 'public' | 'semi-public' | 'private';
   notes?: string;
   image_url?: string;
+  verification?: VerificationStatus;
+  googleMapsUrl?: string;
 }
 
 export interface Review {

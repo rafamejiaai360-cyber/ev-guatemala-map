@@ -1,6 +1,7 @@
 import type { ChargerStation } from '../types';
 import StationPhotos from './StationPhotos';
 import StationReviews from './StationReviews';
+import StationVerification from './StationVerification';
 
 interface Props {
   station: ChargerStation;
@@ -82,6 +83,9 @@ export default function StationDetail({ station, onBack }: Props) {
             <p className="text-[10px] text-gray-400 italic leading-relaxed">{station.notes}</p>
           )}
         </div>
+
+        {/* Verification */}
+        <StationVerification stationId={station.id} verification={station.verification} />
 
         {/* Photos */}
         <StationPhotos stationId={station.id} stationName={station.name} />
