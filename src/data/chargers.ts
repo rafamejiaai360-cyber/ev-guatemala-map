@@ -416,8 +416,8 @@ export const chargerStations: ChargerStation[] = [
     name: "McDonald's Mixco",
     address: 'Calzada Roosevelt Km 15, 13-70, Zona 7, Mixco',
     zone: 'Mixco',
-    lat: 14.6278,
-    lng: -90.5870,
+    lat: 14.6352662,
+    lng: -90.5948437,
     status: 'active',
     connectors: [
       { type: 'CCS2', power_kw: 50, level: 'DC' },
