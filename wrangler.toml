@@ -17,3 +17,11 @@ NOTION_STATIONS_DB_ID = "c1ba47a910824e1fb9dc96a17d45c471"
 binding = "PHOTOS"
 id = "73a50969442548e4b83342a93d3ba60d"
 # Los usuarios se guardan en este mismo KV con el prefijo "user:"
+
+# Base de datos de producción (estaciones/usuarios/reseñas/suscripciones).
+# Descomentar y llenar "database_id" después de correr:
+#   wrangler d1 create ev-guatemala-db
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "ev-guatemala-db"
+# database_id = "PEGAR_AQUI_EL_ID_QUE_DEVUELVE_EL_COMANDO_ANTERIOR"
