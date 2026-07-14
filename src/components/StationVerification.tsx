@@ -1,26 +1,52 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
-import type { VerificationStatus } from '../types';
+import type { ChargerStation, FreshnessStatus } from '../types';
 
 interface Props {
-  stationId: string;
-  verification?: VerificationStatus;
+  station: ChargerStation;
 }
 
-const BADGE: Record<VerificationStatus, { label: string; className: string }> = {
-  verified: { label: 'Ubicación verificada', className: 'bg-green-100 text-green-700' },
-  error: { label: 'Ubicación reportada errónea', className: 'bg-red-100 text-red-700' },
-  pending: { label: 'Ubicación sin verificar', className: 'bg-gray-100 text-gray-500' },
-};
+// "hace 3 días", "hace 2 meses" — a partir del timestamp UTC de D1
+function timeAgo(sqlUtc: string): string {
+  const then = Date.parse(sqlUtc.replace(' ', 'T') + (sqlUtc.endsWith('Z') ? '' : 'Z'));
+  if (isNaN(then)) return '';
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return 'hoy';
+  if (days === 1) return 'hace 1 día';
+  if (days < 60) return `hace ${days} días`;
+  const months = Math.floor(days / 30);
+  return `hace ${months} meses`;
+}
 
-export default function StationVerification({ stationId, verification }: Props) {
+function badgeFor(station: ChargerStation): { label: string; className: string } {
+  // freshness viene de D1; si falta (semilla estática), derivar del campo legado
+  const freshness: FreshnessStatus = station.freshness
+    ?? (station.verification === 'verified' ? 'verified'
+      : station.verification === 'error' ? 'flagged' : 'pending');
+
+  switch (freshness) {
+    case 'verified': {
+      const ago = station.lastConfirmedAt ? ` ${timeAgo(station.lastConfirmedAt)}` : '';
+      const count = (station.confirmCount ?? 0) > 1 ? ` · ${station.confirmCount} confirmaciones` : '';
+      return { label: `✓ Confirmada${ago}${count}`, className: 'bg-green-100 text-green-700' };
+    }
+    case 'stale':
+      return { label: '⏳ Sin confirmar recientemente', className: 'bg-amber-100 text-amber-700' };
+    case 'flagged':
+      return { label: '⚠ Reportada con problemas por la comunidad', className: 'bg-red-100 text-red-700' };
+    default:
+      return { label: 'Sin verificar', className: 'bg-gray-100 text-gray-500' };
+  }
+}
+
+export default function StationVerification({ station }: Props) {
+  const stationId = station.id;
   const { authToken, currentUser, loadDynamicStations } = useStore();
   const [submitting, setSubmitting] = useState<'confirm' | 'gps' | 'error' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const status = verification ?? 'pending';
-  const badge = BADGE[status];
+  const badge = badgeFor(station);
 
   async function submit(body: { status: 'verified' | 'error'; lat?: number; lng?: number }, kind: 'confirm' | 'gps' | 'error') {
     setSubmitting(kind);
@@ -38,8 +64,10 @@ export default function StationVerification({ stationId, verification }: Props) 
       }
       const data = await res.json() as { applied?: boolean };
       setMessage(data.applied
-        ? (body.status === 'verified' ? '¡Gracias! Ubicación confirmada.' : 'Gracias, lo revisaremos.')
-        : 'Gracias — tu propuesta fue enviada y un administrador la revisará antes de publicarla.');
+        ? (body.status === 'verified'
+          ? '¡Gracias! Tu confirmación ya está en el mapa.'
+          : 'Gracias por el reporte — quedó registrado para la comunidad.')
+        : 'Gracias — tu corrección fue enviada y un administrador la revisará antes de publicarla.');
       await loadDynamicStations();
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Error al enviar');

@@ -102,7 +102,7 @@ export default function StationDetail({ station, onBack }: Props) {
         </div>
 
         {/* Verification */}
-        <StationVerification stationId={station.id} verification={station.verification} />
+        <StationVerification station={station} />
 
         {/* Photos */}
         <StationPhotos stationId={station.id} stationName={station.name} />

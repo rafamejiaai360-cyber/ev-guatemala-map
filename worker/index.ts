@@ -931,11 +931,12 @@ async function handleGetStationsFromD1(env: Env): Promise<Response> {
 
   const { results } = await env.DB.prepare(
     `SELECT id, name, address, zone, lat, lng, status, connectors, network, access,
-            notes, verification_status, google_maps_url
+            notes, verification_status, google_maps_url, last_confirmed_at,
+            confirm_count, open_reports
        FROM stations
       WHERE approval_status = 'active' AND status IN ('active', 'maintenance')
       ORDER BY id`
-  ).all<StationRow>();
+  ).all<StationRow & { last_confirmed_at: string | null; confirm_count: number; open_reports: number }>();
 
   const stations = results.map((r) => {
     let connectors: unknown[] = [];
@@ -943,8 +944,8 @@ async function handleGetStationsFromD1(env: Env): Promise<Response> {
       const parsed = JSON.parse(r.connectors || '[]');
       if (Array.isArray(parsed)) connectors = parsed;
     } catch {}
-    // El frontend hoy entiende pending | verified | error; stale/flagged se
-    // traducen hasta que la UI de frescura (insignias) exista.
+    // `verification` es el campo legado (pending|verified|error) que clientes
+    // viejos entienden; `freshness` expone el estado real (incluye stale).
     const verification =
       r.verification_status === 'verified' ? 'verified'
       : r.verification_status === 'flagged' ? 'error'
@@ -962,6 +963,10 @@ async function handleGetStationsFromD1(env: Env): Promise<Response> {
       access: ['public', 'semi-public', 'private'].includes(r.access) ? r.access : 'public',
       notes: r.notes || undefined,
       verification,
+      freshness: r.verification_status,
+      lastConfirmedAt: r.last_confirmed_at || undefined,
+      confirmCount: r.confirm_count,
+      openReports: r.open_reports,
       googleMapsUrl: r.google_maps_url || undefined,
     };
   });
@@ -1505,19 +1510,57 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
     return json({ ok: true, applied: true });
   }
 
-  // Non-admin: record as a pending proposal for an admin to review.
-  const changes: Record<string, unknown> = { verification: body.status };
+  // Non-admin con corrección de UBICACIÓN: eso sí es una edición de datos y
+  // pasa por moderación (cola de propuestas) antes de tocar el mapa.
   if (body.status === 'verified' && body.lat != null && body.lng != null) {
-    changes.lat = body.lat;
-    changes.lng = body.lng;
+    const changes = { verification: 'verified', lat: body.lat, lng: body.lng };
+    const result = await env.DB.prepare(
+      'INSERT INTO station_proposals (station_id, submitted_by, changes) VALUES (?, ?, ?)'
+    ).bind(stationId, user.email, JSON.stringify(changes)).run();
+    await eventStmt(env.DB, stationId, 'proposal_submitted', user, {
+      proposal_id: result.meta.last_row_id, changes,
+    }).run();
+    return json({ ok: true, applied: false, pending: true });
   }
-  const result = await env.DB.prepare(
-    'INSERT INTO station_proposals (station_id, submitted_by, changes) VALUES (?, ?, ?)'
-  ).bind(stationId, user.email, JSON.stringify(changes)).run();
-  await eventStmt(env.DB, stationId, 'proposal_submitted', user, {
-    proposal_id: result.meta.last_row_id, changes,
-  }).run();
-  return json({ ok: true, applied: false, pending: true });
+
+  // Non-admin confirmación/reporte simple: es una opinión, se aplica de
+  // inmediato — así el mapa refleja la realidad sin esperar moderación.
+  if (body.status === 'verified') {
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE stations SET verification_status = 'verified',
+           last_confirmed_at = datetime('now'), confirm_count = confirm_count + 1,
+           open_reports = 0, updated_at = datetime('now') WHERE id = ?`
+      ).bind(stationId),
+      eventStmt(env.DB, stationId, 'confirmed_ok', user, {}),
+    ]);
+    invalidateStationsCache();
+    ctx.waitUntil(syncStationToNotion(env, stationId));
+    return json({ ok: true, applied: true });
+  }
+
+  // Reporte de problema: cuenta reportantes DISTINTOS desde la última
+  // confirmación/resolución (derivado del historial). Con 2+ usuarios
+  // distintos la estación se marca 'flagged'; un reporte aislado solo queda
+  // registrado — así un solo usuario no puede degradar una estación.
+  await eventStmt(env.DB, stationId, 'reported_issue', user, {}).run();
+  const distinct = await env.DB.prepare(
+    `SELECT COUNT(DISTINCT actor_email) AS n FROM station_events
+      WHERE station_id = ?1 AND event_type = 'reported_issue'
+        AND id > COALESCE(
+          (SELECT MAX(id) FROM station_events
+            WHERE station_id = ?1 AND event_type IN ('confirmed_ok', 'report_resolved')),
+          0)`
+  ).bind(stationId).first<{ n: number }>();
+  const openReporters = distinct?.n ?? 1;
+  await env.DB.prepare(
+    `UPDATE stations SET open_reports = ?,
+       verification_status = CASE WHEN ? >= 2 THEN 'flagged' ELSE verification_status END,
+       updated_at = datetime('now') WHERE id = ?`
+  ).bind(openReporters, openReporters, stationId).run();
+  invalidateStationsCache();
+  ctx.waitUntil(syncStationToNotion(env, stationId));
+  return json({ ok: true, applied: true, openReports: openReporters });
 }
 
 async function handleDeleteStation(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
