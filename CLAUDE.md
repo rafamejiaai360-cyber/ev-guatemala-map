@@ -10,50 +10,54 @@ Mapa de estaciones de carga para vehículos eléctricos en Guatemala. Frontend R
 - **Deploy**: `npm run deploy` (= `tsc -b && vite build && wrangler deploy`). No hay CI/CD — el push a GitHub NO despliega automáticamente.
 - **Repo**: `github.com/rafamejiaai360-cyber/ev-guatemala-map`, rama `main`
 
-## ⚠️ MIGRACIÓN D1 EN CURSO (13 jul 2026) — estado intermedio
+## Arquitectura actual (14 jul 2026 — migración D1 Fases 0–4 completadas)
 
-Fases 0–3 de `docs/plan-migracion-d1.md` COMPLETADAS: la app **lee** estaciones
-desde D1 (`GET /api/stations`, base `ev-guatemala-db`), pero las **escrituras**
-(alta/edición/aprobación de estaciones, reseñas) siguen yendo a Notion y NO se
-reflejan en D1 todavía. **No aprobar ni editar estaciones hasta completar la
-Fase 4** (corte de escrituras), o los cambios no aparecerán en el mapa.
-Staging: `ev-guatemala-db-staging`. Pendiente de cuenta: habilitar R2 en el
-Dashboard para respaldos (Fase 5). URL prod:
+**D1 es la única fuente de verdad.** Notion es espejo editorial de solo
+lectura (sincroniza DESDE D1, en segundo plano). Plan y detalle:
+`docs/plan-migracion-d1.md`. URL prod:
 `https://ev-guatemala-map.rafamejia-ai360.workers.dev`.
-
-## Arquitectura actual (jul 2026)
 
 ```
 Frontend (React/Zustand)
-  ├─ src/data/chargers.ts    → seed estático (respaldo de arranque, ya no fuente de verdad)
-  └─ fetch /api/stations/dynamic  → Worker → Notion (fuente de verdad para estaciones)
+  ├─ src/data/chargers.ts   → seed estático (paracaídas si la API falla)
+  └─ fetch /api/stations    → Worker → D1 (caché en memoria 60s)
+                               (fallback: /api/stations/dynamic → Notion, legado)
 
-Worker (Cloudflare)
-  ├─ Auth: JWT (HS256) + PBKDF2, usuarios en KV (prefijo "user:")
-  ├─ Estaciones: CRUD contra Notion DB "EV Estaciones GT"
-  ├─ Reseñas: CRUD contra Notion DB "Reseñas"
-  └─ Fotos: KV + backup en Notion (File Uploads API)
+Worker (Cloudflare) — todo contra D1 (binding DB, base ev-guatemala-db)
+  ├─ Auth: JWT (HS256) + PBKDF2, tabla users
+  ├─ Estaciones: tabla stations + station_events (historial inmutable)
+  │    escrituras en batch() atómico + evento; caché invalidada al escribir
+  ├─ Propuestas de usuarios: tabla station_proposals (cola de moderación)
+  ├─ Reseñas: tabla reviews (ocultar, no borrar) + rating recalculado
+  ├─ Fotos: índice en tabla photos; binario en KV
+  └─ Espejo: syncStationToNotion() vía ctx.waitUntil, reintentos ante 429,
+       rastro en ops_log (op='sync_notion')
 ```
 
-**IMPORTANTE — bug corregido el 13 jul 2026**: `useStore.ts` deduplicaba estaciones dinámicas de Notion excluyéndolas si su `id` coincidía con una estática (`chargerStations`), lo que significaba que **ninguna edición hecha en Notion se reflejaba nunca en la app** para las estaciones originales. Se corrigió para que Notion tenga precedencia sobre el seed estático una vez que la carga dinámica se completa. Si algo similar vuelve a pasar (ediciones en Notion que no se ven en el mapa), revisar `buildAllStations()` en `src/store/useStore.ts`.
+**Reglas de integridad (no romperlas)**:
+- `station_events` es inmutable: solo INSERT. Es la auditoría y la base de
+  reputación/frescura futura.
+- Nada se borra físicamente: estaciones → `approval_status='rejected'`;
+  reseñas/fotos → `status='hidden'`. Siempre con su evento.
+- Los usuarios nunca editan `stations` directo: proponen (station_proposals)
+  → admin aprueba/rechaza vía `/api/stations/:id/approve|reject`.
+- **Las ediciones manuales en Notion ya NO llegan a la app.** Toda edición se
+  hace por el panel de admin de la app. Notion es solo para leer/revisar.
 
-**Notion — gotchas conocidos**:
-- El endpoint `/api/stations/dynamic` del Worker exige `Fuente` no vacío **y** `Estado = "Activo"` para que una estación aparezca. Si agregas registros directo en Notion sin llenar esos dos campos, la app nunca los mostrará.
-- Notion no tiene "borrar" real vía la API usada aquí — solo `archived: true` (worker) o, si se edita manualmente, cambiar `Estado` a `"Rechazado"` (excluido por el filtro anterior). No confundas "Rechazado" con eliminado.
-- La API de Notion tiene rate limits reales (`429`) — se vieron varias veces en una sola sesión de trabajo intensivo. No diseñar features que dependan de ráfagas grandes de escrituras a Notion.
+**Bases de datos**: prod `ev-guatemala-db` (6b0f10a8-59f8-4218-b7c5-6d9f46d722b7),
+staging `ev-guatemala-db-staging` (933f7752-0065-4fc9-a0c5-e90844ebb69d).
+D1 Time Travel permite restaurar a cualquier punto de los últimos 30 días.
 
-## Recomendación de arquitectura (por qué migrar a D1)
+**Gotcha de despliegue (visto 14 jul 2026)**: tras `wrangler deploy` hay una
+ventana breve donde versiones vieja y nueva atienden tráfico a la vez. No
+correr pruebas de humo inmediatamente tras el deploy sin considerar esa carrera.
 
-Notion es bueno como **panel editorial** (interfaz sin código para revisar/aprobar estaciones), pero **no debería ser la base de datos de producción** que la app consulta en cada carga, por:
-
-1. Rate limits de la API — no escala con tráfico real de usuarios.
-2. Sin integridad relacional/transacciones — fácil llegar a estados inconsistentes (pasó el 13 jul: 67 registros "Rechazado" flotando tras un intento de limpieza).
-3. Sin consultas geoespaciales (nearest-neighbor, radio de búsqueda).
-4. Los usuarios ya viven en Cloudflare KV, separados de Notion — dos sistemas de datos es la raíz de la fragilidad actual.
-
-**Decisión (13 jul 2026): migrar a Cloudflare D1** (SQLite en el edge, ya integrado con el Worker actual, tier gratuito generoso) como base de datos de producción para estaciones, usuarios y suscripciones. Notion pasa a ser un panel de curación que sincroniza hacia D1 (no la fuente que la app consulta en vivo).
-
-Ver `db/schema.sql` para el esquema propuesto/en progreso.
+**Pendiente**:
+- Fase 5: habilitar R2 en el Dashboard (acción del dueño de la cuenta) →
+  bucket `ev-gt-backups` → cron diario de respaldo + cron de frescura
+  (`verified`→`stale` a los 90 días, aún no implementado).
+- KV conserva los `user:*` viejos como reliquia; ya no se leen. Las fotos
+  binarias sí siguen en KV.
 
 ## Roadmap de crecimiento
 
