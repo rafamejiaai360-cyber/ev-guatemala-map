@@ -78,51 +78,129 @@ function pageToReview(page: NotionPage) {
   };
 }
 
-// ─── Station helpers ──────────────────────────────────────────────────────────
+// ─── Capa de datos D1 ─────────────────────────────────────────────────────────
+// D1 es la fuente de verdad (docs/plan-migracion-d1.md). Reglas:
+// 1. station_events es inmutable: solo INSERT, nunca UPDATE/DELETE.
+// 2. Los usuarios no editan `stations` directamente: proponen → admin aprueba.
+// 3. Nada se borra físicamente: rejected/closed/hidden + evento.
+// 4. Toda escritura multi-tabla va en env.DB.batch() (atómico).
+// 5. Notion es espejo: syncStationToNotion() en segundo plano vía ctx.waitUntil.
 
-async function findStationPageId(stationId: string, env: Env): Promise<string | null> {
-  const res = await fetch(`${NOTION_API}/databases/${env.NOTION_STATIONS_DB_ID}/query`, {
-    method: 'POST',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({
-      filter: { property: 'Station ID', rich_text: { equals: stationId } },
-      page_size: 1,
-    }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json() as { results: { id: string }[] };
-  return data.results[0]?.id ?? null;
+type EventType =
+  | 'created' | 'updated' | 'confirmed_ok' | 'reported_issue' | 'reported_closed'
+  | 'report_resolved' | 'proposal_submitted' | 'proposal_approved'
+  | 'proposal_rejected' | 'status_changed' | 'archived' | 'restored';
+
+function eventStmt(
+  db: D1Database,
+  stationId: string,
+  type: EventType,
+  actor: UserRecord | null,
+  payload: Record<string, unknown> = {},
+): D1PreparedStatement {
+  return db.prepare(
+    'INSERT INTO station_events (station_id, event_type, actor_email, actor_role, payload) VALUES (?, ?, ?, ?, ?)'
+  ).bind(stationId, type, actor?.email ?? null, actor ? actor.role : 'system', JSON.stringify(payload));
 }
 
-async function updateStationStats(stationId: string, env: Env): Promise<void> {
-  const res = await fetch(`${NOTION_API}/databases/${env.NOTION_REVIEWS_DB_ID}/query`, {
-    method: 'POST',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({
-      filter: { property: 'Station ID', rich_text: { equals: stationId } },
-      page_size: 100,
-    }),
-  });
-  if (!res.ok) return;
+interface FullStationRow {
+  id: string;
+  type: string;
+  name: string;
+  address: string | null;
+  zone: string | null;
+  lat: number;
+  lng: number;
+  status: string;
+  network: string | null;
+  access: string;
+  connectors: string;
+  notes: string | null;
+  source: string | null;
+  google_maps_url: string | null;
+  submitted_by: string | null;
+  approval_status: string;
+  verification_status: string;
+  notion_page_id: string | null;
+}
 
-  const data = await res.json() as { results: NotionPage[] };
-  const ratings = data.results.map(p => p.properties['Rating']?.number ?? 0).filter(r => r > 0);
-  if (!ratings.length) return;
+async function getStation(db: D1Database, stationId: string): Promise<FullStationRow | null> {
+  return db.prepare('SELECT * FROM stations WHERE id = ?').bind(stationId).first<FullStationRow>();
+}
 
-  const avg = Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10;
-  const pageId = await findStationPageId(stationId, env);
-  if (!pageId) return;
+// ─── Espejo D1 → Notion (solo lectura para humanos) ──────────────────────────
 
-  await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({
-      properties: {
-        'Rating Promedio': { number: avg },
-        'Total Reseñas': { number: ratings.length },
-      },
-    }),
-  });
+function stationToNotionProperties(s: FullStationRow): Record<string, unknown> {
+  const estado = s.approval_status === 'pending' ? 'Pendiente'
+    : s.approval_status === 'rejected' ? 'Rechazado' : 'Activo';
+  const verificacion = s.verification_status === 'verified' ? 'Verificado'
+    : s.verification_status === 'flagged' ? 'Erróneo' : 'Pendiente';
+  return {
+    'Nombre': { title: [{ text: { content: s.name } }] },
+    'Station ID': { rich_text: [{ text: { content: s.id } }] },
+    'Latitud': { number: s.lat },
+    'Longitud': { number: s.lng },
+    'Zona': { rich_text: [{ text: { content: s.zone ?? 'Guatemala' } }] },
+    'Red': { rich_text: [{ text: { content: s.network ?? 'Desconocido' } }] },
+    'Dirección': { rich_text: [{ text: { content: s.address ?? '' } }] },
+    'Conectores': { rich_text: [{ text: { content: s.connectors } }] },
+    'Acceso': { rich_text: [{ text: { content: s.access } }] },
+    'Fuente': { rich_text: [{ text: { content: s.source || 'Manual' } }] },
+    'Notas': { rich_text: s.notes ? [{ text: { content: s.notes.slice(0, 1900) } }] : [] },
+    'Google Maps': { url: s.google_maps_url || `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` },
+    'Estado': { select: { name: estado } },
+    'Verificacion': { select: { name: verificacion } },
+  };
+}
+
+// Sincroniza una estación de D1 hacia su página espejo en Notion, con
+// reintentos (rate limits 429). Corre en segundo plano: si Notion falla, la
+// app no se entera — el dato ya está seguro en D1. Deja rastro en ops_log.
+async function syncStationToNotion(env: Env, stationId: string): Promise<void> {
+  if (!env.DB || !env.NOTION_TOKEN) return;
+  let ok = false;
+  let detail = '';
+  try {
+    const s = await getStation(env.DB, stationId);
+    if (!s) return;
+    const properties = stationToNotionProperties(s);
+
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1200 * attempt));
+      try {
+        if (s.notion_page_id) {
+          const res = await fetch(`${NOTION_API}/pages/${s.notion_page_id}`, {
+            method: 'PATCH',
+            headers: notionHeaders(env.NOTION_TOKEN),
+            body: JSON.stringify({ properties }),
+          });
+          ok = res.ok;
+          if (!ok) detail = `PATCH HTTP ${res.status}`;
+        } else {
+          const res = await fetch(`${NOTION_API}/pages`, {
+            method: 'POST',
+            headers: notionHeaders(env.NOTION_TOKEN),
+            body: JSON.stringify({ parent: { database_id: env.NOTION_STATIONS_DB_ID }, properties }),
+          });
+          if (res.ok) {
+            const page = await res.json() as { id: string };
+            await env.DB.prepare('UPDATE stations SET notion_page_id = ? WHERE id = ?').bind(page.id, stationId).run();
+            ok = true;
+          } else {
+            detail = `POST HTTP ${res.status}`;
+          }
+        }
+      } catch (e) {
+        detail = String(e);
+      }
+    }
+  } catch (e) {
+    detail = String(e);
+  }
+  try {
+    await env.DB.prepare('INSERT INTO ops_log (op, ok, detail) VALUES (?, ?, ?)')
+      .bind('sync_notion', ok ? 1 : 0, JSON.stringify({ stationId, ...(detail ? { detail } : {}) })).run();
+  } catch {}
 }
 
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
@@ -141,36 +219,14 @@ function isNearExisting(lat: number, lng: number, existing: { lat: number; lng: 
   return existing.some(e => haversineKm(lat, lng, e.lat, e.lng) < thresholdKm);
 }
 
-async function getAllNotionStationCoords(env: Env): Promise<{ lat: number; lng: number; stationId: string }[]> {
-  const results: { lat: number; lng: number; stationId: string }[] = [];
-  let cursor: string | undefined;
-
-  do {
-    const body: Record<string, unknown> = { page_size: 100 };
-    if (cursor) body.start_cursor = cursor;
-
-    const res = await fetch(`${NOTION_API}/databases/${env.NOTION_STATIONS_DB_ID}/query`, {
-      method: 'POST',
-      headers: notionHeaders(env.NOTION_TOKEN),
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) break;
-
-    const data = await res.json() as { results: NotionPage[]; has_more: boolean; next_cursor?: string };
-
-    for (const page of data.results) {
-      const lat = page.properties['Latitud']?.number ?? null;
-      const lng = page.properties['Longitud']?.number ?? null;
-      const stationId = richText(page.properties['Station ID']);
-      if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
-        results.push({ lat, lng, stationId });
-      }
-    }
-
-    cursor = data.has_more ? data.next_cursor : undefined;
-  } while (cursor);
-
-  return results;
+async function getAllStationCoords(env: Env): Promise<{ lat: number; lng: number; stationId: string }[]> {
+  // Coordenadas de todas las estaciones no rechazadas en D1 (para deduplicar
+  // candidatos del scan contra lo ya registrado, incluidas las pendientes).
+  if (!env.DB) return [];
+  const { results } = await env.DB.prepare(
+    "SELECT id, lat, lng FROM stations WHERE approval_status != 'rejected'"
+  ).all<{ id: string; lat: number; lng: number }>();
+  return results.map(r => ({ lat: r.lat, lng: r.lng, stationId: r.id }));
 }
 
 // ─── Scan types ───────────────────────────────────────────────────────────────
@@ -361,8 +417,8 @@ async function scanElectronPower(
 }
 
 async function handleGetScan(env: Env): Promise<Response> {
-  // Load all existing station coords from Notion (source of truth)
-  const existing = await getAllNotionStationCoords(env);
+  // Load all existing station coords from D1 (source of truth)
+  const existing = await getAllStationCoords(env);
 
   // Scan sources in parallel
   const [ocmResult, epResult] = await Promise.all([
@@ -397,7 +453,7 @@ async function handleGetScan(env: Env): Promise<Response> {
   });
 }
 
-async function handlePostStation(request: Request, env: Env): Promise<Response> {
+async function handlePostStation(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const body = await request.json() as {
     id: string; name: string; address?: string;
     zone?: string; lat: number; lng: number;
@@ -410,260 +466,280 @@ async function handlePostStation(request: Request, env: Env): Promise<Response> 
     return apiError('id, name, lat y lng son requeridos');
   }
 
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+
   // Check who is submitting
   const requester = await getUserFromToken(request, env);
   const isAdmin = requester?.role === 'admin';
   const submittedBy = requester?.email ?? '';
 
   // Ensure no duplicate by checking ID
-  const existing = await findStationPageId(body.id, env);
+  const existing = await getStation(env.DB, body.id);
   if (existing) return apiError('Esta estación ya existe en la base de datos', 409);
+
+  if (typeof body.lat !== 'number' || body.lat < 13 || body.lat > 18) return apiError('lat fuera de rango para Guatemala');
+  if (typeof body.lng !== 'number' || body.lng < -93 || body.lng > -88) return apiError('lng fuera de rango para Guatemala');
 
   // Admins publish directly; logged-in users create a pending proposal;
   // anonymous users also publish directly (no account to validate against)
   const isPending = !isAdmin && !!submittedBy;
-  const estado = isPending ? 'Pendiente' : 'Activo';
+  const access = ['public', 'semi-public', 'private'].includes(body.access ?? '') ? body.access! : 'public';
 
-  // Combine notes with submitter info if pending
-  const notesContent = [
-    body.notes ?? '',
-    isPending ? `[Propuesta por: ${submittedBy}]` : '',
-  ].filter(Boolean).join(' · ');
-
-  const res = await fetch(`${NOTION_API}/pages`, {
-    method: 'POST',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({
-      parent: { database_id: env.NOTION_STATIONS_DB_ID },
-      properties: {
-        'Nombre': { title: [{ text: { content: body.name } }] },
-        'Station ID': { rich_text: [{ text: { content: body.id } }] },
-        'Latitud': { number: body.lat },
-        'Longitud': { number: body.lng },
-        'Zona': { rich_text: [{ text: { content: body.zone ?? 'Guatemala' } }] },
-        'Red': { rich_text: [{ text: { content: body.network ?? 'Desconocido' } }] },
-        'Dirección': { rich_text: [{ text: { content: body.address ?? '' } }] },
-        'Conectores': { rich_text: [{ text: { content: JSON.stringify(body.connectors ?? []) } }] },
-        'Acceso': { rich_text: [{ text: { content: body.access ?? 'public' } }] },
-        'Fuente': { rich_text: [{ text: { content: body.source ?? 'Manual' } }] },
-        ...(notesContent ? { 'Notas': { rich_text: [{ text: { content: notesContent } }] } } : {}),
-        ...(isPending ? { 'Propuesta Por': { rich_text: [{ text: { content: submittedBy } }] } } : {}),
-        'Estado': { select: { name: estado } },
-        'Verificacion': { select: { name: 'Pendiente' } },
-      },
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO stations (id, type, name, address, zone, lat, lng, status, network, access,
+         connectors, notes, source, google_maps_url, submitted_by, approval_status, verification_status)
+       VALUES (?, 'public', ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
+    ).bind(
+      body.id, body.name, body.address ?? '', body.zone ?? 'Guatemala', body.lat, body.lng,
+      body.network ?? 'Desconocido', access, JSON.stringify(body.connectors ?? []),
+      body.notes ?? null, body.source ?? 'Manual',
+      `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}`,
+      submittedBy || null, isPending ? 'pending' : 'active',
+    ),
+    eventStmt(env.DB, body.id, 'created', requester, {
+      source: body.source ?? 'Manual',
+      approval_status: isPending ? 'pending' : 'active',
     }),
-  });
+  ]);
 
-  if (!res.ok) {
-    console.error('Notion create station error:', await res.text());
-    return apiError('Error guardando estación en Notion', 502);
-  }
+  invalidateStationsCache();
+  ctx.waitUntil(syncStationToNotion(env, body.id));
+  return json({ ok: true, pending: isPending }, 201);
+}
 
-  const page = await res.json() as { id: string };
-  return json({ ok: true, notionId: page.id, pending: !isAdmin }, 201);
+function parseConnectors(raw: string | null): unknown[] {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {}
+  return [{ type: 'Type2', power_kw: 7.4, level: 'L2' }];
 }
 
 async function handleGetPendingStations(request: Request, env: Env): Promise<Response> {
   const requester = await getUserFromToken(request, env);
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+
+  // Estaciones nuevas esperando aprobación
+  const pendingNew = await env.DB.prepare(
+    "SELECT * FROM stations WHERE approval_status = 'pending' ORDER BY created_at"
+  ).all<FullStationRow & { created_at: string }>();
+
+  // Propuestas de corrección sobre estaciones activas
+  const proposals = await env.DB.prepare(
+    `SELECT p.id AS proposal_id, p.station_id, p.submitted_by, p.changes, p.comment,
+            p.created_at AS proposal_created_at, s.*
+       FROM station_proposals p JOIN stations s ON s.id = p.station_id
+      WHERE p.status = 'pending'
+      ORDER BY p.created_at`
+  ).all<FullStationRow & { proposal_id: number; station_id: string; submitted_by: string; changes: string; comment: string | null; proposal_created_at: string }>();
 
   const results: unknown[] = [];
-  let cursor: string | undefined;
 
-  do {
-    const body: Record<string, unknown> = {
-      page_size: 100,
-      filter: {
-        or: [
-          { property: 'Estado', select: { equals: 'Pendiente' } },
-          { property: 'Propuesta Por', rich_text: { is_not_empty: true } },
-        ],
-      },
-      sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
-    };
-    if (cursor) body.start_cursor = cursor;
-
-    const res = await fetch(`${NOTION_API}/databases/${env.NOTION_STATIONS_DB_ID}/query`, {
-      method: 'POST',
-      headers: notionHeaders(env.NOTION_TOKEN),
-      body: JSON.stringify(body),
+  for (const s of pendingNew.results) {
+    results.push({
+      notionId: s.notion_page_id,
+      id: s.id,
+      name: s.name,
+      address: s.address ?? '',
+      zone: s.zone || 'Guatemala',
+      lat: s.lat,
+      lng: s.lng,
+      connectors: parseConnectors(s.connectors),
+      network: s.network || 'Desconocido',
+      access: s.access || 'public',
+      submittedBy: s.submitted_by || 'anónimo',
+      createdAt: s.created_at,
+      kind: 'new',
+      notes: s.notes ?? '',
     });
-    if (!res.ok) return apiError('Error consultando Notion', 502);
+  }
 
-    const data = await res.json() as { results: NotionPage[]; has_more: boolean; next_cursor?: string };
-
-    for (const page of data.results) {
-      const lat = page.properties['Latitud']?.number;
-      const lng = page.properties['Longitud']?.number;
-      if (lat == null || lng == null) continue;
-
-      const isNewStation = page.properties['Estado']?.select?.name === 'Pendiente';
-
-      let connectors: unknown[] = [];
-      try {
-        const raw = richText(page.properties['Conectores']);
-        if (raw) connectors = JSON.parse(raw);
-      } catch {}
-
-      const propuestaLat = page.properties['Propuesta Lat']?.number;
-      const propuestaLng = page.properties['Propuesta Lng']?.number;
-      const propuestaVerificacion = page.properties['Propuesta Verificacion']?.select?.name;
-      let proposedChanges: Record<string, unknown> | null = null;
-      try {
-        const raw = richText(page.properties['Propuesta Cambios']);
-        if (raw) proposedChanges = JSON.parse(raw);
-      } catch {}
-
-      results.push({
-        notionId: page.id,
-        id: richText(page.properties['Station ID']),
-        name: page.properties['Nombre']?.title?.[0]?.text?.content ?? 'Estación',
-        address: richText(page.properties['Dirección']),
-        zone: richText(page.properties['Zona']) || 'Guatemala',
-        lat, lng,
-        connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
-        network: richText(page.properties['Red']) || 'Desconocido',
-        access: richText(page.properties['Acceso']) || 'public',
-        submittedBy: richText(page.properties['Propuesta Por'])
-          || (richText(page.properties['Notas']).match(/\[Propuesta por: ([^\]]+)\]/) || [])[1]
-          || 'anónimo',
-        createdAt: page.created_time,
-        kind: isNewStation ? 'new' : 'correction',
-        notes: richText(page.properties['Notas']),
-        ...(isNewStation ? {} : {
-          proposedLat: propuestaLat ?? null,
-          proposedLng: propuestaLng ?? null,
-          proposedVerification: verificationFromSelect(propuestaVerificacion),
-          proposedChanges,
-        }),
-      });
-    }
-
-    cursor = data.has_more ? data.next_cursor : undefined;
-  } while (cursor);
+  for (const p of proposals.results) {
+    let changes: Record<string, unknown> = {};
+    try { changes = JSON.parse(p.changes) as Record<string, unknown>; } catch {}
+    const { verification, lat: propLat, lng: propLng, ...fieldChanges } = changes as {
+      verification?: string; lat?: number; lng?: number; [k: string]: unknown;
+    };
+    results.push({
+      notionId: p.notion_page_id,
+      proposalId: p.proposal_id,
+      id: p.station_id,
+      name: p.name,
+      address: p.address ?? '',
+      zone: p.zone || 'Guatemala',
+      lat: p.lat,
+      lng: p.lng,
+      connectors: parseConnectors(p.connectors),
+      network: p.network || 'Desconocido',
+      access: p.access || 'public',
+      submittedBy: p.submitted_by || 'anónimo',
+      createdAt: p.proposal_created_at,
+      kind: 'correction',
+      notes: p.notes ?? '',
+      proposedLat: propLat ?? null,
+      proposedLng: propLng ?? null,
+      proposedVerification: verification === 'verified' ? 'verified' : verification === 'error' ? 'error' : 'pending',
+      proposedChanges: Object.keys(fieldChanges).length > 0 ? fieldChanges : null,
+    });
+  }
 
   return json(results);
 }
 
-async function handleStationApprove(stationId: string, request: Request, env: Env): Promise<Response> {
+// Campos editables de una estación que una propuesta puede tocar.
+const EDITABLE_FIELDS = ['name', 'address', 'zone', 'network', 'access', 'status', 'connectors', 'lat', 'lng', 'notes'] as const;
+
+// Construye los UPDATE de estación a partir de cambios normalizados,
+// registrando old→new para el evento. Devuelve fragmentos SET y valores.
+function buildStationUpdate(
+  current: FullStationRow,
+  changes: Record<string, unknown>,
+): { sets: string[]; values: unknown[]; diff: { field: string; old: unknown; new: unknown }[] } {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  const diff: { field: string; old: unknown; new: unknown }[] = [];
+  const columnFor: Record<string, string> = {
+    name: 'name', address: 'address', zone: 'zone', network: 'network',
+    access: 'access', status: 'status', lat: 'lat', lng: 'lng', notes: 'notes',
+  };
+  for (const field of EDITABLE_FIELDS) {
+    if (!(field in changes)) continue;
+    let newVal: unknown = changes[field];
+    let oldVal: unknown = (current as unknown as Record<string, unknown>)[field];
+    if (field === 'connectors') {
+      newVal = JSON.stringify(changes.connectors);
+      oldVal = current.connectors;
+      if (newVal === oldVal) continue;
+      sets.push('connectors = ?');
+      values.push(newVal);
+      diff.push({ field, old: oldVal, new: newVal });
+      continue;
+    }
+    if (newVal === oldVal) continue;
+    sets.push(`${columnFor[field]} = ?`);
+    values.push(newVal as string | number | null);
+    diff.push({ field, old: oldVal, new: newVal });
+  }
+  if (typeof changes.lat === 'number' && typeof changes.lng === 'number') {
+    sets.push('google_maps_url = ?');
+    values.push(`https://www.google.com/maps/search/?api=1&query=${changes.lat},${changes.lng}`);
+  }
+  return { sets, values, diff };
+}
+
+async function handleStationApprove(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const requester = await getUserFromToken(request, env);
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  const pageId = await findStationPageId(stationId, env);
-  if (!pageId) return apiError('Estación no encontrada', 404);
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
 
-  const pageRes = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
-  if (!pageRes.ok) return apiError('Estación no encontrada', 404);
-  const page = await pageRes.json() as NotionPage;
-
-  const isNewStation = page.properties['Estado']?.select?.name === 'Pendiente';
-
-  if (isNewStation) {
-    const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-      method: 'PATCH',
-      headers: notionHeaders(env.NOTION_TOKEN),
-      body: JSON.stringify({ properties: { 'Estado': { select: { name: 'Activo' } } } }),
-    });
-    if (!res.ok) return apiError('Error actualizando estación en Notion', 502);
+  // Caso 1: estación nueva pendiente → publicarla
+  if (station.approval_status === 'pending') {
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE stations SET approval_status = 'active', updated_at = datetime('now') WHERE id = ?"
+      ).bind(stationId),
+      eventStmt(env.DB, stationId, 'proposal_approved', requester, { kind: 'new_station' }),
+    ]);
+    invalidateStationsCache();
+    ctx.waitUntil(syncStationToNotion(env, stationId));
     return json({ ok: true });
   }
 
-  // Correction proposal on an already-active station: apply the proposed
-  // fields to the live ones, then clear the proposal so it stops appearing
-  // as pending.
-  const propuestaLat = page.properties['Propuesta Lat']?.number;
-  const propuestaLng = page.properties['Propuesta Lng']?.number;
-  const propuestaVerificacion = page.properties['Propuesta Verificacion']?.select?.name;
-  const propuestaPor = richText(page.properties['Propuesta Por']);
-  let propuestaCambios: Record<string, unknown> | null = null;
-  try {
-    const raw = richText(page.properties['Propuesta Cambios']);
-    if (raw) propuestaCambios = JSON.parse(raw);
-  } catch {}
-  if (!propuestaVerificacion && propuestaLat == null && !propuestaCambios) {
+  // Caso 2: propuestas de corrección pendientes → aplicarlas todas
+  const pending = await env.DB.prepare(
+    "SELECT * FROM station_proposals WHERE station_id = ? AND status = 'pending' ORDER BY created_at"
+  ).bind(stationId).all<{ id: number; submitted_by: string; changes: string }>();
+
+  if (pending.results.length === 0) {
     return apiError('No hay ninguna propuesta pendiente para esta estación');
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const action = propuestaCambios
-    ? 'Datos corregidos (aprobado por admin)'
-    : propuestaLat != null ? 'Ubicación corregida y verificada (aprobado por admin)' : 'Verificado en sitio (aprobado por admin)';
-  const currentNotas = richText(page.properties['Notas']);
-  const attribution = propuestaVerificacion === 'Erróneo'
-    ? `[Ubicación reportada errónea por: ${propuestaPor}, aprobado ${today}]`
-    : `[${action} — propuesto por: ${propuestaPor}]`;
+  const stmts: D1PreparedStatement[] = [];
+  let current = station;
 
-  // Proposed general edits go first; the fields below (Notas attribution,
-  // proposal cleanup, location proposal) take precedence over them.
-  const properties: Record<string, unknown> = {
-    ...(propuestaCambios ? stationChangesToNotionProperties(propuestaCambios) : {}),
-    'Propuesta Lat': { number: null },
-    'Propuesta Lng': { number: null },
-    'Propuesta Verificacion': { select: null },
-    'Propuesta Por': { rich_text: [] },
-    'Propuesta Fecha': { rich_text: [] },
-    'Propuesta Cambios': { rich_text: [] },
-  };
-  const baseNotas = propuestaCambios && typeof propuestaCambios.notes === 'string'
-    ? propuestaCambios.notes
-    : currentNotas;
-  properties['Notas'] = { rich_text: [{ text: { content: [baseNotas, attribution].filter(Boolean).join(' · ') } }] };
-  if (propuestaVerificacion) {
-    properties['Verificacion'] = { select: { name: propuestaVerificacion } };
-  }
-  if (propuestaLat != null && propuestaLng != null) {
-    properties['Latitud'] = { number: propuestaLat };
-    properties['Longitud'] = { number: propuestaLng };
-    properties['Google Maps'] = { url: `https://www.google.com/maps/search/?api=1&query=${propuestaLat},${propuestaLng}` };
+  for (const p of pending.results) {
+    let changes: Record<string, unknown> = {};
+    try { changes = JSON.parse(p.changes) as Record<string, unknown>; } catch {}
+    const { verification, ...fieldChanges } = changes as { verification?: string; [k: string]: unknown };
+
+    const action = Object.keys(fieldChanges).filter(k => k !== 'lat' && k !== 'lng').length > 0
+      ? 'Datos corregidos (aprobado por admin)'
+      : typeof fieldChanges.lat === 'number' ? 'Ubicación corregida y verificada (aprobado por admin)' : 'Verificado en sitio (aprobado por admin)';
+    const attribution = verification === 'error'
+      ? `[Ubicación reportada errónea por: ${p.submitted_by}, aprobado ${today}]`
+      : `[${action} — propuesto por: ${p.submitted_by}]`;
+    const baseNotes = typeof fieldChanges.notes === 'string' ? fieldChanges.notes : (current.notes ?? '');
+    fieldChanges.notes = [baseNotes, attribution].filter(Boolean).join(' · ');
+
+    const { sets, values, diff } = buildStationUpdate(current, fieldChanges);
+    if (verification === 'verified') {
+      sets.push("verification_status = 'verified'", "last_confirmed_at = datetime('now')", 'confirm_count = confirm_count + 1', 'open_reports = 0');
+    } else if (verification === 'error') {
+      sets.push("verification_status = 'flagged'", 'open_reports = open_reports + 1');
+    }
+    if (sets.length > 0) {
+      sets.push("updated_at = datetime('now')");
+      stmts.push(env.DB.prepare(`UPDATE stations SET ${sets.join(', ')} WHERE id = ?`).bind(...values, stationId));
+    }
+    stmts.push(env.DB.prepare(
+      "UPDATE station_proposals SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?"
+    ).bind(requester.email, p.id));
+    stmts.push(eventStmt(env.DB, stationId, 'proposal_approved', requester, {
+      proposal_id: p.id, submitted_by: p.submitted_by, verification: verification ?? null, changes: diff,
+    }));
+    if (verification === 'verified') stmts.push(eventStmt(env.DB, stationId, 'confirmed_ok', requester, { via_proposal: p.id, on_behalf_of: p.submitted_by }));
+    if (verification === 'error') stmts.push(eventStmt(env.DB, stationId, 'reported_issue', requester, { via_proposal: p.id, on_behalf_of: p.submitted_by }));
+
+    // Refrescar la vista local de la estación para la siguiente propuesta
+    current = { ...current, ...Object.fromEntries(diff.map(d => [d.field, d.new])) } as FullStationRow;
   }
 
-  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ properties }),
-  });
-  if (!res.ok) return apiError('Error aplicando la propuesta en Notion', 502);
+  await env.DB.batch(stmts);
+  invalidateStationsCache();
+  ctx.waitUntil(syncStationToNotion(env, stationId));
   return json({ ok: true });
 }
 
-async function handleStationReject(stationId: string, request: Request, env: Env): Promise<Response> {
+async function handleStationReject(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const requester = await getUserFromToken(request, env);
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  const pageId = await findStationPageId(stationId, env);
-  if (!pageId) return apiError('Estación no encontrada', 404);
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
 
-  const pageRes = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
-  if (!pageRes.ok) return apiError('Estación no encontrada', 404);
-  const page = await pageRes.json() as NotionPage;
-  const isNewStation = page.properties['Estado']?.select?.name === 'Pendiente';
-
-  if (isNewStation) {
-    const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-      method: 'PATCH',
-      headers: notionHeaders(env.NOTION_TOKEN),
-      body: JSON.stringify({ archived: true }),
-    });
-    if (!res.ok) return apiError('Error eliminando estación en Notion', 502);
+  // Estación nueva pendiente: se marca rechazada (nunca se borra físicamente)
+  if (station.approval_status === 'pending') {
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE stations SET approval_status = 'rejected', updated_at = datetime('now') WHERE id = ?"
+      ).bind(stationId),
+      eventStmt(env.DB, stationId, 'proposal_rejected', requester, { kind: 'new_station' }),
+    ]);
+    invalidateStationsCache();
+    ctx.waitUntil(syncStationToNotion(env, stationId));
     return json({ ok: true });
   }
 
-  // Correction proposal: just discard it, the live station stays untouched.
-  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({
-      properties: {
-        'Propuesta Lat': { number: null },
-        'Propuesta Lng': { number: null },
-        'Propuesta Verificacion': { select: null },
-        'Propuesta Por': { rich_text: [] },
-        'Propuesta Fecha': { rich_text: [] },
-        'Propuesta Cambios': { rich_text: [] },
-      },
-    }),
-  });
-  if (!res.ok) return apiError('Error descartando la propuesta en Notion', 502);
+  // Propuestas de corrección: se descartan, la estación viva queda intacta
+  const pending = await env.DB.prepare(
+    "SELECT id, submitted_by FROM station_proposals WHERE station_id = ? AND status = 'pending'"
+  ).bind(stationId).all<{ id: number; submitted_by: string }>();
+
+  const stmts: D1PreparedStatement[] = [];
+  for (const p of pending.results) {
+    stmts.push(env.DB.prepare(
+      "UPDATE station_proposals SET status = 'rejected', reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?"
+    ).bind(requester.email, p.id));
+    stmts.push(eventStmt(env.DB, stationId, 'proposal_rejected', requester, { proposal_id: p.id, submitted_by: p.submitted_by }));
+  }
+  if (stmts.length > 0) await env.DB.batch(stmts);
   return json({ ok: true });
 }
 
@@ -809,46 +885,47 @@ async function handleGetStationsFromD1(env: Env): Promise<Response> {
   });
 }
 
-// ─── Review handlers ──────────────────────────────────────────────────────────
+// ─── Review handlers (D1) ─────────────────────────────────────────────────────
+
+// Recalcula el rating agregado de la estación desde sus reseñas visibles.
+function recalcRatingStmt(db: D1Database, stationId: string): D1PreparedStatement {
+  return db.prepare(
+    `UPDATE stations SET
+       rating_avg = (SELECT ROUND(AVG(rating), 1) FROM reviews WHERE station_id = ?1 AND status = 'visible'),
+       rating_count = (SELECT COUNT(*) FROM reviews WHERE station_id = ?1 AND status = 'visible')
+     WHERE id = ?1`
+  ).bind(stationId);
+}
 
 async function handleGetReviews(stationId: string, env: Env): Promise<Response> {
-  const res = await fetch(`${NOTION_API}/databases/${env.NOTION_REVIEWS_DB_ID}/query`, {
-    method: 'POST',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({
-      filter: { property: 'Station ID', rich_text: { equals: stationId } },
-      sorts: [{ timestamp: 'created_time', direction: 'descending' }],
-      page_size: 50,
-    }),
-  });
-  if (!res.ok) return apiError('Error consultando Notion', 502);
-  const data = await res.json() as { results: NotionPage[] };
-  return json(data.results.map(pageToReview));
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const { results } = await env.DB.prepare(
+    `SELECT r.id, r.station_id, r.rating, r.comment, r.author, r.created_at, s.name AS station_name
+       FROM reviews r LEFT JOIN stations s ON s.id = r.station_id
+      WHERE r.station_id = ? AND r.status = 'visible'
+      ORDER BY r.created_at DESC LIMIT 50`
+  ).bind(stationId).all<{ id: string; station_id: string; rating: number; comment: string | null; author: string | null; created_at: string; station_name: string | null }>();
+
+  return json(results.map(r => ({
+    id: r.id,
+    stationId: r.station_id,
+    stationName: r.station_name ?? '',
+    rating: r.rating,
+    text: r.comment ?? '',
+    author: r.author || 'Anónimo',
+    date: r.created_at,
+  })));
 }
 
 async function handleGetRatings(env: Env): Promise<Response> {
-  const res = await fetch(`${NOTION_API}/databases/${env.NOTION_REVIEWS_DB_ID}/query`, {
-    method: 'POST',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ page_size: 100 }),
-  });
-  if (!res.ok) return json({});
+  if (!env.DB) return json({});
+  const { results } = await env.DB.prepare(
+    `SELECT station_id, ROUND(AVG(rating), 1) AS avg, COUNT(*) AS count
+       FROM reviews WHERE status = 'visible' GROUP BY station_id`
+  ).all<{ station_id: string; avg: number; count: number }>();
 
-  const data = await res.json() as { results: NotionPage[] };
-  const agg: Record<string, { sum: number; count: number }> = {};
-  for (const page of data.results) {
-    const sid = richText(page.properties['Station ID']);
-    const rating = page.properties['Rating']?.number;
-    if (sid && rating) {
-      if (!agg[sid]) agg[sid] = { sum: 0, count: 0 };
-      agg[sid].sum += rating;
-      agg[sid].count += 1;
-    }
-  }
   const result: Record<string, { avg: number; count: number }> = {};
-  for (const [sid, { sum, count }] of Object.entries(agg)) {
-    result[sid] = { avg: Math.round((sum / count) * 10) / 10, count };
-  }
+  for (const r of results) result[r.station_id] = { avg: r.avg, count: r.count };
   return json(result);
 }
 
@@ -857,63 +934,66 @@ async function handlePostReview(request: Request, env: Env): Promise<Response> {
     stationId: string; stationName: string;
     rating: number; text?: string; author?: string;
   };
-  const { stationId, stationName, rating, text = '', author = 'Anónimo' } = body;
+  const { stationId, rating, text = '', author = 'Anónimo' } = body;
   if (!stationId || !rating || rating < 1 || rating > 5) {
     return apiError('stationId y rating (1-5) son requeridos');
   }
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  const dateStr = new Date().toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError(`Estación ${stationId} no encontrada`, 404);
 
-  const res = await fetch(`${NOTION_API}/pages`, {
-    method: 'POST',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({
-      parent: { database_id: env.NOTION_REVIEWS_DB_ID },
-      properties: {
-        'Título': { title: [{ text: { content: `${stationName} — ${dateStr}` } }] },
-        'Station ID': { rich_text: [{ text: { content: stationId } }] },
-        'Nombre Estación': { rich_text: [{ text: { content: stationName } }] },
-        'Rating': { number: rating },
-        'Reseña': { rich_text: [{ text: { content: text } }] },
-        'Autor': { rich_text: [{ text: { content: author } }] },
-      },
-    }),
-  });
+  const requester = await getUserFromToken(request, env);
+  const id = crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(
+      'INSERT INTO reviews (id, station_id, author, user_email, rating, comment) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(id, stationId, author, requester?.email ?? null, rating, text),
+    recalcRatingStmt(env.DB, stationId),
+  ]);
 
-  if (!res.ok) { console.error('Notion error:', await res.text()); return apiError('Error guardando reseña', 502); }
-
-  const created = await res.json() as { id: string };
-  (async () => { try { await updateStationStats(stationId, env); } catch {} })();
-  return json({ id: created.id, ok: true }, 201);
+  return json({ id, ok: true }, 201);
 }
 
 async function handleUpdateReview(id: string, request: Request, env: Env): Promise<Response> {
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
   const body = await request.json() as { rating?: number; text?: string };
-  const properties: Record<string, unknown> = {};
+
+  const review = await env.DB.prepare('SELECT id, station_id FROM reviews WHERE id = ?').bind(id)
+    .first<{ id: string; station_id: string }>();
+  if (!review) return apiError('Reseña no encontrada', 404);
+
+  const sets: string[] = [];
+  const values: unknown[] = [];
   if (body.rating) {
     if (body.rating < 1 || body.rating > 5) return apiError('Rating debe ser 1-5');
-    properties['Rating'] = { number: body.rating };
+    sets.push('rating = ?');
+    values.push(body.rating);
   }
   if (body.text !== undefined) {
-    properties['Reseña'] = { rich_text: [{ text: { content: body.text } }] };
+    sets.push('comment = ?');
+    values.push(body.text);
   }
+  if (sets.length === 0) return apiError('Nada que actualizar');
 
-  const res = await fetch(`${NOTION_API}/pages/${id}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ properties }),
-  });
-  if (!res.ok) return apiError('Error actualizando reseña', 502);
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE reviews SET ${sets.join(', ')} WHERE id = ?`).bind(...values, id),
+    recalcRatingStmt(env.DB, review.station_id),
+  ]);
   return json({ ok: true });
 }
 
 async function handleDeleteReview(id: string, env: Env): Promise<Response> {
-  const res = await fetch(`${NOTION_API}/pages/${id}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ archived: true }),
-  });
-  if (!res.ok) return apiError('Error eliminando reseña', 502);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const review = await env.DB.prepare('SELECT id, station_id FROM reviews WHERE id = ?').bind(id)
+    .first<{ id: string; station_id: string }>();
+  if (!review) return apiError('Reseña no encontrada', 404);
+
+  // Moderación sin borrado físico: la reseña se oculta, no se elimina.
+  await env.DB.batch([
+    env.DB.prepare("UPDATE reviews SET status = 'hidden' WHERE id = ?").bind(id),
+    recalcRatingStmt(env.DB, review.station_id),
+  ]);
   return json({ ok: true });
 }
 
@@ -927,40 +1007,14 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-function photoUrl(request: Request, photoId: string): string {
-  return `${new URL(request.url).origin}/api/photo/${photoId}`;
-}
-
-async function getStationFotos(pageId: string, env: Env): Promise<NotionFile[]> {
-  const res = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
-  if (!res.ok) return [];
-  const page = await res.json() as { properties: Record<string, NotionProp> };
-  return page.properties['Fotos']?.files ?? [];
-}
-
-async function updateStationFotos(pageId: string, files: unknown[], env: Env): Promise<void> {
-  await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ properties: { Fotos: { files } } }),
-  });
-}
-
-// ─── Photo handlers ───────────────────────────────────────────────────────────
+// ─── Photo handlers (índice en D1; binario en KV) ─────────────────────────────
 
 async function handleGetPhotos(stationId: string, env: Env): Promise<Response> {
-  const pageId = await findStationPageId(stationId, env);
-  if (!pageId) return json([]);
-
-  const files = await getStationFotos(pageId, env);
-  const photos = files
-    .filter(f => f.type === 'external' && f.external?.url?.includes('/api/photo/'))
-    .map(f => {
-      const url = f.external!.url;
-      const id = url.split('/api/photo/').pop() ?? '';
-      return { id, url: `/api/photo/${id}` };
-    });
-  return json(photos);
+  if (!env.DB) return json([]);
+  const { results } = await env.DB.prepare(
+    "SELECT id FROM photos WHERE station_id = ? AND status = 'visible' ORDER BY created_at"
+  ).bind(stationId).all<{ id: string }>();
+  return json(results.map(r => ({ id: r.id, url: `/api/photo/${r.id}` })));
 }
 
 async function handleGetPhoto(photoId: string, env: Env): Promise<Response> {
@@ -991,23 +1045,18 @@ async function handlePostPhoto(request: Request, env: Env): Promise<Response> {
   const { stationId, imageBase64, mimeType = 'image/jpeg' } = body;
   if (!stationId || !imageBase64) return apiError('stationId e imageBase64 son requeridos');
 
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError(`Estación ${stationId} no encontrada`, 404);
+
+  const requester = await getUserFromToken(request, env);
   const bytes = base64ToUint8Array(imageBase64);
   const photoId = `${stationId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   await env.PHOTOS.put(photoId, bytes.buffer, { metadata: { contentType: mimeType } });
-
-  const pUrl = photoUrl(request, photoId);
-  const pageId = await findStationPageId(stationId, env);
-  if (!pageId) {
-    await env.PHOTOS.delete(photoId);
-    return apiError(`Estación ${stationId} no encontrada`, 404);
-  }
-
-  const existing = await getStationFotos(pageId, env);
-  const kept = existing
-    .filter(f => f.type === 'external' && f.external?.url)
-    .map(f => ({ name: f.name ?? 'foto', type: 'external', external: { url: f.external!.url } }));
-
-  await updateStationFotos(pageId, [...kept, { name: 'foto', type: 'external', external: { url: pUrl } }], env);
+  await env.DB.prepare(
+    'INSERT INTO photos (id, station_id, kv_key, uploaded_by) VALUES (?, ?, ?, ?)'
+  ).bind(photoId, stationId, photoId, requester?.email ?? null).run();
 
   return json({ photoId, url: `/api/photo/${photoId}` }, 201);
 }
@@ -1017,16 +1066,11 @@ async function handleDeletePhoto(url: URL, env: Env): Promise<Response> {
   const stationId = url.searchParams.get('stationId');
   if (!photoId || !stationId) return apiError('photoId y stationId requeridos');
 
+  // El índice se oculta (sin borrado físico del registro); el binario en KV
+  // sí se elimina para no acumular almacenamiento de fotos retiradas.
   if (env.PHOTOS) await env.PHOTOS.delete(photoId);
-
-  const pageId = await findStationPageId(stationId, env);
-  if (pageId) {
-    const existing = await getStationFotos(pageId, env);
-    const filtered = existing
-      .filter(f => !(f.type === 'external' && f.external?.url?.includes(photoId)))
-      .filter(f => f.type === 'external' && f.external?.url)
-      .map(f => ({ name: f.name ?? 'foto', type: 'external', external: { url: f.external!.url } }));
-    await updateStationFotos(pageId, filtered, env);
+  if (env.DB) {
+    await env.DB.prepare("UPDATE photos SET status = 'hidden' WHERE id = ?").bind(photoId).run();
   }
 
   return json({ ok: true });
@@ -1086,7 +1130,7 @@ async function verifyPassword(password: string, hash: string, salt: string): Pro
   return b64url(bits) === hash;
 }
 
-// ─── User model (stored in PHOTOS KV with "user:" prefix) ────────────────────
+// ─── User model (D1, tabla users) ─────────────────────────────────────────────
 
 interface UserRecord {
   email: string;
@@ -1098,32 +1142,45 @@ interface UserRecord {
   subscriptionEnd?: string;
 }
 
+interface UserRow {
+  email: string;
+  name: string;
+  password_hash: string;
+  salt: string;
+  role: string;
+  account_status: string;
+  subscription_end: string | null;
+  created_at: string;
+}
+
+function rowToUser(r: UserRow): UserRecord {
+  return {
+    email: r.email,
+    name: r.name,
+    passwordHash: r.password_hash,
+    salt: r.salt,
+    role: r.role === 'admin' ? 'admin' : 'user',
+    createdAt: r.created_at,
+    subscriptionEnd: r.subscription_end ?? undefined,
+  };
+}
+
 async function getUser(email: string, env: Env): Promise<UserRecord | null> {
-  if (!env.PHOTOS) return null;
-  const raw = await env.PHOTOS.get(`user:${email.toLowerCase().trim()}`);
-  return raw ? JSON.parse(raw) as UserRecord : null;
+  if (!env.DB) return null;
+  const row = await env.DB.prepare(
+    "SELECT * FROM users WHERE email = ? AND account_status = 'active'"
+  ).bind(email.toLowerCase().trim()).first<UserRow>();
+  return row ? rowToUser(row) : null;
 }
 
 async function saveUser(user: UserRecord, env: Env): Promise<void> {
-  if (!env.PHOTOS) return;
-  await env.PHOTOS.put(`user:${user.email.toLowerCase().trim()}`, JSON.stringify(user));
-}
-
-async function addToUsersIndex(email: string, env: Env): Promise<void> {
-  if (!env.PHOTOS) return;
-  const raw = await env.PHOTOS.get('users_index');
-  const emails: string[] = raw ? JSON.parse(raw) : [];
-  const normalized = email.toLowerCase().trim();
-  if (!emails.includes(normalized)) {
-    emails.push(normalized);
-    await env.PHOTOS.put('users_index', JSON.stringify(emails));
-  }
-}
-
-async function getUsersIndex(env: Env): Promise<string[]> {
-  if (!env.PHOTOS) return [];
-  const raw = await env.PHOTOS.get('users_index');
-  return raw ? JSON.parse(raw) as string[] : [];
+  if (!env.DB) return;
+  await env.DB.prepare(
+    'UPDATE users SET name = ?, password_hash = ?, salt = ?, role = ?, subscription_end = ? WHERE email = ?'
+  ).bind(
+    user.name, user.passwordHash, user.salt, user.role,
+    user.subscriptionEnd ?? null, user.email.toLowerCase().trim(),
+  ).run();
 }
 
 function getAuthToken(request: Request): string | null {
@@ -1151,18 +1208,19 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
   if (password.length < 6) return apiError('La contraseña debe tener al menos 6 caracteres');
   if (!name) return apiError('El nombre es requerido');
 
-  const existing = await getUser(email, env);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const existing = await env.DB.prepare('SELECT email FROM users WHERE email = ?').bind(email).first();
   if (existing) return apiError('Este email ya está registrado', 409);
 
   const { hash: passwordHash, salt } = await hashPassword(password);
   const role: 'admin' | 'user' = env.ADMIN_EMAIL && email === env.ADMIN_EMAIL.toLowerCase().trim() ? 'admin' : 'user';
 
-  const user: UserRecord = { email, name, passwordHash, salt, role, createdAt: new Date().toISOString() };
-  await saveUser(user, env);
-  await addToUsersIndex(email, env);
+  await env.DB.prepare(
+    'INSERT INTO users (email, name, password_hash, salt, role, last_login_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))'
+  ).bind(email, name, passwordHash, salt, role).run();
 
   const token = await signJWT({ sub: email, name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
-  return json({ token, user: { email: user.email, name: user.name, role: user.role, subscriptionEnd: user.subscriptionEnd } }, 201);
+  return json({ token, user: { email, name, role, subscriptionEnd: undefined } }, 201);
 }
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
@@ -1178,11 +1236,12 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   const ok = await verifyPassword(password, user.passwordHash, user.salt);
   if (!ok) return apiError('Email o contraseña incorrectos', 401);
 
-  // Always grant admin role if email matches ADMIN_EMAIL, even if KV record says 'user'
+  // Always grant admin role if email matches ADMIN_EMAIL, even if the record says 'user'
   const role: 'admin' | 'user' = (env.ADMIN_EMAIL && email === env.ADMIN_EMAIL.toLowerCase().trim()) ? 'admin' : user.role;
-  if (role !== user.role) await saveUser({ ...user, role }, env);
-  // Backfill index for users registered before the index existed
-  await addToUsersIndex(email, env);
+  if (env.DB) {
+    await env.DB.prepare("UPDATE users SET role = ?, last_login_at = datetime('now') WHERE email = ?")
+      .bind(role, email).run();
+  }
 
   const token = await signJWT({ sub: email, name: user.name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
   return json({ token, user: { email: user.email, name: user.name, role, subscriptionEnd: user.subscriptionEnd } });
@@ -1221,21 +1280,19 @@ async function handleSetSubscription(request: Request, env: Env): Promise<Respon
 async function handleListUsers(request: Request, env: Env): Promise<Response> {
   const requester = await getUserFromToken(request, env);
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
-  if (!env.PHOTOS) return json([]);
+  if (!env.DB) return json([]);
 
-  // Use point reads via the index to avoid KV list() eventual consistency lag
-  const emails = await getUsersIndex(env);
+  const { results } = await env.DB.prepare(
+    "SELECT email, name, role, created_at, subscription_end FROM users WHERE account_status = 'active' ORDER BY created_at"
+  ).all<{ email: string; name: string; role: string; created_at: string; subscription_end: string | null }>();
 
-  // Always include the requester in case they registered before the index existed
-  if (!emails.includes(requester.email)) emails.push(requester.email);
-
-  const users: { email: string; name: string; role: string; createdAt: string; subscriptionEnd?: string }[] = [];
-  for (const email of emails) {
-    const u = await getUser(email, env);
-    if (u) users.push({ email: u.email, name: u.name, role: u.role, createdAt: u.createdAt, subscriptionEnd: u.subscriptionEnd });
-  }
-
-  return json(users);
+  return json(results.map(u => ({
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    createdAt: u.created_at,
+    subscriptionEnd: u.subscription_end ?? undefined,
+  })));
 }
 
 // ─── Station PATCH handler ────────────────────────────────────────────────────
@@ -1264,43 +1321,17 @@ function normalizeStationChanges(body: Record<string, unknown>): { changes: Reco
   return { changes };
 }
 
-function stationChangesToNotionProperties(changes: Record<string, unknown>): Record<string, unknown> {
-  const properties: Record<string, unknown> = {};
-  if (typeof changes.name === 'string' && changes.name.trim())
-    properties['Nombre'] = { title: [{ text: { content: changes.name.trim() } }] };
-  if (typeof changes.address === 'string')
-    properties['Dirección'] = { rich_text: [{ text: { content: changes.address } }] };
-  if (typeof changes.zone === 'string' && changes.zone.trim())
-    properties['Zona'] = { rich_text: [{ text: { content: changes.zone.trim() } }] };
-  if (typeof changes.network === 'string')
-    properties['Red'] = { rich_text: [{ text: { content: changes.network } }] };
-  if (typeof changes.access === 'string')
-    properties['Acceso'] = { rich_text: [{ text: { content: changes.access } }] };
-  if (typeof changes.status === 'string')
-    properties['Estado'] = { select: { name: changes.status === 'active' ? 'Activo' : changes.status === 'maintenance' ? 'Mantenimiento' : 'Inactivo' } };
-  if (Array.isArray(changes.connectors))
-    properties['Conectores'] = { rich_text: [{ text: { content: JSON.stringify(changes.connectors) } }] };
-  if (typeof changes.lat === 'number')
-    properties['Latitud'] = { number: changes.lat };
-  if (typeof changes.lng === 'number')
-    properties['Longitud'] = { number: changes.lng };
-  if (typeof changes.lat === 'number' && typeof changes.lng === 'number')
-    properties['Google Maps'] = { url: `https://www.google.com/maps/search/?api=1&query=${changes.lat},${changes.lng}` };
-  if (typeof changes.notes === 'string')
-    properties['Notas'] = { rich_text: [{ text: { content: changes.notes } }] };
-  return properties;
-}
-
 // Admins edit the live listing directly. Any other logged-in user gets the
-// same form, but their edit is stored as a "Propuesta Cambios" proposal on
-// the page — it never touches the live data until an admin approves it via
+// same form, but their edit is stored as a proposal in station_proposals —
+// it never touches the live data until an admin approves it via
 // handleStationApprove.
-async function handlePatchStation(stationId: string, request: Request, env: Env): Promise<Response> {
+async function handlePatchStation(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('Debes iniciar sesión para editar estaciones', 401);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  const pageId = await findStationPageId(stationId, env);
-  if (!pageId) return apiError('Estación no encontrada', 404);
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
 
   const body = await request.json() as Record<string, unknown>;
   const { changes, error } = normalizeStationChanges(body);
@@ -1308,28 +1339,24 @@ async function handlePatchStation(stationId: string, request: Request, env: Env)
   if (Object.keys(changes).length === 0) return apiError('Nada que actualizar');
 
   if (user.role !== 'admin') {
-    const today = new Date().toISOString().slice(0, 10);
-    const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-      method: 'PATCH',
-      headers: notionHeaders(env.NOTION_TOKEN),
-      body: JSON.stringify({
-        properties: {
-          'Propuesta Cambios': { rich_text: [{ text: { content: JSON.stringify(changes) } }] },
-          'Propuesta Por': { rich_text: [{ text: { content: user.email } }] },
-          'Propuesta Fecha': { rich_text: [{ text: { content: today } }] },
-        },
-      }),
-    });
-    if (!res.ok) return apiError('Error guardando la propuesta en Notion', 502);
+    const result = await env.DB.prepare(
+      'INSERT INTO station_proposals (station_id, submitted_by, changes) VALUES (?, ?, ?)'
+    ).bind(stationId, user.email, JSON.stringify(changes)).run();
+    const proposalId = result.meta.last_row_id;
+    await eventStmt(env.DB, stationId, 'proposal_submitted', user, { proposal_id: proposalId, changes }).run();
     return json({ ok: true, applied: false, pending: true });
   }
 
-  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ properties: stationChangesToNotionProperties(changes) }),
-  });
-  if (!res.ok) return apiError('Error actualizando estación en Notion', 502);
+  const { sets, values, diff } = buildStationUpdate(station, changes);
+  if (sets.length === 0) return json({ ok: true, applied: true });
+  sets.push("updated_at = datetime('now')");
+
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE stations SET ${sets.join(', ')} WHERE id = ?`).bind(...values, stationId),
+    eventStmt(env.DB, stationId, 'updated', user, { changes: diff }),
+  ]);
+  invalidateStationsCache();
+  ctx.waitUntil(syncStationToNotion(env, stationId));
   return json({ ok: true, applied: true });
 }
 
@@ -1340,9 +1367,10 @@ async function handlePatchStation(stationId: string, request: Request, env: Env)
 // until an admin approves it via handleStationApprove. In both cases only
 // location/verification fields are ever touched, never name/connectors/
 // network, so this can't be used to vandalize listing data.
-async function handleVerifyStation(stationId: string, request: Request, env: Env): Promise<Response> {
+async function handleVerifyStation(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('Debes iniciar sesión para verificar una estación', 401);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
 
   const body = await request.json() as { status?: string; lat?: number; lng?: number };
   if (body.status !== 'verified' && body.status !== 'error') {
@@ -1355,82 +1383,79 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
     return apiError('lng fuera de rango para Guatemala');
   }
 
-  const pageId = await findStationPageId(stationId, env);
-  if (!pageId) return apiError('Estación no encontrada', 404);
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
 
   const today = new Date().toISOString().slice(0, 10);
 
   if (user.role === 'admin') {
-    // Read current Notas so the attribution line is appended, not overwritten.
-    const current = await fetch(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders(env.NOTION_TOKEN) });
-    const currentNotas = current.ok
-      ? richText((await current.json() as NotionPage).properties['Notas'])
-      : '';
     const action = body.status === 'verified'
       ? (body.lat != null ? 'Ubicación corregida y verificada' : 'Verificado en sitio')
       : 'Reportado con ubicación errónea';
     const attribution = `[${action} por: ${user.email}, ${today}]`;
-    const notas = [currentNotas, attribution].filter(Boolean).join(' · ');
+    const notes = [station.notes ?? '', attribution].filter(Boolean).join(' · ');
 
-    const properties: Record<string, unknown> = {
-      'Verificacion': { select: { name: body.status === 'verified' ? 'Verificado' : 'Erróneo' } },
-      'Notas': { rich_text: [{ text: { content: notas } }] },
-    };
-    if (body.status === 'verified' && body.lat != null && body.lng != null) {
-      properties['Latitud'] = { number: body.lat };
-      properties['Longitud'] = { number: body.lng };
-      properties['Google Maps'] = { url: `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}` };
+    const sets: string[] = ['notes = ?', "updated_at = datetime('now')"];
+    const values: unknown[] = [notes];
+    if (body.status === 'verified') {
+      sets.push("verification_status = 'verified'", "last_confirmed_at = datetime('now')", 'confirm_count = confirm_count + 1', 'open_reports = 0');
+      if (body.lat != null && body.lng != null) {
+        sets.push('lat = ?', 'lng = ?', 'google_maps_url = ?');
+        values.push(body.lat, body.lng, `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}`);
+      }
+    } else {
+      sets.push("verification_status = 'flagged'", 'open_reports = open_reports + 1');
     }
 
-    const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-      method: 'PATCH',
-      headers: notionHeaders(env.NOTION_TOKEN),
-      body: JSON.stringify({ properties }),
-    });
-    if (!res.ok) return apiError('Error actualizando verificación en Notion', 502);
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE stations SET ${sets.join(', ')} WHERE id = ?`).bind(...values, stationId),
+      eventStmt(env.DB, stationId, body.status === 'verified' ? 'confirmed_ok' : 'reported_issue', user,
+        body.lat != null ? { lat: body.lat, lng: body.lng } : {}),
+    ]);
+    invalidateStationsCache();
+    ctx.waitUntil(syncStationToNotion(env, stationId));
     return json({ ok: true, applied: true });
   }
 
   // Non-admin: record as a pending proposal for an admin to review.
-  const properties: Record<string, unknown> = {
-    'Propuesta Verificacion': { select: { name: body.status === 'verified' ? 'Verificado' : 'Erróneo' } },
-    'Propuesta Por': { rich_text: [{ text: { content: user.email } }] },
-    'Propuesta Fecha': { rich_text: [{ text: { content: today } }] },
-  };
+  const changes: Record<string, unknown> = { verification: body.status };
   if (body.status === 'verified' && body.lat != null && body.lng != null) {
-    properties['Propuesta Lat'] = { number: body.lat };
-    properties['Propuesta Lng'] = { number: body.lng };
+    changes.lat = body.lat;
+    changes.lng = body.lng;
   }
-
-  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ properties }),
-  });
-  if (!res.ok) return apiError('Error guardando la propuesta en Notion', 502);
+  const result = await env.DB.prepare(
+    'INSERT INTO station_proposals (station_id, submitted_by, changes) VALUES (?, ?, ?)'
+  ).bind(stationId, user.email, JSON.stringify(changes)).run();
+  await eventStmt(env.DB, stationId, 'proposal_submitted', user, {
+    proposal_id: result.meta.last_row_id, changes,
+  }).run();
   return json({ ok: true, applied: false, pending: true });
 }
 
-async function handleDeleteStation(stationId: string, request: Request, env: Env): Promise<Response> {
+async function handleDeleteStation(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user || user.role !== 'admin') return apiError('Solo administradores pueden eliminar estaciones', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  const pageId = await findStationPageId(stationId, env);
-  if (!pageId) return apiError('Estación no encontrada', 404);
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
 
-  const res = await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: 'PATCH',
-    headers: notionHeaders(env.NOTION_TOKEN),
-    body: JSON.stringify({ archived: true }),
-  });
-  if (!res.ok) return apiError('Error eliminando estación en Notion', 502);
+  // Sin borrado físico: la estación queda archivada (rejected) con su historial.
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE stations SET approval_status = 'rejected', updated_at = datetime('now') WHERE id = ?"
+    ).bind(stationId),
+    eventStmt(env.DB, stationId, 'archived', user, { previous_status: station.approval_status }),
+  ]);
+  invalidateStationsCache();
+  ctx.waitUntil(syncStationToNotion(env, stationId));
   return json({ ok: true });
 }
 
 // ─── Main fetch handler ───────────────────────────────────────────────────────
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -1584,28 +1609,28 @@ export default {
       if (path === 'stations' && request.method === 'GET') return handleGetStationsFromD1(env);
       if (path === 'stations/dynamic' && request.method === 'GET') return handleGetDynamicStations(env);
       if (path === 'stations/pending' && request.method === 'GET') return handleGetPendingStations(request, env);
-      if (path === 'stations' && request.method === 'POST') return handlePostStation(request, env);
+      if (path === 'stations' && request.method === 'POST') return handlePostStation(request, env, ctx);
 
       // Station approve/reject: POST /api/stations/:id/approve|reject
       const stationActionMatch = path.match(/^stations\/([^/]+)\/(approve|reject)$/);
       if (stationActionMatch && request.method === 'POST') {
         const [, sid, action] = stationActionMatch;
-        if (action === 'approve') return handleStationApprove(sid, request, env);
-        if (action === 'reject') return handleStationReject(sid, request, env);
+        if (action === 'approve') return handleStationApprove(sid, request, env, ctx);
+        if (action === 'reject') return handleStationReject(sid, request, env, ctx);
       }
 
       // Field verification: POST /api/stations/:id/verify (any logged-in user)
       const stationVerifyMatch = path.match(/^stations\/([^/]+)\/verify$/);
       if (stationVerifyMatch && request.method === 'POST') {
-        return handleVerifyStation(stationVerifyMatch[1], request, env);
+        return handleVerifyStation(stationVerifyMatch[1], request, env, ctx);
       }
 
       // Station edit / delete: PATCH|DELETE /api/stations/:id
       const stationMatch = path.match(/^stations\/([^/]+)$/);
       if (stationMatch) {
         const sid = stationMatch[1];
-        if (request.method === 'PATCH') return handlePatchStation(sid, request, env);
-        if (request.method === 'DELETE') return handleDeleteStation(sid, request, env);
+        if (request.method === 'PATCH') return handlePatchStation(sid, request, env, ctx);
+        if (request.method === 'DELETE') return handleDeleteStation(sid, request, env, ctx);
       }
 
       // Reviews CRUD
