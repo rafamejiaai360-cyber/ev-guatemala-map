@@ -132,6 +132,9 @@ interface AppState {
   registerUser: (email: string, password: string, name: string, phone: string) => Promise<void>;
   logoutUser: () => void;
   loadCurrentUser: () => Promise<void>;
+  profileModalOpen: boolean;
+  setProfileModalOpen: (open: boolean) => void;
+  updateProfile: (name: string, phone: string) => Promise<void>;
 
   // Ratings (loaded from Worker API)
   ratings: Record<string, RatingInfo>;
@@ -361,6 +364,22 @@ export const useStore = create<AppState>((set, get) => ({
       }
       set({ currentUser: user, authToken: token });
     } catch { /* silently fail */ }
+  },
+
+  profileModalOpen: false,
+  setProfileModalOpen: (open) => set({ profileModalOpen: open }),
+
+  updateProfile: async (name, phone) => {
+    const token = get().authToken;
+    if (!token) throw new Error('No autenticado');
+    const res = await fetch('/api/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name, phone }),
+    });
+    const data = await res.json() as { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string; error?: string };
+    if (!res.ok) throw new Error(data.error ?? 'Error al actualizar el perfil');
+    set({ currentUser: data });
   },
 
   ratings: {},

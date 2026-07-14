@@ -101,7 +101,11 @@ falta para poder contactar/pagarle al dueño más adelante. Teléfono y correo
 del propietario **nunca se exponen** en la ficha pública de la estación.
 Gancho para suscripciones: `isSubscriptionActive(user)` en el Worker, sobre
 los campos `subscription_status`/`subscription_end` que ya existían — hoy
-ninguna función lo llama todavía.
+ninguna función lo llama todavía. Vista "Mi perfil" (`ProfileModal.tsx`,
+accesible desde el menú de usuario en `Header.tsx`): editar nombre y
+teléfono vía `PATCH /api/auth/me` (`handleUpdateProfile`); email de solo
+lectura (es el identificador de la cuenta/JWT, cambiarlo queda fuera de
+alcance por ahora).
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"

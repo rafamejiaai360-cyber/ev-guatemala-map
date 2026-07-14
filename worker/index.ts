@@ -1382,6 +1382,20 @@ async function handleGetMe(request: Request, env: Env): Promise<Response> {
   return json({ email: user.email, name: user.name, phone: user.phone, role: user.role, subscriptionEnd: user.subscriptionEnd });
 }
 
+async function handleUpdateProfile(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('No autenticado', 401);
+  const body = await request.json() as { name?: string; phone?: string };
+
+  const name = body.name !== undefined ? body.name.trim() : user.name;
+  if (!name) return apiError('El nombre es requerido');
+  const phone = body.phone !== undefined ? normalizePhone(body.phone) : user.phone;
+  if (body.phone !== undefined && !phone) return apiError('Teléfono inválido — usa 8 dígitos (ej. 5512-3456)');
+
+  await saveUser({ ...user, name, phone: phone ?? undefined }, env);
+  return json({ email: user.email, name, phone, role: user.role, subscriptionEnd: user.subscriptionEnd });
+}
+
 async function handleChangePassword(request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('No autenticado', 401);
@@ -1651,6 +1665,7 @@ export default {
       if (path === 'auth/register' && request.method === 'POST') return handleRegister(request, env);
       if (path === 'auth/login' && request.method === 'POST') return handleLogin(request, env);
       if (path === 'auth/me' && request.method === 'GET') return handleGetMe(request, env);
+      if (path === 'auth/me' && request.method === 'PATCH') return handleUpdateProfile(request, env);
       if (path === 'auth/change-password' && request.method === 'POST') return handleChangePassword(request, env);
       if (path === 'auth/set-subscription' && request.method === 'POST') return handleSetSubscription(request, env);
       if (path === 'auth/users' && request.method === 'GET') return handleListUsers(request, env);

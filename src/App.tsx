@@ -6,6 +6,7 @@ import ScanModal from './components/ScanModal';
 import AddStationModal from './components/AddStationModal';
 import AdminLoginModal from './components/AdminLoginModal';
 import AuthModal from './components/AuthModal';
+import ProfileModal from './components/ProfileModal';
 import { useStore } from './store/useStore';
 
 const EVMap = lazy(() => import('./components/Map'));
@@ -13,7 +14,7 @@ const EVMap = lazy(() => import('./components/Map'));
 const isAdminPanel = window.location.pathname === '/admin';
 
 export default function App() {
-  const { scanModalOpen, addStationModalOpen, adminLoginOpen, authModalOpen, loadRatings, loadDynamicStations, loadCurrentUser } = useStore();
+  const { scanModalOpen, addStationModalOpen, adminLoginOpen, authModalOpen, profileModalOpen, loadRatings, loadDynamicStations, loadCurrentUser } = useStore();
 
   useEffect(() => {
     loadRatings();
@@ -63,6 +64,9 @@ export default function App() {
 
       {/* Auth modal */}
       {authModalOpen && <AuthModal />}
+
+      {/* Profile modal */}
+      {profileModalOpen && <ProfileModal />}
     </div>
   );
 }
