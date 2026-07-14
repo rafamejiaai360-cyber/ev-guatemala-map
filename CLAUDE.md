@@ -10,6 +10,17 @@ Mapa de estaciones de carga para vehículos eléctricos en Guatemala. Frontend R
 - **Deploy**: `npm run deploy` (= `tsc -b && vite build && wrangler deploy`). No hay CI/CD — el push a GitHub NO despliega automáticamente.
 - **Repo**: `github.com/rafamejiaai360-cyber/ev-guatemala-map`, rama `main`
 
+## ⚠️ MIGRACIÓN D1 EN CURSO (13 jul 2026) — estado intermedio
+
+Fases 0–3 de `docs/plan-migracion-d1.md` COMPLETADAS: la app **lee** estaciones
+desde D1 (`GET /api/stations`, base `ev-guatemala-db`), pero las **escrituras**
+(alta/edición/aprobación de estaciones, reseñas) siguen yendo a Notion y NO se
+reflejan en D1 todavía. **No aprobar ni editar estaciones hasta completar la
+Fase 4** (corte de escrituras), o los cambios no aparecerán en el mapa.
+Staging: `ev-guatemala-db-staging`. Pendiente de cuenta: habilitar R2 en el
+Dashboard para respaldos (Fase 5). URL prod:
+`https://ev-guatemala-map.rafamejia-ai360.workers.dev`.
+
 ## Arquitectura actual (jul 2026)
 
 ```
