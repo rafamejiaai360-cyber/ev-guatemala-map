@@ -41,6 +41,13 @@ Worker (Cloudflare) — todo contra D1 (binding DB, base ev-guatemala-db)
   reseñas/fotos → `status='hidden'`. Siempre con su evento.
 - Los usuarios nunca editan `stations` directo: proponen (station_proposals)
   → admin aprueba/rechaza vía `/api/stations/:id/approve|reject`.
+- Verificación (14 jul 2026): confirmaciones y reportes simples de usuarios
+  se aplican AL INSTANTE (opiniones, evento confirmed_ok/reported_issue);
+  solo correcciones de ubicación (con lat/lng) van a moderación. `flagged`
+  requiere 2+ reportantes distintos desde la última confirmación (contados
+  por id de evento); una confirmación resetea reportes. La API expone
+  freshness/lastConfirmedAt/confirmCount/openReports y la UI los muestra
+  como insignia en StationVerification.tsx.
 - **Las ediciones manuales en Notion ya NO llegan a la app.** Toda edición se
   hace por el panel de admin de la app. Notion es solo para leer/revisar.
 
