@@ -26,8 +26,13 @@ binding = "DB"
 database_name = "ev-guatemala-db"
 database_id = "6b0f10a8-59f8-4218-b7c5-6d9f46d722b7"
 
-# Respaldos diarios (Fase 5): requiere habilitar R2 en el Dashboard de
-# Cloudflare (una vez, gratis) y luego: wrangler r2 bucket create ev-gt-backups
-# [[r2_buckets]]
-# binding = "BACKUPS"
-# bucket_name = "ev-gt-backups"
+# Respaldos diarios (Fase 5): export JSON de todas las tablas a R2.
+# Retención: 30 diarios + 12 mensuales (día 1). Ver runBackup() en el worker.
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "ev-gt-backups"
+
+# Cron de mantenimiento nocturno: 08:00 UTC = 02:00 Guatemala.
+# Corre respaldo a R2 + recálculo de frescura (verified→stale a los 90 días).
+[triggers]
+crons = ["0 8 * * *"]

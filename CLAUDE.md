@@ -52,10 +52,22 @@ D1 Time Travel permite restaurar a cualquier punto de los últimos 30 días.
 ventana breve donde versiones vieja y nueva atienden tráfico a la vez. No
 correr pruebas de humo inmediatamente tras el deploy sin considerar esa carrera.
 
+**Respaldos y mantenimiento (Fase 5, activa desde 14 jul 2026)**:
+- Cron diario 08:00 UTC (02:00 GT): exporta las 7 tablas a R2
+  (`ev-gt-backups`, `backups/YYYY-MM-DD/*.json`), retención 30 diarios +
+  12 mensuales, y recalcula frescura (`verified`→`stale` si no hay
+  confirmación en 90 días). Cada corrida deja fila en `ops_log`
+  (op `backup_r2` / `recalc_derived`) — si `ok=0` en días seguidos, investigar.
+- Simulacro de restauración validado el 14 jul 2026: backup de R2 → staging,
+  checksums idénticos a prod. Procedimiento: descargar JSON con
+  `wrangler r2 object get ... --remote --pipe` (¡sin `--remote` lee el
+  simulador local!), generar INSERTs, aplicar a staging.
+- La semilla `src/data/chargers.ts` se regenera desde D1 (no editar a mano).
+
 **Pendiente**:
-- Fase 5: habilitar R2 en el Dashboard (acción del dueño de la cuenta) →
-  bucket `ev-gt-backups` → cron diario de respaldo + cron de frescura
-  (`verified`→`stale` a los 90 días, aún no implementado).
+- Decidir qué hacer con las cuentas de prueba heredadas de KV en la tabla
+  users (2 con rol admin: kv_test2@test.com, verify_admin@test.com) —
+  recomendado desactivarlas (`account_status='disabled'`).
 - KV conserva los `user:*` viejos como reliquia; ya no se leen. Las fotos
   binarias sí siguen en KV.
 

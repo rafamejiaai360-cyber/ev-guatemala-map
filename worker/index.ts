@@ -5,6 +5,7 @@ export interface Env {
   NOTION_STATIONS_DB_ID: string;
   PHOTOS?: KVNamespace;
   DB?: D1Database;
+  BACKUPS?: R2Bucket;
   OCM_API_KEY?: string;
   ADMIN_PASSWORD?: string;
   JWT_SECRET?: string;
@@ -201,6 +202,93 @@ async function syncStationToNotion(env: Env, stationId: string): Promise<void> {
     await env.DB.prepare('INSERT INTO ops_log (op, ok, detail) VALUES (?, ?, ?)')
       .bind('sync_notion', ok ? 1 : 0, JSON.stringify({ stationId, ...(detail ? { detail } : {}) })).run();
   } catch {}
+}
+
+// ─── Mantenimiento nocturno (cron): frescura + respaldo a R2 ─────────────────
+
+async function logOp(db: D1Database, op: string, ok: boolean, detail: unknown): Promise<void> {
+  try {
+    await db.prepare('INSERT INTO ops_log (op, ok, detail) VALUES (?, ?, ?)')
+      .bind(op, ok ? 1 : 0, JSON.stringify(detail)).run();
+  } catch {}
+}
+
+// Una estación "verificada" envejece a "stale" si nadie la confirma en 90 días.
+// Honestidad automática: el mapa nunca presume verificaciones viejas.
+async function recalcFreshness(env: Env): Promise<void> {
+  if (!env.DB) return;
+  try {
+    const res = await env.DB.prepare(
+      `UPDATE stations SET verification_status = 'stale', updated_at = datetime('now')
+        WHERE verification_status = 'verified'
+          AND (last_confirmed_at IS NULL OR last_confirmed_at < datetime('now', '-90 days'))`
+    ).run();
+    const marked = res.meta.changes ?? 0;
+    if (marked > 0) invalidateStationsCache();
+    await logOp(env.DB, 'recalc_derived', true, { stale_marked: marked });
+  } catch (e) {
+    await logOp(env.DB, 'recalc_derived', false, { error: String(e) });
+  }
+}
+
+const BACKUP_TABLES = ['stations', 'station_events', 'station_proposals', 'users', 'reviews', 'photos', 'ops_log'];
+
+// Retención: 30 respaldos diarios + los del día 1 de cada mes por 12 meses.
+async function applyBackupRetention(bucket: R2Bucket): Promise<number> {
+  const keysByDay = new Map<string, string[]>();
+  let cursor: string | undefined;
+  do {
+    const listed = await bucket.list({ prefix: 'backups/', cursor });
+    for (const obj of listed.objects) {
+      const day = obj.key.split('/')[1];
+      if (!day) continue;
+      if (!keysByDay.has(day)) keysByDay.set(day, []);
+      keysByDay.get(day)!.push(obj.key);
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+
+  let deleted = 0;
+  const now = Date.now();
+  for (const [day, keys] of keysByDay) {
+    const ageDays = (now - Date.parse(day)) / 86_400_000;
+    if (isNaN(ageDays)) continue;
+    const isMonthly = day.endsWith('-01');
+    if (ageDays <= 30 || (isMonthly && ageDays <= 366)) continue;
+    for (const key of keys) {
+      await bucket.delete(key);
+      deleted++;
+    }
+  }
+  return deleted;
+}
+
+async function runBackup(env: Env): Promise<void> {
+  if (!env.DB) return;
+  if (!env.BACKUPS) {
+    await logOp(env.DB, 'backup_r2', false, { error: 'binding BACKUPS ausente (¿R2 habilitado?)' });
+    return;
+  }
+  const day = new Date().toISOString().slice(0, 10);
+  const counts: Record<string, number> = {};
+  try {
+    for (const table of BACKUP_TABLES) {
+      const { results } = await env.DB.prepare(`SELECT * FROM ${table}`).all();
+      counts[table] = results.length;
+      await env.BACKUPS.put(`backups/${day}/${table}.json`, JSON.stringify(results), {
+        httpMetadata: { contentType: 'application/json' },
+      });
+    }
+    const purged = await applyBackupRetention(env.BACKUPS);
+    await logOp(env.DB, 'backup_r2', true, { day, counts, purged });
+  } catch (e) {
+    await logOp(env.DB, 'backup_r2', false, { day, counts, error: String(e) });
+  }
+}
+
+async function runNightlyMaintenance(env: Env): Promise<void> {
+  await recalcFreshness(env);
+  await runBackup(env);
 }
 
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
@@ -1672,5 +1760,10 @@ export default {
     }
 
     return env.ASSETS.fetch(request);
+  },
+
+  // Cron diario (wrangler.toml [triggers]): respaldo a R2 + frescura.
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runNightlyMaintenance(env));
   },
 };

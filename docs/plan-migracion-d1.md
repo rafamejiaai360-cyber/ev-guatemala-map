@@ -1,10 +1,11 @@
 # Plan de migración a D1 — Especificación completa
 
-**Estado: PLANIFICACIÓN — nada de esto se ha ejecutado aún.**
-Fecha del plan: 13 jul 2026. Este documento es la especificación acordada para
-la Fase 1 del roadmap de robustez: migrar la fuente de verdad de Notion a
-Cloudflare D1, con historial de eventos (auditoría), cola de propuestas y
-respaldos automáticos.
+**Estado: ✅ EJECUTADO COMPLETO (Fases 0–5, 13–14 jul 2026).**
+Fecha del plan: 13 jul 2026. Este documento fue la especificación de la
+migración de Notion a Cloudflare D1, con historial de eventos (auditoría),
+cola de propuestas y respaldos automáticos. Se conserva como referencia del
+diseño y de los procedimientos (importación, restauración, retención).
+La arquitectura vigente está resumida en `CLAUDE.md`.
 
 ## Objetivo
 
