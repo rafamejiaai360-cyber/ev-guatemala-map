@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import type { ChargerStatus, ConnectorType, ChargerLevel } from '../types';
+import type { ChargerStatus, ConnectorType, ChargerLevel, StationType } from '../types';
 import type { ChargerStation } from '../types';
 import EditStationModal from './EditStationModal';
 
@@ -19,6 +19,7 @@ interface UserInfo {
 interface PendingStation {
   notionId: string;
   id: string;
+  type?: StationType;
   name: string;
   address: string;
   zone: string;
@@ -44,14 +45,21 @@ const CHANGE_LABELS: Record<string, string> = {
   network: 'Operador',
   access: 'Acceso',
   status: 'Estado',
+  type: 'Tipo',
   lat: 'Latitud',
   lng: 'Longitud',
   connectors: 'Conectores',
   notes: 'Notas',
 };
 
-function formatChangeValue(value: unknown): string {
+const TYPE_LABELS: Record<string, string> = {
+  public: '🔌 Pública',
+  residential: '🏠 Residencial',
+};
+
+function formatChangeValue(value: unknown, key?: string): string {
   if (value == null || value === '') return '—';
+  if (key === 'type' && typeof value === 'string') return TYPE_LABELS[value] ?? value;
   if (Array.isArray(value)) {
     return value
       .map(c => {
@@ -71,6 +79,7 @@ function currentChangeValue(station: PendingStation, key: string): unknown {
     case 'zone': return station.zone;
     case 'network': return station.network;
     case 'access': return station.access;
+    case 'type': return station.type;
     case 'lat': return station.lat;
     case 'lng': return station.lng;
     case 'connectors': return station.connectors;
@@ -104,6 +113,7 @@ function generateId(name: string, zone: string): string {
 function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
   const { loadDynamicStations, authToken } = useStore();
 
+  const [type, setType] = useState<StationType>('public');
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [zone, setZone] = useState('');
@@ -151,7 +161,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
         body: JSON.stringify({
-          id: generateId(name, zone), name: name.trim(), address: address.trim(),
+          id: generateId(name, zone), type, name: name.trim(), address: address.trim(),
           zone: zone.trim() || 'Guatemala', lat, lng,
           network: network.trim() || 'Desconocido', status: 'active',
           connectors: connectors.map(c => ({ type: c.type, ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }) })),
@@ -161,6 +171,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
       if (!res.ok) { const e = await res.json() as { error?: string }; throw new Error(e.error ?? `Error ${res.status}`); }
       await loadDynamicStations();
       const savedName = name.trim();
+      setType('public');
       setName(''); setAddress(''); setZone(''); setMapsUrl(''); setLat(null); setLng(null);
       setNetwork(''); setNotes(''); setAccess('public'); setConnectors([{ type: 'Type2', power_kw: null }]);
       onSuccess(savedName);
@@ -170,6 +181,23 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
+      {/* Type */}
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Tipo de estación</label>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setType('public')}
+            className={`text-sm py-2 rounded-lg border font-medium transition-colors ${
+              type === 'public' ? 'border-green-400 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+            🔌 Pública
+          </button>
+          <button type="button" onClick={() => setType('residential')}
+            className={`text-sm py-2 rounded-lg border font-medium transition-colors ${
+              type === 'residential' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+            🏠 Residencial
+          </button>
+        </div>
+      </div>
+
       {/* Name */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1">Nombre *</label>
@@ -322,7 +350,9 @@ function StationsTab() {
               station.status === 'maintenance' ? 'bg-amber-400' : 'bg-red-500'}`} />
 
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-gray-900 truncate">{station.name}</div>
+              <div className="text-sm font-medium text-gray-900 truncate">
+                {(station.type ?? 'public') === 'residential' ? '🏠' : '🔌'} {station.name}
+              </div>
               <div className="text-xs text-gray-400">{station.zone} · {station.id}</div>
             </div>
 
@@ -453,7 +483,9 @@ function PendingTab() {
               <div className="px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{station.name}</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {(station.type ?? 'public') === 'residential' ? '🏠' : '🔌'} {station.name}
+                    </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {[station.address, station.zone].filter(Boolean).join(' · ')}
                     </p>
@@ -467,9 +499,9 @@ function PendingTab() {
                             {Object.entries(station.proposedChanges).map(([key, value]) => (
                               <p key={key} className="text-[10px] leading-relaxed">
                                 <span className="text-gray-500 font-medium">{CHANGE_LABELS[key] ?? key}:</span>{' '}
-                                <span className="text-gray-400 line-through">{formatChangeValue(currentChangeValue(station, key))}</span>
+                                <span className="text-gray-400 line-through">{formatChangeValue(currentChangeValue(station, key), key)}</span>
                                 {' → '}
-                                <span className="text-blue-600 font-medium">{formatChangeValue(value)}</span>
+                                <span className="text-blue-600 font-medium">{formatChangeValue(value, key)}</span>
                               </p>
                             ))}
                           </div>

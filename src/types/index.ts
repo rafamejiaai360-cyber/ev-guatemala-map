@@ -12,6 +12,8 @@ export interface Connector {
 
 export type VerificationStatus = 'pending' | 'verified' | 'error';
 
+export type StationType = 'public' | 'residential';
+
 // Estado real de frescura que expone la API desde D1:
 // verified = confirmada hace <90 dias y sin reportes abiertos
 // stale    = la ultima confirmacion ya envejecio
@@ -20,6 +22,7 @@ export type FreshnessStatus = 'pending' | 'verified' | 'stale' | 'flagged';
 
 export interface ChargerStation {
   id: string;
+  type?: StationType;
   name: string;
   address: string;
   zone: string;

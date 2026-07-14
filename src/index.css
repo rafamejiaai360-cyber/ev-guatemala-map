@@ -74,10 +74,9 @@ html, body, #root {
   pointer-events: none;
 }
 
-.ev-marker.active   { background: #22c55e; }
-.ev-marker.maintenance { background: #f59e0b; }
-.ev-marker.offline  { background: #ef4444; }
-.ev-marker.user     { background: #3b82f6; }
+/* Relleno = tipo de estación; borde (inline, ver Map.tsx) = estado operativo. */
+.ev-marker.public      { background: #22c55e; }
+.ev-marker.residential { background: #3b82f6; }
 
 /* Station hover tooltip */
 .leaflet-tooltip.station-tooltip {

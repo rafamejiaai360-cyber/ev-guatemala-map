@@ -545,7 +545,7 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
   const body = await request.json() as {
     id: string; name: string; address?: string;
     zone?: string; lat: number; lng: number;
-    network?: string; status?: string;
+    network?: string; status?: string; type?: string;
     connectors?: Array<{ type: string; power_kw: number; level: string }>;
     access?: string; source?: string; notes?: string;
   };
@@ -572,21 +572,22 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
   // anonymous users also publish directly (no account to validate against)
   const isPending = !isAdmin && !!submittedBy;
   const access = ['public', 'semi-public', 'private'].includes(body.access ?? '') ? body.access! : 'public';
+  const type = body.type === 'residential' ? 'residential' : 'public';
 
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO stations (id, type, name, address, zone, lat, lng, status, network, access,
          connectors, notes, source, google_maps_url, submitted_by, approval_status, verification_status)
-       VALUES (?, 'public', ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
     ).bind(
-      body.id, body.name, body.address ?? '', body.zone ?? 'Guatemala', body.lat, body.lng,
+      body.id, type, body.name, body.address ?? '', body.zone ?? 'Guatemala', body.lat, body.lng,
       body.network ?? 'Desconocido', access, JSON.stringify(body.connectors ?? []),
       body.notes ?? null, body.source ?? 'Manual',
       `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}`,
       submittedBy || null, isPending ? 'pending' : 'active',
     ),
     eventStmt(env.DB, body.id, 'created', requester, {
-      source: body.source ?? 'Manual',
+      source: body.source ?? 'Manual', type,
       approval_status: isPending ? 'pending' : 'active',
     }),
   ]);
@@ -629,6 +630,7 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
     results.push({
       notionId: s.notion_page_id,
       id: s.id,
+      type: s.type === 'residential' ? 'residential' : 'public',
       name: s.name,
       address: s.address ?? '',
       zone: s.zone || 'Guatemala',
@@ -654,6 +656,7 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
       notionId: p.notion_page_id,
       proposalId: p.proposal_id,
       id: p.station_id,
+      type: p.type === 'residential' ? 'residential' : 'public',
       name: p.name,
       address: p.address ?? '',
       zone: p.zone || 'Guatemala',
@@ -677,7 +680,7 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
 }
 
 // Campos editables de una estación que una propuesta puede tocar.
-const EDITABLE_FIELDS = ['name', 'address', 'zone', 'network', 'access', 'status', 'connectors', 'lat', 'lng', 'notes'] as const;
+const EDITABLE_FIELDS = ['name', 'address', 'zone', 'network', 'access', 'status', 'type', 'connectors', 'lat', 'lng', 'notes'] as const;
 
 // Construye los UPDATE de estación a partir de cambios normalizados,
 // registrando old→new para el evento. Devuelve fragmentos SET y valores.
@@ -689,7 +692,7 @@ function buildStationUpdate(
   const values: unknown[] = [];
   const diff: { field: string; old: unknown; new: unknown }[] = [];
   const columnFor: Record<string, string> = {
-    name: 'name', address: 'address', zone: 'zone', network: 'network',
+    name: 'name', address: 'address', zone: 'zone', network: 'network', type: 'type',
     access: 'access', status: 'status', lat: 'lat', lng: 'lng', notes: 'notes',
   };
   for (const field of EDITABLE_FIELDS) {
@@ -897,6 +900,7 @@ async function handleGetDynamicStations(env: Env): Promise<Response> {
 
 interface StationRow {
   id: string;
+  type: string;
   name: string;
   address: string | null;
   zone: string | null;
@@ -930,7 +934,7 @@ async function handleGetStationsFromD1(env: Env): Promise<Response> {
   }
 
   const { results } = await env.DB.prepare(
-    `SELECT id, name, address, zone, lat, lng, status, connectors, network, access,
+    `SELECT id, type, name, address, zone, lat, lng, status, connectors, network, access,
             notes, verification_status, google_maps_url, last_confirmed_at,
             confirm_count, open_reports
        FROM stations
@@ -952,6 +956,7 @@ async function handleGetStationsFromD1(env: Env): Promise<Response> {
       : 'pending';
     return {
       id: r.id,
+      type: r.type === 'residential' ? 'residential' : 'public',
       name: r.name,
       address: r.address ?? '',
       zone: r.zone || 'Guatemala',
@@ -1401,6 +1406,7 @@ function normalizeStationChanges(body: Record<string, unknown>): { changes: Reco
   if (typeof body.network === 'string') changes.network = body.network.trim();
   if (typeof body.access === 'string' && ['public', 'semi-public', 'private'].includes(body.access)) changes.access = body.access;
   if (typeof body.status === 'string' && ['active', 'maintenance', 'offline'].includes(body.status)) changes.status = body.status;
+  if (typeof body.type === 'string' && ['public', 'residential'].includes(body.type)) changes.type = body.type;
   if (Array.isArray(body.connectors)) changes.connectors = body.connectors;
   if (typeof body.lat === 'number') {
     if (body.lat < 13 || body.lat > 18) return { changes, error: 'lat fuera de rango para Guatemala' };

@@ -1,13 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../store/useStore';
-import type { ChargerStatus, ConnectorType, ChargerLevel } from '../types';
+import type { ChargerStatus, ConnectorType, ChargerLevel, StationType } from '../types';
 
 const STATUS_OPTIONS: { value: ChargerStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'Todos' },
   { value: 'active', label: 'Activo' },
   { value: 'maintenance', label: 'Mantenimiento' },
   { value: 'offline', label: 'Fuera de servicio' },
+];
+
+const TYPE_OPTIONS: { value: StationType | 'all'; label: string }[] = [
+  { value: 'all', label: 'Todas' },
+  { value: 'public', label: '🔌 Públicas' },
+  { value: 'residential', label: '🏠 Residenciales' },
 ];
 
 const CONNECTOR_OPTIONS: ConnectorType[] = ['CCS2', 'CHAdeMO', 'Type2', 'J1772', 'GBT', 'CCS1'];
@@ -105,6 +111,23 @@ export default function FilterBar() {
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      {/* Station type filter (pública / residencial) */}
+      <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5">
+        {TYPE_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => setFilters({ stationType: opt.value })}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
+              filters.stationType === opt.value
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {/* Status filter */}
       <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5">
         {STATUS_OPTIONS.map((opt) => (

@@ -38,6 +38,15 @@ const STATUS_LABELS: Record<string, string> = {
   offline: 'Fuera de servicio',
 };
 
+const TYPE_LABELS: Record<string, string> = {
+  public: '🔌 Pública',
+  residential: '🏠 Residencial',
+};
+const TYPE_COLORS: Record<string, string> = {
+  public: 'bg-green-100 text-green-700',
+  residential: 'bg-blue-100 text-blue-700',
+};
+
 export default function StationDetail({ station, onBack }: Props) {
   const { currentUser } = useStore();
   const [showEdit, setShowEdit] = useState(false);
@@ -78,6 +87,9 @@ export default function StationDetail({ station, onBack }: Props) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TYPE_COLORS[station.type ?? 'public']}`}>
+              {TYPE_LABELS[station.type ?? 'public']}
+            </span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STATUS_COLORS[station.status]}`}>
               {STATUS_LABELS[station.status]}
             </span>

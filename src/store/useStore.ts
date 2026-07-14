@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { chargerStations } from '../data/chargers';
 import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } from '../utils/ocm';
-import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo } from '../types';
+import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType } from '../types';
 import { getAllRatings } from '../utils/reviewsApi';
 
 async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
@@ -61,6 +61,7 @@ export interface Filters {
   status: ChargerStatus | 'all';
   connectorTypes: ConnectorType[];
   level: ChargerLevel | 'all';
+  stationType: StationType | 'all';
 }
 
 interface AppState {
@@ -144,6 +145,7 @@ function computeFiltered(
 ): ChargerStation[] {
   return stations.filter((s) => {
     if (filters.status !== 'all' && s.status !== filters.status) return false;
+    if (filters.stationType !== 'all' && (s.type ?? 'public') !== filters.stationType) return false;
     if (filters.connectorTypes.length > 0) {
       const stationTypes = s.connectors.map((c) => c.type);
       if (!filters.connectorTypes.some((t) => stationTypes.includes(t))) return false;
@@ -181,7 +183,7 @@ function buildAllStations(
     : chargerStations;
   return applyOverrides([...staticFallback, ...custom, ...dynamic], overrides);
 }
-const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all' };
+const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all', stationType: 'all' };
 
 export const useStore = create<AppState>((set, get) => ({
   stations: allInitial,

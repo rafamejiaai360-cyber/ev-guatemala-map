@@ -5,10 +5,12 @@ import type { ChargerStation } from '../types';
 import StationDetail from './StationDetail';
 import StarRating from './StarRating';
 
-const STATUS_DOT: Record<string, string> = {
-  active: 'bg-green-500',
-  maintenance: 'bg-amber-400',
-  offline: 'bg-red-500',
+// El punto de la lista usa el color de TIPO (verde/azul), igual que el pin del
+// mapa — así la lista y el mapa se leen con el mismo código de colores. El
+// estado operativo sigue visible en la píldora de texto de abajo.
+const TYPE_DOT: Record<string, string> = {
+  public: 'bg-green-500',
+  residential: 'bg-blue-500',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -176,8 +178,8 @@ export default function Sidebar() {
                         isSelected ? 'bg-green-50 border-l-2 border-l-green-500' : ''
                       } ${!isCompatible ? 'opacity-40' : ''}`}
                     >
-                      {/* Status dot */}
-                      <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[station.status]}`} />
+                      {/* Type dot (pública/residencial) */}
+                      <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${TYPE_DOT[station.type ?? 'public']}`} />
 
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-gray-900 truncate">{station.name}</div>

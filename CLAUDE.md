@@ -71,12 +71,31 @@ correr pruebas de humo inmediatamente tras el deploy sin considerar esa carrera.
   simulador local!), generar INSERTs, aplicar a staging.
 - La semilla `src/data/chargers.ts` se regenera desde D1 (no editar a mano).
 
+**Estaciones residenciales (14 jul 2026)**: campo `stations.type` (`public` |
+`residential`, ya previsto desde la Fase 0) expuesto en la API, editable por
+admin/propuesta igual que cualquier otro campo, y visible en toda la UI.
+Codificación de color acordada — **dos señales independientes, no una sola**:
+- **Relleno del pin = tipo** (quién ofrece la estación): verde = pública,
+  azul = residencial. Es la categoría permanente de la estación.
+- **Borde del pin = estado operativo**: blanco = activo, ámbar = mantenimiento,
+  rojo = fuera de servicio. No se fusionó con el relleno para no perder
+  ninguna de las dos señales.
+- El nivel de **acceso** (`access`: public/semi-public/private) sigue siendo
+  un campo aparte, sin color propio en el pin — decisión deliberada: no se
+  agregó un tercer color "celeste" para semi-privado porque `access` es un
+  eje distinto de `type` (una estación pública puede ser semi-pública; una
+  residencial puede ser privada o compartida) y cruzar ambos ejes en el color
+  del pin (2×3 = 6 combinaciones) rompería la legibilidad del mapa.
+- Filtro "🔌 Públicas / 🏠 Residenciales" en `FilterBar.tsx`; selector en
+  `AddStationModal.tsx`, `EditStationModal.tsx` y `AdminPanel.tsx`.
+
 **Pendiente**:
-- Decidir qué hacer con las cuentas de prueba heredadas de KV en la tabla
-  users (2 con rol admin: kv_test2@test.com, verify_admin@test.com) —
-  recomendado desactivarlas (`account_status='disabled'`).
 - KV conserva los `user:*` viejos como reliquia; ya no se leen. Las fotos
   binarias sí siguen en KV.
+
+(Resuelto 14 jul 2026: las 5 cuentas de prueba heredadas de KV —incluidas
+las 2 con rol admin, kv_test2@test.com y verify_admin@test.com— quedaron en
+`account_status='disabled'` en D1.)
 
 ## Roadmap de crecimiento
 

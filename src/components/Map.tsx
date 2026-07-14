@@ -20,18 +20,28 @@ L.Icon.Default.mergeOptions({
 
 const iconCache = new Map<string, L.DivIcon>();
 
-function makeStationIcon(status: string, dimmed: boolean) {
-  const key = `${status}-${dimmed}`;
+// Relleno = TIPO de estación (quién la ofrece): verde = pública, azul = residencial.
+// Borde = ESTADO operativo: blanco = activo, ámbar = mantenimiento, rojo = fuera de servicio.
+// Dos señales independientes en un mismo ícono, cada una con su propio significado.
+const TYPE_FILL: Record<string, string> = {
+  public: '#22c55e',
+  residential: '#3b82f6',
+};
+const STATUS_BORDER: Record<string, string> = {
+  active: '#ffffff',
+  maintenance: '#f59e0b',
+  offline: '#ef4444',
+};
+
+function makeStationIcon(type: string, status: string, dimmed: boolean) {
+  const key = `${type}-${status}-${dimmed}`;
   if (iconCache.has(key)) return iconCache.get(key)!;
-  const colors: Record<string, string> = {
-    active: '#22c55e',
-    maintenance: '#f59e0b',
-    offline: '#ef4444',
-  };
-  const color = colors[status] ?? '#6b7280';
+  const fill = TYPE_FILL[type] ?? TYPE_FILL.public;
+  const border = STATUS_BORDER[status] ?? '#ffffff';
+  const borderWidth = status === 'active' ? 2.5 : 3.5;
   const icon = L.divIcon({
     className: '',
-    html: `<div class="ev-marker ${status}${dimmed ? ' dimmed' : ''}" style="background:${color};width:30px;height:30px;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;font-size:14px;">⚡</div>`,
+    html: `<div class="ev-marker ${type} ${status}${dimmed ? ' dimmed' : ''}" style="background:${fill};width:30px;height:30px;border-radius:50%;border:${borderWidth}px solid ${border};box-shadow:0 2px 8px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;font-size:14px;">⚡</div>`,
     iconSize: [30, 30],
     iconAnchor: [15, 15],
     popupAnchor: [0, -18],
@@ -74,6 +84,15 @@ const STATUS_COLOR: Record<string, string> = {
   offline: '#ef4444',
 };
 
+const TYPE_LABEL: Record<string, string> = {
+  public: '🔌 Pública',
+  residential: '🏠 Residencial',
+};
+const TYPE_BADGE_CLASS: Record<string, string> = {
+  public: 'text-green-700 bg-green-50',
+  residential: 'text-blue-700 bg-blue-50',
+};
+
 function StationTooltipContent({ station }: { station: ChargerStation }) {
   return (
     <div style={{ minWidth: '210px', fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -95,7 +114,7 @@ function StationTooltipContent({ station }: { station: ChargerStation }) {
               {station.name}
             </div>
             <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-              {station.zone} · {station.network}
+              {(station.type ?? 'public') === 'residential' ? '🏠' : '🔌'} {station.zone} · {station.network}
             </div>
           </div>
         </div>
@@ -142,6 +161,8 @@ function StationPopupContent({ station }: { station: ChargerStation }) {
     offline: 'Fuera de servicio',
   }[station.status];
 
+  const stationType = station.type ?? 'public';
+
   return (
     <div className="w-72 font-[Inter,system-ui,sans-serif]">
       {/* Header */}
@@ -151,9 +172,14 @@ function StationPopupContent({ station }: { station: ChargerStation }) {
             <h3 className="text-sm font-semibold text-gray-900 leading-tight">{station.name}</h3>
             <p className="text-xs text-gray-500 mt-0.5">{station.address}</p>
           </div>
-          <span className={`flex-shrink-0 text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColor}`}>
-            {statusLabel}
-          </span>
+          <div className="flex-shrink-0 flex flex-col items-end gap-1">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColor}`}>
+              {statusLabel}
+            </span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_BADGE_CLASS[stationType]}`}>
+              {TYPE_LABEL[stationType]}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-3 mt-2">
           <span className="text-xs text-gray-500">{station.zone}</span>
@@ -319,6 +345,7 @@ export default function EVMap() {
   const hasActiveFilters =
     selectedVehicle !== null ||
     filters.status !== 'all' ||
+    filters.stationType !== 'all' ||
     filters.connectorTypes.length > 0 ||
     filters.level !== 'all';
 
@@ -354,7 +381,7 @@ export default function EVMap() {
               key={station.id}
               ref={(r) => { markerRefs.current[station.id] = r; }}
               position={[station.lat, station.lng]}
-              icon={makeStationIcon(station.status, dimmed)}
+              icon={makeStationIcon(station.type ?? 'public', station.status, dimmed)}
               eventHandlers={{
                 click: () => {
                   const { selectedStationId, setSelectedStationId, setSidebarOpen } = useStore.getState();
