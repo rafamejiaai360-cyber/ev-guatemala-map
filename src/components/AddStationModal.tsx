@@ -22,7 +22,7 @@ function generateId(name: string, zone: string): string {
 }
 
 export default function AddStationModal() {
-  const { setAddStationModalOpen, loadDynamicStations, authToken, currentUser } = useStore();
+  const { setAddStationModalOpen, loadDynamicStations, authToken, currentUser, setAuthModalOpen } = useStore();
   const isAdmin = currentUser?.role === 'admin';
 
   const [type, setType] = useState<StationType>('public');
@@ -121,6 +121,10 @@ export default function AddStationModal() {
     e.preventDefault();
     setError(null);
 
+    if (type === 'residential' && !currentUser) {
+      setError('Debes iniciar sesión para agregar una estación residencial');
+      return;
+    }
     if (!name.trim()) { setError('El nombre es obligatorio'); return; }
     if (lat == null || lng == null) { setError('Resuelve la ubicación de Google Maps primero'); return; }
     if (lat < 13 || lat > 18 || lng < -93 || lng > -88) {
@@ -289,6 +293,25 @@ export default function AddStationModal() {
                     : 'Un cargador en una casa particular que su dueño comparte con la comunidad.'}
                 </p>
               </div>
+
+              {/* Login gate: las residenciales exigen cuenta (owner_email en el backend) */}
+              {type === 'residential' && !currentUser && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 space-y-2">
+                  <p className="text-xs text-blue-800 font-medium">
+                    🔒 Necesitas una cuenta para agregar tu cargador residencial
+                  </p>
+                  <p className="text-[11px] text-blue-700 leading-relaxed">
+                    Así podemos vincular la estación contigo y contactarte cuando alguien quiera usarla.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setAddStationModalOpen(false); setAuthModalOpen(true); }}
+                    className="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-1.5 transition-colors"
+                  >
+                    Crear cuenta
+                  </button>
+                </div>
+              )}
 
               {/* Name */}
               <div>
@@ -553,10 +576,12 @@ export default function AddStationModal() {
             <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || (type === 'residential' && !currentUser)}
                 className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
               >
-                {submitting ? 'Enviando…' : isAdmin ? 'Guardar en mapa y Notion' : 'Enviar propuesta para revisión'}
+                {type === 'residential' && !currentUser
+                  ? 'Inicia sesión para continuar'
+                  : submitting ? 'Enviando…' : isAdmin ? 'Guardar en mapa y Notion' : 'Enviar propuesta para revisión'}
               </button>
             </div>
           </form>

@@ -89,6 +89,29 @@ Codificación de color acordada — **dos señales independientes, no una sola**
 - Filtro "🔌 Públicas / 🏠 Residenciales" en `FilterBar.tsx`; selector en
   `AddStationModal.tsx`, `EditStationModal.tsx` y `AdminPanel.tsx`.
 
+**Plataforma de usuarios (14 jul 2026)**: registro pide nombre completo,
+correo y **teléfono** (`users.phone`, 8 dígitos GT, con/sin `+502` — solo
+declarado, sin verificar por correo/SMS todavía). **Las estaciones
+residenciales exigen cuenta**: `handlePostStation` responde 401 si
+`type='residential'` sin usuario autenticado; las públicas siguen aceptando
+alta anónima igual que antes (decisión explícita, no un descuido). Al crear
+una residencial con sesión, `stations.owner_email` (existía desde la Fase 0,
+nunca usado) queda enlazado automáticamente al creador — es la pieza que
+falta para poder contactar/pagarle al dueño más adelante. Teléfono y correo
+del propietario **nunca se exponen** en la ficha pública de la estación.
+Gancho para suscripciones: `isSubscriptionActive(user)` en el Worker, sobre
+los campos `subscription_status`/`subscription_end` que ya existían — hoy
+ninguna función lo llama todavía.
+
+**Hallazgo (no introducido por este cambio, documentado tal cual se encontró
+14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
+a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
+de llegar al formulario en la UI hoy, aunque el Worker sigue aceptando altas
+públicas anónimas si se llama a la API directamente. La compuerta de login
+para residenciales en `AddStationModal.tsx` es correcta pero, por este mismo
+motivo, hoy es inalcanzable desde la UI — queda como defensa en profundidad
+para el día que se agregue algún punto de entrada anónimo.
+
 **Pendiente**:
 - KV conserva los `user:*` viejos como reliquia; ya no se leen. Las fotos
   binarias sí siguen en KV.

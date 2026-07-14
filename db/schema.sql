@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   salt TEXT NOT NULL,
+  phone TEXT,                                  -- agregado 14 jul 2026; declarado, sin verificar
   role TEXT NOT NULL DEFAULT 'user',           -- admin | user (ampliable: moderator, owner)
   account_status TEXT NOT NULL DEFAULT 'active', -- active | disabled
   subscription_status TEXT NOT NULL DEFAULT 'free', -- free | active | expired | cancelled

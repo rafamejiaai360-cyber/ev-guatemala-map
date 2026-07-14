@@ -120,6 +120,7 @@ interface FullStationRow {
   source: string | null;
   google_maps_url: string | null;
   submitted_by: string | null;
+  owner_email: string | null;
   approval_status: string;
   verification_status: string;
   notion_page_id: string | null;
@@ -560,6 +561,14 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
   const requester = await getUserFromToken(request, env);
   const isAdmin = requester?.role === 'admin';
   const submittedBy = requester?.email ?? '';
+  const type = body.type === 'residential' ? 'residential' : 'public';
+
+  // Las estaciones residenciales exigen cuenta: sin dueño identificado no hay
+  // a quién enlazar la propiedad (owner_email) ni a quién contactar/pagar
+  // más adelante. Las públicas mantienen el flujo anónimo existente.
+  if (type === 'residential' && !requester) {
+    return apiError('Debes iniciar sesión para agregar una estación residencial', 401);
+  }
 
   // Ensure no duplicate by checking ID
   const existing = await getStation(env.DB, body.id);
@@ -569,22 +578,23 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
   if (typeof body.lng !== 'number' || body.lng < -93 || body.lng > -88) return apiError('lng fuera de rango para Guatemala');
 
   // Admins publish directly; logged-in users create a pending proposal;
-  // anonymous users also publish directly (no account to validate against)
+  // anonymous users also publish directly (no account to validate against) —
+  // solo aplica a públicas, ya que residenciales exige cuenta arriba.
   const isPending = !isAdmin && !!submittedBy;
   const access = ['public', 'semi-public', 'private'].includes(body.access ?? '') ? body.access! : 'public';
-  const type = body.type === 'residential' ? 'residential' : 'public';
+  const ownerEmail = type === 'residential' ? requester!.email : null;
 
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO stations (id, type, name, address, zone, lat, lng, status, network, access,
-         connectors, notes, source, google_maps_url, submitted_by, approval_status, verification_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
+         connectors, notes, source, google_maps_url, submitted_by, owner_email, approval_status, verification_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
     ).bind(
       body.id, type, body.name, body.address ?? '', body.zone ?? 'Guatemala', body.lat, body.lng,
       body.network ?? 'Desconocido', access, JSON.stringify(body.connectors ?? []),
       body.notes ?? null, body.source ?? 'Manual',
       `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}`,
-      submittedBy || null, isPending ? 'pending' : 'active',
+      submittedBy || null, ownerEmail, isPending ? 'pending' : 'active',
     ),
     eventStmt(env.DB, body.id, 'created', requester, {
       source: body.source ?? 'Manual', type,
@@ -1233,6 +1243,7 @@ async function verifyPassword(password: string, hash: string, salt: string): Pro
 interface UserRecord {
   email: string;
   name: string;
+  phone?: string;
   passwordHash: string;
   salt: string;
   role: 'admin' | 'user';
@@ -1243,6 +1254,7 @@ interface UserRecord {
 interface UserRow {
   email: string;
   name: string;
+  phone: string | null;
   password_hash: string;
   salt: string;
   role: string;
@@ -1255,12 +1267,29 @@ function rowToUser(r: UserRow): UserRecord {
   return {
     email: r.email,
     name: r.name,
+    phone: r.phone ?? undefined,
     passwordHash: r.password_hash,
     salt: r.salt,
     role: r.role === 'admin' ? 'admin' : 'user',
     createdAt: r.created_at,
     subscriptionEnd: r.subscription_end ?? undefined,
   };
+}
+
+// Punto único para consultar si una cuenta tiene suscripción activa. Hoy
+// ninguna función lo llama (no hay funciones premium todavía) — queda listo
+// para cuando se active algo que dependa de ello.
+function isSubscriptionActive(user: UserRecord): boolean {
+  if (!user.subscriptionEnd) return false;
+  return new Date(user.subscriptionEnd).getTime() > Date.now();
+}
+
+// Formato de teléfono guatemalteco: 8 dígitos, con o sin +502. Declarado por
+// el usuario, no verificado (ver docs/plan-migracion-d1.md — sin proveedor
+// de SMS/email transaccional integrado todavía).
+function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/[^\d]/g, '').replace(/^502/, '');
+  return /^\d{8}$/.test(digits) ? digits : null;
 }
 
 async function getUser(email: string, env: Env): Promise<UserRecord | null> {
@@ -1274,9 +1303,9 @@ async function getUser(email: string, env: Env): Promise<UserRecord | null> {
 async function saveUser(user: UserRecord, env: Env): Promise<void> {
   if (!env.DB) return;
   await env.DB.prepare(
-    'UPDATE users SET name = ?, password_hash = ?, salt = ?, role = ?, subscription_end = ? WHERE email = ?'
+    'UPDATE users SET name = ?, phone = ?, password_hash = ?, salt = ?, role = ?, subscription_end = ? WHERE email = ?'
   ).bind(
-    user.name, user.passwordHash, user.salt, user.role,
+    user.name, user.phone ?? null, user.passwordHash, user.salt, user.role,
     user.subscriptionEnd ?? null, user.email.toLowerCase().trim(),
   ).run();
 }
@@ -1298,13 +1327,15 @@ async function getUserFromToken(request: Request, env: Env): Promise<UserRecord 
 
 async function handleRegister(request: Request, env: Env): Promise<Response> {
   if (!env.JWT_SECRET) return apiError('Autenticación no configurada en el servidor', 503);
-  const body = await request.json() as { email?: string; password?: string; name?: string };
+  const body = await request.json() as { email?: string; password?: string; name?: string; phone?: string };
   const email = body.email?.toLowerCase().trim() ?? '';
   const password = body.password ?? '';
   const name = body.name?.trim() ?? '';
   if (!email || !email.includes('@')) return apiError('Email inválido');
   if (password.length < 6) return apiError('La contraseña debe tener al menos 6 caracteres');
   if (!name) return apiError('El nombre es requerido');
+  const phone = normalizePhone(body.phone ?? '');
+  if (!phone) return apiError('Teléfono inválido — usa 8 dígitos (ej. 5512-3456)');
 
   if (!env.DB) return apiError('Base de datos no configurada', 503);
   const existing = await env.DB.prepare('SELECT email FROM users WHERE email = ?').bind(email).first();
@@ -1314,11 +1345,11 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
   const role: 'admin' | 'user' = env.ADMIN_EMAIL && email === env.ADMIN_EMAIL.toLowerCase().trim() ? 'admin' : 'user';
 
   await env.DB.prepare(
-    'INSERT INTO users (email, name, password_hash, salt, role, last_login_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))'
-  ).bind(email, name, passwordHash, salt, role).run();
+    'INSERT INTO users (email, name, phone, password_hash, salt, role, last_login_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))'
+  ).bind(email, name, phone, passwordHash, salt, role).run();
 
   const token = await signJWT({ sub: email, name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
-  return json({ token, user: { email, name, role, subscriptionEnd: undefined } }, 201);
+  return json({ token, user: { email, name, phone, role, subscriptionEnd: undefined } }, 201);
 }
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
@@ -1342,13 +1373,13 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   }
 
   const token = await signJWT({ sub: email, name: user.name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
-  return json({ token, user: { email: user.email, name: user.name, role, subscriptionEnd: user.subscriptionEnd } });
+  return json({ token, user: { email: user.email, name: user.name, phone: user.phone, role, subscriptionEnd: user.subscriptionEnd } });
 }
 
 async function handleGetMe(request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('No autenticado', 401);
-  return json({ email: user.email, name: user.name, role: user.role, subscriptionEnd: user.subscriptionEnd });
+  return json({ email: user.email, name: user.name, phone: user.phone, role: user.role, subscriptionEnd: user.subscriptionEnd });
 }
 
 async function handleChangePassword(request: Request, env: Env): Promise<Response> {

@@ -124,12 +124,12 @@ interface AppState {
   setAdminLoginOpen: (open: boolean) => void;
 
   // User auth (JWT system)
-  currentUser: { email: string; name: string; role: 'admin' | 'user'; subscriptionEnd?: string } | null;
+  currentUser: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string } | null;
   authToken: string | null;
   authModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
   loginUser: (email: string, password: string) => Promise<void>;
-  registerUser: (email: string, password: string, name: string) => Promise<void>;
+  registerUser: (email: string, password: string, name: string, phone: string) => Promise<void>;
   logoutUser: () => void;
   loadCurrentUser: () => Promise<void>;
 
@@ -316,7 +316,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json() as { token?: string; user?: { email: string; name: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
+    const data = await res.json() as { token?: string; user?: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
     if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al iniciar sesión');
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
@@ -326,13 +326,13 @@ export const useStore = create<AppState>((set, get) => ({
     set({ authToken: data.token, currentUser: data.user });
   },
 
-  registerUser: async (email, password, name) => {
+  registerUser: async (email, password, name, phone) => {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, phone }),
     });
-    const data = await res.json() as { token?: string; user?: { email: string; name: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
+    const data = await res.json() as { token?: string; user?: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
     if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al registrarse');
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
@@ -354,7 +354,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) { localStorage.removeItem('ev_auth_token'); set({ authToken: null, currentUser: null }); return; }
-      const user = await res.json() as { email: string; name: string; role: 'admin' | 'user'; subscriptionEnd?: string };
+      const user = await res.json() as { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string };
       if (user.role === 'admin') {
         localStorage.setItem('ev_admin_auth', '1');
         set({ isAdminAuthenticated: true });

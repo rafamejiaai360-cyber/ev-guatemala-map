@@ -10,6 +10,7 @@ export default function AuthModal() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -38,11 +39,13 @@ export default function AuthModal() {
     reset();
     if (!name.trim()) { setError('El nombre es requerido'); return; }
     if (!email) { setError('El email es requerido'); return; }
+    const phoneDigits = phone.replace(/[^\d]/g, '').replace(/^502/, '');
+    if (!/^\d{8}$/.test(phoneDigits)) { setError('El teléfono debe tener 8 dígitos (ej. 5512-3456)'); return; }
     if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return; }
     if (password !== confirmPassword) { setError('Las contraseñas no coinciden'); return; }
     setLoading(true);
     try {
-      await registerUser(email, password, name.trim());
+      await registerUser(email, password, name.trim(), phoneDigits);
       setAuthModalOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrarse');
@@ -138,12 +141,12 @@ export default function AuthModal() {
           {tab === 'register' && (
             <form onSubmit={handleRegister} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Nombre</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nombre y apellido</label>
                 <input
                   type="text"
                   value={name}
                   onChange={e => { setName(e.target.value); reset(); }}
-                  placeholder="Tu nombre"
+                  placeholder="ej. María López"
                   autoFocus
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-green-400"
                 />
@@ -157,6 +160,17 @@ export default function AuthModal() {
                   placeholder="tu@email.com"
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-green-400"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Teléfono</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => { setPhone(e.target.value); reset(); }}
+                  placeholder="5512-3456"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-green-400"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Nunca se muestra públicamente en el mapa.</p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Contraseña</label>
