@@ -5,13 +5,18 @@ import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicl
 import { getAllRatings } from '../utils/reviewsApi';
 
 async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
-  try {
-    const res = await fetch('/api/stations/dynamic');
-    if (!res.ok) return null;
-    return await res.json() as ChargerStation[];
-  } catch {
-    return null;
+  // Fuente principal: D1 (/api/stations). Si falla, degrada al endpoint
+  // legado de Notion y, en última instancia, el caller usa la semilla estática.
+  for (const endpoint of ['/api/stations', '/api/stations/dynamic']) {
+    try {
+      const res = await fetch(endpoint);
+      if (!res.ok) continue;
+      return await res.json() as ChargerStation[];
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 const STORAGE_KEY = 'ev_gt_status_overrides';

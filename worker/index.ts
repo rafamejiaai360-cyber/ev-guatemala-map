@@ -4,6 +4,7 @@ export interface Env {
   NOTION_REVIEWS_DB_ID: string;
   NOTION_STATIONS_DB_ID: string;
   PHOTOS?: KVNamespace;
+  DB?: D1Database;
   OCM_API_KEY?: string;
   ADMIN_PASSWORD?: string;
   JWT_SECRET?: string;
@@ -726,6 +727,86 @@ async function handleGetDynamicStations(env: Env): Promise<Response> {
   } while (cursor);
 
   return json(results);
+}
+
+// ─── Estaciones desde D1 (fuente de verdad; ver docs/plan-migracion-d1.md) ────
+
+interface StationRow {
+  id: string;
+  name: string;
+  address: string | null;
+  zone: string | null;
+  lat: number;
+  lng: number;
+  status: string;
+  connectors: string;
+  network: string | null;
+  access: string;
+  notes: string | null;
+  verification_status: string;
+  google_maps_url: string | null;
+}
+
+// Caché en memoria del isolate: a esta escala evita ir a D1 en cada carga del
+// mapa. Los writes (Fase 4) deben llamar invalidateStationsCache().
+let stationsCache: { body: string; expires: number } | null = null;
+const STATIONS_CACHE_TTL_MS = 60_000;
+
+export function invalidateStationsCache(): void {
+  stationsCache = null;
+}
+
+async function handleGetStationsFromD1(env: Env): Promise<Response> {
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+
+  if (stationsCache && Date.now() < stationsCache.expires) {
+    return new Response(stationsCache.body, {
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'hit' },
+    });
+  }
+
+  const { results } = await env.DB.prepare(
+    `SELECT id, name, address, zone, lat, lng, status, connectors, network, access,
+            notes, verification_status, google_maps_url
+       FROM stations
+      WHERE approval_status = 'active' AND status IN ('active', 'maintenance')
+      ORDER BY id`
+  ).all<StationRow>();
+
+  const stations = results.map((r) => {
+    let connectors: unknown[] = [];
+    try {
+      const parsed = JSON.parse(r.connectors || '[]');
+      if (Array.isArray(parsed)) connectors = parsed;
+    } catch {}
+    // El frontend hoy entiende pending | verified | error; stale/flagged se
+    // traducen hasta que la UI de frescura (insignias) exista.
+    const verification =
+      r.verification_status === 'verified' ? 'verified'
+      : r.verification_status === 'flagged' ? 'error'
+      : 'pending';
+    return {
+      id: r.id,
+      name: r.name,
+      address: r.address ?? '',
+      zone: r.zone || 'Guatemala',
+      lat: r.lat,
+      lng: r.lng,
+      status: r.status,
+      connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
+      network: r.network || 'Desconocido',
+      access: ['public', 'semi-public', 'private'].includes(r.access) ? r.access : 'public',
+      notes: r.notes || undefined,
+      verification,
+      googleMapsUrl: r.google_maps_url || undefined,
+    };
+  });
+
+  const body = JSON.stringify(stations);
+  stationsCache = { body, expires: Date.now() + STATIONS_CACHE_TTL_MS };
+  return new Response(body, {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'miss' },
+  });
 }
 
 // ─── Review handlers ──────────────────────────────────────────────────────────
@@ -1498,6 +1579,9 @@ export default {
       }
 
       // Dynamic stations: GET /api/stations/dynamic, POST /api/stations
+      // Fase 2 (lectura en sombra): /api/stations lee D1; /api/stations/dynamic
+      // sigue leyendo Notion hasta completar el corte de lecturas (Fase 3).
+      if (path === 'stations' && request.method === 'GET') return handleGetStationsFromD1(env);
       if (path === 'stations/dynamic' && request.method === 'GET') return handleGetDynamicStations(env);
       if (path === 'stations/pending' && request.method === 'GET') return handleGetPendingStations(request, env);
       if (path === 'stations' && request.method === 'POST') return handlePostStation(request, env);
