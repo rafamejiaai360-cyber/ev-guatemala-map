@@ -1,0 +1,28 @@
+name: Deploy a producción
+
+# Se ejecuta en cada push a main. Requiere el secreto de repo
+# CLOUDFLARE_API_TOKEN (Settings → Secrets and variables → Actions).
+# Sin ese secreto este workflow falla en el paso de deploy sin efecto
+# alguno — no hay riesgo de publicar nada hasta que el token exista.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Deploy con Wrangler
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

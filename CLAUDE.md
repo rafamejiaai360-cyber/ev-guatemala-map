@@ -7,7 +7,15 @@ Mapa de estaciones de carga para vehículos eléctricos en Guatemala. Frontend R
 - **Frontend**: React 19 + TypeScript + Vite, Zustand (estado), Tailwind CSS, Leaflet/react-leaflet (mapa)
 - **Backend**: Cloudflare Workers (`worker/index.ts`, un solo archivo con todas las rutas de la API)
 - **Datos hoy**: Notion (estaciones + reseñas) + Cloudflare KV (usuarios, fotos)
-- **Deploy**: `npm run deploy` (= `tsc -b && vite build && wrangler deploy`). No hay CI/CD — el push a GitHub NO despliega automáticamente.
+- **Deploy producción**: automático — todo push a `main` dispara
+  `.github/workflows/deploy.yml` (GitHub Actions → `wrangler deploy`).
+  Requiere el secreto de repo `CLOUDFLARE_API_TOKEN`; sin él el workflow
+  falla en el paso de deploy sin publicar nada. También se puede desplegar
+  a mano con `npm run deploy` (= `tsc -b && vite build && wrangler deploy`).
+- **Deploy staging**: manual, `npm run deploy:staging` →
+  `https://ev-guatemala-map-staging.rafamejia-ai360.workers.dev`. Ambiente
+  aislado (D1, KV y secretos propios; sin cron ni R2 de respaldos) — ver
+  sección "Staging" más abajo antes de tocar `wrangler.toml`.
 - **Repo**: `github.com/rafamejiaai360-cyber/ev-guatemala-map`, rama `main`
 
 ## Arquitectura actual (14 jul 2026 — migración D1 Fases 0–4 completadas)
@@ -58,6 +66,23 @@ D1 Time Travel permite restaurar a cualquier punto de los últimos 30 días.
 **Gotcha de despliegue (visto 14 jul 2026)**: tras `wrangler deploy` hay una
 ventana breve donde versiones vieja y nueva atienden tráfico a la vez. No
 correr pruebas de humo inmediatamente tras el deploy sin considerar esa carrera.
+Aplica también al deploy automático (push a `main`).
+
+**Staging (14 jul 2026)**: `wrangler.toml` tiene `[env.staging]` — Worker,
+D1 (`ev-guatemala-db-staging`), KV (`PHOTOS_STAGING`) y secretos (JWT_SECRET,
+ADMIN_PASSWORD) propios, verificado con prueba real de aislamiento (escribir
+en staging no aparece en producción). Deliberadamente **sin** binding
+`BACKUPS` y **sin** cron — solo producción respalda y recalcula frescura.
+Deliberadamente **sin** secreto `NOTION_TOKEN` — cualquier sync a Notion
+falla en silencio (`ops_log` op=`sync_notion` ok=0) en vez de escribir en
+el panel editorial real. Admin en staging: usar `ADMIN_PASSWORD` (login
+legado `/api/admin/login`), no login JWT con el correo real — no se
+configuró `ADMIN_EMAIL` en staging.
+**Gotcha de Wrangler (visto 14 jul 2026, contradice la documentación de
+Cloudflare)**: `[triggers]` del nivel superior SÍ se hereda a los entornos
+con nombre si no se sobreescribe (la doc dice que no). Por eso
+`[env.staging.triggers]` está explícitamente vacío — quitarlo revive el
+cron en staging.
 
 **Respaldos y mantenimiento (Fase 5, activa desde 14 jul 2026)**:
 - Cron diario 08:00 UTC (02:00 GT): exporta las 7 tablas a R2

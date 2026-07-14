@@ -36,3 +36,48 @@ bucket_name = "ev-gt-backups"
 # Corre respaldo a R2 + recálculo de frescura (verified→stale a los 90 días).
 [triggers]
 crons = ["0 8 * * *"]
+
+# ============================================================
+# STAGING — ambiente de ensayo, aislado de producción.
+# Deploy manual: npm run deploy:staging
+# URL: https://ev-guatemala-map-staging.<subdominio>.workers.dev
+#
+# Aislamiento deliberado:
+# - D1 propio (ev-guatemala-db-staging) — nunca toca datos reales.
+# - KV propio (PHOTOS_STAGING) — fotos/usuarios-legado separados de prod.
+# - Sin binding BACKUPS ni [triggers]: staging no corre el cron nocturno,
+#   así que nunca escribe en el bucket R2 de respaldos de producción.
+# - Sin secreto NOTION_TOKEN configurado a propósito: cualquier intento de
+#   sincronizar hacia Notion falla en silencio (queda registrado en
+#   ops_log, op='sync_notion', ok=0) en vez de escribir en el panel
+#   editorial real. Ver CLAUDE.md.
+# Bindings NO son heredables entre entornos en Wrangler — todo se repite
+# aquí explícitamente aunque sea igual que arriba.
+# ============================================================
+[env.staging]
+name = "ev-guatemala-map-staging"
+
+[env.staging.assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+binding = "ASSETS"
+
+[env.staging.vars]
+NOTION_REVIEWS_DB_ID = "e039a369825244ba967182120891954e"
+NOTION_STATIONS_DB_ID = "c1ba47a910824e1fb9dc96a17d45c471"
+
+[[env.staging.kv_namespaces]]
+binding = "PHOTOS"
+id = "64a697aa63494bce9ec817430f118d31"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "ev-guatemala-db-staging"
+database_id = "933f7752-0065-4fc9-a0c5-e90844ebb69d"
+
+# Wrangler SÍ hereda [triggers] del nivel superior si no se sobreescribe
+# (comportamiento real observado 14 jul 2026, distinto a lo documentado por
+# Cloudflare). Se anula aquí a propósito: staging no necesita respaldo
+# nocturno propio y no tiene binding BACKUPS.
+[env.staging.triggers]
+crons = []
