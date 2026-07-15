@@ -290,6 +290,31 @@ async function applyBackupRetention(bucket: R2Bucket): Promise<number> {
   return deleted;
 }
 
+// El respaldo de la tabla `photos` (arriba, vía BACKUP_TABLES) solo guarda el
+// índice — qué foto existe, de qué estación — no el archivo en sí, que vive
+// en KV. Esto copia cada binario visible a R2 para que un respaldo realmente
+// permita recuperar las fotos, no solo el registro de que existieron.
+async function backupPhotoFiles(db: D1Database, photos: KVNamespace, backups: R2Bucket, day: string): Promise<{ copied: number; failed: number }> {
+  const { results } = await db.prepare(
+    "SELECT id, kv_key FROM photos WHERE status = 'visible'"
+  ).all<{ id: string; kv_key: string }>();
+
+  let copied = 0, failed = 0;
+  for (const p of results) {
+    try {
+      const obj = await photos.getWithMetadata<{ contentType: string }>(p.kv_key, { type: 'arrayBuffer' });
+      if (!obj.value) { failed++; continue; }
+      await backups.put(`backups/${day}/photo-files/${p.id}`, obj.value, {
+        httpMetadata: { contentType: obj.metadata?.contentType ?? 'image/jpeg' },
+      });
+      copied++;
+    } catch {
+      failed++;
+    }
+  }
+  return { copied, failed };
+}
+
 async function runBackup(env: Env): Promise<void> {
   if (!env.DB) return;
   if (!env.BACKUPS) {
@@ -306,8 +331,9 @@ async function runBackup(env: Env): Promise<void> {
         httpMetadata: { contentType: 'application/json' },
       });
     }
+    const photoFiles = env.PHOTOS ? await backupPhotoFiles(env.DB, env.PHOTOS, env.BACKUPS, day) : { copied: 0, failed: 0 };
     const purged = await applyBackupRetention(env.BACKUPS);
-    await logOp(env.DB, 'backup_r2', true, { day, counts, purged });
+    await logOp(env.DB, 'backup_r2', true, { day, counts, photoFiles, purged });
   } catch (e) {
     await logOp(env.DB, 'backup_r2', false, { day, counts, error: String(e) });
   }
