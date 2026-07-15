@@ -1,9 +1,54 @@
 import { useState } from 'react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useStore } from '../store/useStore';
 import type { ConnectorType, ChargerLevel, StationType } from '../types/index';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
+
+// Fix Leaflet default icon URLs broken by bundlers (idempotent, safe if Map.tsx already ran it)
+delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+const GUATEMALA_CITY: [number, number] = [14.6349, -90.5069];
+
+function PickerMarker({ lat, lng, onChange }: { lat: number | null; lng: number | null; onChange: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(e) { onChange(e.latlng.lat, e.latlng.lng); },
+  });
+  if (lat == null || lng == null) return null;
+  return (
+    <Marker
+      position={[lat, lng]}
+      draggable
+      eventHandlers={{
+        dragend: (e) => {
+          const marker = e.target as L.Marker;
+          const p = marker.getLatLng();
+          onChange(p.lat, p.lng);
+        },
+      }}
+    />
+  );
+}
+
+function LocationPickerMap({ lat, lng, onChange }: { lat: number | null; lng: number | null; onChange: (lat: number, lng: number) => void }) {
+  const center: [number, number] = lat != null && lng != null ? [lat, lng] : GUATEMALA_CITY;
+  return (
+    <div className="rounded-lg overflow-hidden border border-gray-200" style={{ height: 200 }}>
+      <MapContainer center={center} zoom={lat != null ? 16 : 12} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+        <PickerMarker lat={lat} lng={lng} onChange={onChange} />
+      </MapContainer>
+    </div>
+  );
+}
 
 interface ConnectorRow {
   type: ConnectorType;
@@ -35,7 +80,7 @@ export default function AddStationModal() {
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [geoLocating, setGeoLocating] = useState(false);
-  const [locationMethod, setLocationMethod] = useState<'gps' | 'gmaps' | 'browser' | 'manual' | null>(null);
+  const [locationMethod, setLocationMethod] = useState<'gps' | 'gmaps' | 'browser' | 'manual' | 'pin' | null>(null);
   const [network, setNetwork] = useState('');
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
@@ -362,6 +407,13 @@ export default function AddStationModal() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
                       </svg>
                     )},
+                    { key: 'pin', label: 'Elegir en el mapa', sublabel: 'Tocar o arrastrar pin', icon: (
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 21h19.5" />
+                      </svg>
+                    )},
                     { key: 'gmaps', label: 'Link de Maps', sublabel: 'App de teléfono', icon: (
                       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3" />
@@ -377,7 +429,7 @@ export default function AddStationModal() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
                       </svg>
                     )},
-                  ] as { key: 'gps' | 'gmaps' | 'browser' | 'manual'; label: string; sublabel: string; icon: React.ReactNode }[]).map(opt => (
+                  ] as { key: 'gps' | 'pin' | 'gmaps' | 'browser' | 'manual'; label: string; sublabel: string; icon: React.ReactNode }[]).map(opt => (
                     <button
                       key={opt.key}
                       type="button"
@@ -385,6 +437,7 @@ export default function AddStationModal() {
                         setLocationMethod(opt.key);
                         setLat(null); setLng(null); setResolveError(null); setMapsUrl('');
                         if (opt.key === 'gps') useMyLocation();
+                        if (opt.key === 'pin') { setLat(GUATEMALA_CITY[0]); setLng(GUATEMALA_CITY[1]); }
                       }}
                       className={`flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-xl border text-left transition-colors ${
                         locationMethod === opt.key
@@ -403,6 +456,24 @@ export default function AddStationModal() {
                   <div className="flex items-center gap-2 text-sm text-blue-600 py-2">
                     <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
                     Obteniendo ubicación GPS…
+                  </div>
+                )}
+
+                {/* Elegir en el mapa: tocar o arrastrar el pin, funciona sin depender de Google */}
+                {locationMethod === 'pin' && (
+                  <div className="space-y-2">
+                    <LocationPickerMap lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] text-gray-400">Toca el mapa o arrastra el pin para ajustar</p>
+                      <button
+                        type="button"
+                        onClick={useMyLocation}
+                        disabled={geoLocating}
+                        className="flex-shrink-0 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 transition-colors whitespace-nowrap"
+                      >
+                        {geoLocating ? 'Ubicando…' : '📍 Usar mi ubicación'}
+                      </button>
+                    </div>
                   </div>
                 )}
 
