@@ -22,15 +22,6 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      # Diagnóstico temporal — NO imprime el valor del secreto, solo su
-      # longitud en caracteres, para detectar un salto de línea o espacio
-      # colado al copiarlo. Quitar este paso una vez resuelto el problema.
-      - name: Diagnóstico del token (temporal)
-        run: |
-          echo "Longitud del token: ${#CLOUDFLARE_API_TOKEN} caracteres"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
       - name: Deploy con Wrangler
         # --env="" fuerza el ambiente de nivel superior (producción) ahora
         # que wrangler.toml también define [env.staging] — sin esto Wrangler

@@ -8,10 +8,12 @@ Mapa de estaciones de carga para vehículos eléctricos en Guatemala. Frontend R
 - **Backend**: Cloudflare Workers (`worker/index.ts`, un solo archivo con todas las rutas de la API)
 - **Datos hoy**: Notion (estaciones + reseñas) + Cloudflare KV (usuarios, fotos)
 - **Deploy producción**: automático — todo push a `main` dispara
-  `.github/workflows/deploy.yml` (GitHub Actions → `wrangler deploy`).
-  Requiere el secreto de repo `CLOUDFLARE_API_TOKEN`; sin él el workflow
-  falla en el paso de deploy sin publicar nada. También se puede desplegar
-  a mano con `npm run deploy` (= `tsc -b && vite build && wrangler deploy`).
+  `.github/workflows/deploy.yml` (GitHub Actions → `wrangler deploy --env=""`).
+  Activo y verificado desde el 15 jul 2026 (secreto de repo
+  `CLOUDFLARE_API_TOKEN` configurado). También se puede desplegar a mano
+  con `npm run deploy` (= `tsc -b && vite build && wrangler deploy`).
+  **Importante**: desde ahora todo push a `main` publica de inmediato a
+  usuarios reales — ya no hay paso manual de por medio.
 - **Deploy staging**: manual, `npm run deploy:staging` →
   `https://ev-guatemala-map-staging.rafamejia-ai360.workers.dev`. Ambiente
   aislado (D1, KV y secretos propios; sin cron ni R2 de respaldos) — ver
