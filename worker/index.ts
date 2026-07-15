@@ -1674,9 +1674,14 @@ export default {
       if (path === 'scan' && request.method === 'GET') return handleGetScan(env);
 
       // Resolve Google Maps URL → coordinates: GET /api/resolve-location?url=...
+      // &debug=1 adds a `trace` of every hop (status, host reached, body size) to
+      // the JSON response, success or failure — for diagnosing why a specific real
+      // link fails without needing to reproduce it from a dev machine.
       if (path === 'resolve-location' && request.method === 'GET') {
         const mapsUrl = url.searchParams.get('url');
         if (!mapsUrl) return apiError('url requerido');
+        const debug = url.searchParams.get('debug') === '1';
+        const trace: Record<string, unknown>[] = [];
 
         // Helper: extract Guatemala-bounded coords from a URL string
         function extractCoordsFromUrl(u: string): { lat: number; lng: number } | null {
@@ -1726,63 +1731,116 @@ export default {
           return null;
         }
 
+        // Google muestra una interstitial de "consentimiento" (consent.google.com) a
+        // requests que no traen la cookie CONSENT — muy común desde IPs de datacenter
+        // (como las de Cloudflare Workers), aunque el usuario esté en Guatemala. Sin
+        // esta cookie, el fetch nunca llega a la URL real con las coordenadas.
+        const consentCookie = 'CONSENT=YES+cb.20240101-17-p0.en+FX+435';
         const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1';
         const desktopUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+        // If a hop lands on Google's consent interstitial, the real destination is
+        // already in its `continue` query param (URL-encoded) — no extra fetch needed.
+        function extractContinueUrl(u: string): string | null {
+          try {
+            const parsed = new URL(u);
+            if (!parsed.hostname.includes('consent.google.com')) return null;
+            return parsed.searchParams.get('continue');
+          } catch {
+            return null;
+          }
+        }
+
+        // Try every extraction strategy against one (url, body) pair, including
+        // unwrapping a consent-page redirect if present.
+        function extractCoords(finalUrl: string, body: string): { lat: number; lng: number } | null {
+          const fromUrl = extractCoordsFromUrl(finalUrl);
+          if (fromUrl) return fromUrl;
+          const fromBody = extractCoordsFromBody(body);
+          if (fromBody) return fromBody;
+          const continueUrl = extractContinueUrl(finalUrl);
+          if (continueUrl) {
+            const fromContinue = extractCoordsFromUrl(continueUrl);
+            if (fromContinue) return fromContinue;
+          }
+          return null;
+        }
+
+        async function fetchAttempt(target: string, ua: string, timeoutMs: number, step: string) {
+          const res = await fetch(target, {
+            redirect: 'follow',
+            headers: {
+              'User-Agent': ua,
+              'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9',
+              'Accept-Language': 'es-GT,es;q=0.9,en-US;q=0.8',
+              'Cookie': consentCookie,
+            },
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          const body = await res.text();
+          if (debug) {
+            let finalHost = '';
+            try { finalHost = new URL(res.url).hostname; } catch { /* ignore */ }
+            trace.push({ step, requestedUrl: target, status: res.status, finalHost, finalUrl: res.url, bodyLength: body.length, bodySnippet: body.slice(0, 400) });
+          }
+          return { finalUrl: res.url, body, status: res.status };
+        }
+
+        function respond(data: { lat: number; lng: number } | null, errorMsg?: string) {
+          if (data) return json(debug ? { ...data, trace } : data);
+          return json(debug ? { error: errorMsg, trace } : { error: errorMsg }, 400);
+        }
+
         try {
           // — First attempt: follow HTTP redirects with mobile UA —
-          const res = await fetch(mapsUrl, {
-            redirect: 'follow',
-            headers: { 'User-Agent': mobileUA, 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9', 'Accept-Language': 'es-GT,es;q=0.9,en-US;q=0.8' },
-            signal: AbortSignal.timeout(10000),
-          });
-          const finalUrl = res.url;
+          const { finalUrl, body } = await fetchAttempt(mapsUrl, mobileUA, 10000, 'initial');
+          const found = extractCoords(finalUrl, body);
+          if (found) return respond(found);
 
-          // Fast-path: coords in the resolved URL itself
-          const fromUrl = extractCoordsFromUrl(finalUrl);
-          if (fromUrl) return json(fromUrl);
-
-          // Parse body
-          const body = await res.text();
-          const fromBody = extractCoordsFromBody(body);
-          if (fromBody) return json(fromBody);
-
-          // — Second attempt: follow JS redirect via meta refresh or window.location —
-          // Extract any maps URL embedded in the body and follow it
+          // — Second attempt: follow JS redirect via meta refresh, window.location,
+          //   or an unresolved consent-page continue param —
           const metaRefresh = body.match(/content=["']0;\s*url=([^"']+)["']/i);
           const windowLoc = body.match(/(?:window\.location(?:\.replace)?|location\.href)\s*[=(]\s*["']([^"']+maps[^"']+)["']/i);
-          const fallbackUrl = metaRefresh?.[1] || windowLoc?.[1];
+          const continueUrl = extractContinueUrl(finalUrl);
+          const fallbackUrl = metaRefresh?.[1] || windowLoc?.[1] || continueUrl;
 
           if (fallbackUrl) {
-            const res2 = await fetch(fallbackUrl, {
-              redirect: 'follow',
-              headers: { 'User-Agent': desktopUA, 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9' },
-              signal: AbortSignal.timeout(8000),
-            });
-            const fromUrl2 = extractCoordsFromUrl(res2.url);
-            if (fromUrl2) return json(fromUrl2);
-            const body2 = await res2.text();
-            const fromBody2 = extractCoordsFromBody(body2);
-            if (fromBody2) return json(fromBody2);
+            const attempt2 = await fetchAttempt(fallbackUrl, desktopUA, 8000, 'js-redirect-or-consent-continue');
+            const found2 = extractCoords(attempt2.finalUrl, attempt2.body);
+            if (found2) return respond(found2);
           }
 
           // — Third attempt: retry with desktop UA (some short links expand differently) —
           if (mapsUrl.includes('goo.gl') || mapsUrl.includes('maps.app')) {
-            const res3 = await fetch(mapsUrl, {
-              redirect: 'follow',
-              headers: { 'User-Agent': desktopUA, 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9' },
-              signal: AbortSignal.timeout(8000),
-            });
-            const fromUrl3 = extractCoordsFromUrl(res3.url);
-            if (fromUrl3) return json(fromUrl3);
-            const body3 = await res3.text();
-            const fromBody3 = extractCoordsFromBody(body3);
-            if (fromBody3) return json(fromBody3);
+            const attempt3 = await fetchAttempt(mapsUrl, desktopUA, 8000, 'desktop-ua-retry');
+            const found3 = extractCoords(attempt3.finalUrl, attempt3.body);
+            if (found3) return respond(found3);
           }
 
-          return apiError('No se pudieron extraer coordenadas. Intenta abrir el link en el navegador, presionar "Compartir" → "Copiar enlace" y pegar ese link aquí.');
+          return respond(null, 'No se pudieron extraer coordenadas. Intenta abrir el link en el navegador, presionar "Compartir" → "Copiar enlace" y pegar ese link aquí, o usa "Elegir en el mapa".');
         } catch (e) {
-          return apiError('Error resolviendo URL: ' + String(e));
+          return respond(null, 'Error resolviendo URL: ' + String(e));
+        }
+      }
+
+      // Geocode a free-text address (Guatemala only) → approximate coordinates, to
+      // pre-center the "Elegir en el mapa" picker before the user fine-tunes the pin.
+      // Proxied server-side because Nominatim's usage policy requires an identifying
+      // User-Agent, which browsers won't let client-side fetch() set.
+      if (path === 'geocode' && request.method === 'GET') {
+        const q = url.searchParams.get('q');
+        if (!q || !q.trim()) return apiError('q requerido');
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=gt&q=${encodeURIComponent(q.trim())}`,
+            { headers: { 'User-Agent': 'EVGuatemalaMap/1.0 (https://ev-guatemala-map.rafamejia-ai360.workers.dev)' }, signal: AbortSignal.timeout(8000) }
+          );
+          if (!res.ok) return apiError('Error del servicio de geocodificación');
+          const results = await res.json() as { lat: string; lon: string }[];
+          if (!results.length) return apiError('No se encontró esa dirección. Ajusta el pin manualmente.');
+          return json({ lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) });
+        } catch (e) {
+          return apiError('Error geocodificando: ' + String(e));
         }
       }
 
