@@ -1674,9 +1674,14 @@ export default {
       if (path === 'scan' && request.method === 'GET') return handleGetScan(env);
 
       // Resolve Google Maps URL → coordinates: GET /api/resolve-location?url=...
+      // &debug=1 adds a `trace` of every hop (status, host reached, body size) to
+      // the JSON response, success or failure — for diagnosing why a specific real
+      // link fails without needing to reproduce it from a dev machine.
       if (path === 'resolve-location' && request.method === 'GET') {
         const mapsUrl = url.searchParams.get('url');
         if (!mapsUrl) return apiError('url requerido');
+        const debug = url.searchParams.get('debug') === '1';
+        const trace: Record<string, unknown>[] = [];
 
         // Helper: extract Guatemala-bounded coords from a URL string
         function extractCoordsFromUrl(u: string): { lat: number; lng: number } | null {
@@ -1761,7 +1766,7 @@ export default {
           return null;
         }
 
-        async function fetchAttempt(target: string, ua: string, timeoutMs: number) {
+        async function fetchAttempt(target: string, ua: string, timeoutMs: number, step: string) {
           const res = await fetch(target, {
             redirect: 'follow',
             headers: {
@@ -1773,14 +1778,24 @@ export default {
             signal: AbortSignal.timeout(timeoutMs),
           });
           const body = await res.text();
-          return { finalUrl: res.url, body };
+          if (debug) {
+            let finalHost = '';
+            try { finalHost = new URL(res.url).hostname; } catch { /* ignore */ }
+            trace.push({ step, requestedUrl: target, status: res.status, finalHost, finalUrl: res.url, bodyLength: body.length, bodySnippet: body.slice(0, 400) });
+          }
+          return { finalUrl: res.url, body, status: res.status };
+        }
+
+        function respond(data: { lat: number; lng: number } | null, errorMsg?: string) {
+          if (data) return json(debug ? { ...data, trace } : data);
+          return json(debug ? { error: errorMsg, trace } : { error: errorMsg }, 400);
         }
 
         try {
           // — First attempt: follow HTTP redirects with mobile UA —
-          const { finalUrl, body } = await fetchAttempt(mapsUrl, mobileUA, 10000);
+          const { finalUrl, body } = await fetchAttempt(mapsUrl, mobileUA, 10000, 'initial');
           const found = extractCoords(finalUrl, body);
-          if (found) return json(found);
+          if (found) return respond(found);
 
           // — Second attempt: follow JS redirect via meta refresh, window.location,
           //   or an unresolved consent-page continue param —
@@ -1790,21 +1805,21 @@ export default {
           const fallbackUrl = metaRefresh?.[1] || windowLoc?.[1] || continueUrl;
 
           if (fallbackUrl) {
-            const attempt2 = await fetchAttempt(fallbackUrl, desktopUA, 8000);
+            const attempt2 = await fetchAttempt(fallbackUrl, desktopUA, 8000, 'js-redirect-or-consent-continue');
             const found2 = extractCoords(attempt2.finalUrl, attempt2.body);
-            if (found2) return json(found2);
+            if (found2) return respond(found2);
           }
 
           // — Third attempt: retry with desktop UA (some short links expand differently) —
           if (mapsUrl.includes('goo.gl') || mapsUrl.includes('maps.app')) {
-            const attempt3 = await fetchAttempt(mapsUrl, desktopUA, 8000);
+            const attempt3 = await fetchAttempt(mapsUrl, desktopUA, 8000, 'desktop-ua-retry');
             const found3 = extractCoords(attempt3.finalUrl, attempt3.body);
-            if (found3) return json(found3);
+            if (found3) return respond(found3);
           }
 
-          return apiError('No se pudieron extraer coordenadas. Intenta abrir el link en el navegador, presionar "Compartir" → "Copiar enlace" y pegar ese link aquí, o usa "Elegir en el mapa".');
+          return respond(null, 'No se pudieron extraer coordenadas. Intenta abrir el link en el navegador, presionar "Compartir" → "Copiar enlace" y pegar ese link aquí, o usa "Elegir en el mapa".');
         } catch (e) {
-          return apiError('Error resolviendo URL: ' + String(e));
+          return respond(null, 'Error resolviendo URL: ' + String(e));
         }
       }
 
