@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
+import LocationPicker from './LocationPicker';
 import type { ChargerStation, ConnectorType, ChargerLevel, StationType } from '../types/index';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
@@ -29,8 +30,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
   const [status, setStatus] = useState<'active' | 'maintenance' | 'offline'>(
     (station.status as 'active' | 'maintenance' | 'offline') ?? 'active'
   );
-  const [lat, setLat] = useState(String(station.lat));
-  const [lng, setLng] = useState(String(station.lng));
+  const [lat, setLat] = useState<number | null>(station.lat);
+  const [lng, setLng] = useState<number | null>(station.lng);
   const [connectors, setConnectors] = useState<ConnectorRow[]>(
     station.connectors.map(c => ({ type: c.type as ConnectorType, power_kw: c.power_kw ?? null }))
   );
@@ -48,9 +49,12 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const latNum = parseFloat(lat), lngNum = parseFloat(lng);
     if (!name.trim()) { setError('El nombre es obligatorio'); return; }
-    if (isNaN(latNum) || isNaN(lngNum)) { setError('Coordenadas inválidas'); return; }
+    if (lat == null || lng == null) { setError('Coordenadas inválidas'); return; }
+    if (lat < 13 || lat > 18 || lng < -93 || lng > -88) {
+      setError('Las coordenadas parecen estar fuera de Guatemala');
+      return;
+    }
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
 
     // Only send the fields that actually changed, so user proposals show a
@@ -64,8 +68,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
     if (network.trim() !== (station.network ?? '')) payload.network = network.trim();
     if (access !== station.access) payload.access = access;
     if (status !== station.status) payload.status = status;
-    if (latNum !== station.lat) payload.lat = latNum;
-    if (lngNum !== station.lng) payload.lng = lngNum;
+    if (lat !== station.lat) payload.lat = lat;
+    if (lng !== station.lng) payload.lng = lng;
     if (JSON.stringify(newConnectors) !== JSON.stringify(station.connectors)) payload.connectors = newConnectors;
     const origNotes = ((station as unknown as Record<string, unknown>).notes as string ?? '').trim();
     if (notes.trim() !== origNotes) payload.notes = notes.trim();
@@ -189,19 +193,13 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
             </div>
           </div>
 
-          {/* Coordinates */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Latitud *</label>
-              <input type="text" inputMode="decimal" value={lat} onChange={e => setLat(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Longitud *</label>
-              <input type="text" inputMode="decimal" value={lng} onChange={e => setLng(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400 font-mono" />
-            </div>
-          </div>
+          {/* Location — mismas opciones que "Agregar estación" */}
+          <LocationPicker
+            lat={lat}
+            lng={lng}
+            onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }}
+            getSeedQuery={() => [name, address, zone].map(s => s.trim()).filter(Boolean).join(', ')}
+          />
 
           {/* Network + Access + Status */}
           <div className="grid grid-cols-3 gap-3">
