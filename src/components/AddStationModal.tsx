@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
+import LocationPicker from './LocationPicker';
 import type { ConnectorType, ChargerLevel, StationType } from '../types/index';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
@@ -29,13 +30,8 @@ export default function AddStationModal() {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [zone, setZone] = useState('');
-  const [mapsUrl, setMapsUrl] = useState('');
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
-  const [resolving, setResolving] = useState(false);
-  const [resolveError, setResolveError] = useState<string | null>(null);
-  const [geoLocating, setGeoLocating] = useState(false);
-  const [locationMethod, setLocationMethod] = useState<'gps' | 'gmaps' | 'browser' | 'manual' | null>(null);
   const [network, setNetwork] = useState('');
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
@@ -44,6 +40,7 @@ export default function AddStationModal() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
+  const [locationResetKey, setLocationResetKey] = useState(0);
 
   function addConnector() {
     setConnectors(prev => [...prev, { type: 'Type2', power_kw: null }]);
@@ -57,64 +54,6 @@ export default function AddStationModal() {
     setConnectors(prev => prev.map((c, idx) =>
       idx === i ? { ...c, [field]: field === 'power_kw' ? (value === '' ? null : Number(value)) : value } : c
     ));
-  }
-
-  async function resolveLocation() {
-    if (!mapsUrl.trim()) return;
-    setResolving(true);
-    setResolveError(null);
-    setLat(null);
-    setLng(null);
-    try {
-      const res = await fetch(`/api/resolve-location?url=${encodeURIComponent(mapsUrl.trim())}`);
-      const data = await res.json() as { lat?: number; lng?: number; error?: string };
-      if (!res.ok || data.error) {
-        setResolveError(data.error ?? 'No se pudo resolver la ubicación');
-        return;
-      }
-      if (data.lat == null || data.lng == null) {
-        setResolveError('Respuesta inesperada del servidor');
-        return;
-      }
-      setLat(data.lat);
-      setLng(data.lng);
-    } catch {
-      setResolveError('Error de red al resolver la ubicación');
-    } finally {
-      setResolving(false);
-    }
-  }
-
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setResolveError('Tu dispositivo no soporta geolocalización');
-      return;
-    }
-    setGeoLocating(true);
-    setResolveError(null);
-    setLat(null);
-    setLng(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        if (latitude < 13 || latitude > 18 || longitude < -93 || longitude > -88) {
-          setResolveError('Ubicación fuera de Guatemala. Verifica que el GPS esté activo.');
-          setGeoLocating(false);
-          return;
-        }
-        setLat(latitude);
-        setLng(longitude);
-        setGeoLocating(false);
-      },
-      (err) => {
-        const msg = err.code === 1
-          ? 'Permiso de ubicación denegado. Actívalo en la configuración del navegador.'
-          : 'No se pudo obtener la ubicación. Intenta de nuevo o usa el link de Google Maps.';
-        setResolveError(msg);
-        setGeoLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -180,11 +119,11 @@ export default function AddStationModal() {
   function handleAddAnother() {
     setType('public');
     setName(''); setAddress(''); setZone('');
-    setMapsUrl(''); setLat(null); setLng(null); setResolveError(null);
+    setLat(null); setLng(null);
     setNetwork(''); setNotes(''); setAccess('public');
     setConnectors([{ type: 'Type2', power_kw: null }]);
     setSuccess(false); setPendingApproval(false); setError(null);
-    setLocationMethod(null);
+    setLocationResetKey(k => k + 1);
   }
 
   return (
@@ -350,143 +289,13 @@ export default function AddStationModal() {
               </div>
 
               {/* Location */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">Ubicación *</label>
-
-                {/* 4 option selector */}
-                <div className="grid grid-cols-2 gap-1.5 mb-3">
-                  {([
-                    { key: 'gps', label: 'Ubicación actual', sublabel: 'GPS', icon: (
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                      </svg>
-                    )},
-                    { key: 'gmaps', label: 'Link de Maps', sublabel: 'App de teléfono', icon: (
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3" />
-                      </svg>
-                    )},
-                    { key: 'browser', label: 'Link del navegador', sublabel: 'google.com/maps', icon: (
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253M3 12a8.959 8.959 0 0 0 .284 2.253" />
-                      </svg>
-                    )},
-                    { key: 'manual', label: 'Coordenadas', sublabel: 'lat / lng manual', icon: (
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
-                      </svg>
-                    )},
-                  ] as { key: 'gps' | 'gmaps' | 'browser' | 'manual'; label: string; sublabel: string; icon: React.ReactNode }[]).map(opt => (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      onClick={() => {
-                        setLocationMethod(opt.key);
-                        setLat(null); setLng(null); setResolveError(null); setMapsUrl('');
-                        if (opt.key === 'gps') useMyLocation();
-                      }}
-                      className={`flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-xl border text-left transition-colors ${
-                        locationMethod === opt.key
-                          ? 'border-green-400 bg-green-50 text-green-700'
-                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="flex items-center gap-1.5 font-medium text-xs">{opt.icon}{opt.label}</span>
-                      <span className="text-[10px] text-gray-400 pl-[22px]">{opt.sublabel}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* GPS: spinner while locating */}
-                {locationMethod === 'gps' && geoLocating && (
-                  <div className="flex items-center gap-2 text-sm text-blue-600 py-2">
-                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-                    Obteniendo ubicación GPS…
-                  </div>
-                )}
-
-                {/* Link de Maps (maps.app.goo.gl) */}
-                {locationMethod === 'gmaps' && (
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={mapsUrl}
-                      onChange={e => { setMapsUrl(e.target.value); setLat(null); setLng(null); setResolveError(null); }}
-                      placeholder="https://maps.app.goo.gl/…"
-                      className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400 min-w-0"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={resolveLocation}
-                      disabled={resolving || !mapsUrl.trim()}
-                      className="flex-shrink-0 px-3 py-2.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 transition-colors whitespace-nowrap"
-                    >
-                      {resolving ? 'Buscando…' : 'Resolver'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Link del navegador (full URL) */}
-                {locationMethod === 'browser' && (
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={mapsUrl}
-                      onChange={e => { setMapsUrl(e.target.value); setLat(null); setLng(null); setResolveError(null); }}
-                      placeholder="https://www.google.com/maps/place/…"
-                      className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400 min-w-0"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={resolveLocation}
-                      disabled={resolving || !mapsUrl.trim()}
-                      className="flex-shrink-0 px-3 py-2.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 transition-colors whitespace-nowrap"
-                    >
-                      {resolving ? 'Buscando…' : 'Resolver'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Manual coords */}
-                {locationMethod === 'manual' && (
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="block text-[10px] text-gray-500 mb-1">Latitud</label>
-                      <input
-                        type="number" step="0.000001"
-                        value={lat ?? ''}
-                        onChange={e => setLat(e.target.value ? parseFloat(e.target.value) : null)}
-                        placeholder="14.6349"
-                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400"
-                        autoFocus
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-[10px] text-gray-500 mb-1">Longitud</label>
-                      <input
-                        type="number" step="0.000001"
-                        value={lng ?? ''}
-                        onChange={e => setLng(e.target.value ? parseFloat(e.target.value) : null)}
-                        placeholder="-90.5069"
-                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {resolveError && (
-                  <p className="text-[11px] text-red-500 mt-1.5 leading-snug">{resolveError}</p>
-                )}
-                {lat != null && lng != null && (
-                  <p className="text-[11px] text-green-600 mt-1.5 font-mono flex items-center gap-1">
-                    <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
-                    {lat.toFixed(6)}, {lng.toFixed(6)}
-                  </p>
-                )}
-              </div>
+              <LocationPicker
+                key={locationResetKey}
+                lat={lat}
+                lng={lng}
+                onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }}
+                getSeedQuery={() => [name, address, zone].map(s => s.trim()).filter(Boolean).join(', ')}
+              />
 
               {/* Network + Access */}
               <div className="grid grid-cols-2 gap-3">
