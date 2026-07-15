@@ -10,6 +10,8 @@ export interface Env {
   ADMIN_PASSWORD?: string;
   JWT_SECRET?: string;
   ADMIN_EMAIL?: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_CHAT_ID?: string;
 }
 
 const NOTION_API = 'https://api.notion.com/v1';
@@ -31,6 +33,30 @@ function json(data: unknown, status = 200): Response {
 
 function apiError(msg: string, status = 400): Response {
   return json({ error: msg }, status);
+}
+
+// ─── Notificaciones al admin (Telegram) ───────────────────────────────────────
+// Aviso push cuando algo queda pendiente de aprobación (alta o corrección de
+// usuario no-admin). Se probó primero con ntfy.sh y falló de forma
+// consistente (429/522) — su límite por IP se dispara con las IPs de salida
+// compartidas de Cloudflare Workers. Telegram no tiene ese problema (auth
+// por token de bot, no por IP). Sin TELEGRAM_BOT_TOKEN/CHAT_ID configurados,
+// no hace nada — nunca bloquea ni afecta la operación que la dispara.
+// Llamar siempre vía ctx.waitUntil() para no retrasar la respuesta.
+async function notifyAdmin(env: Env, title: string, message: string): Promise<void> {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: env.TELEGRAM_CHAT_ID,
+        text: `⚡ ${title}\n${message}`,
+      }),
+    });
+  } catch {
+    // No hay nada razonable que hacer si Telegram falla; no es crítico.
+  }
 }
 
 // ─── Notion types ─────────────────────────────────────────────────────────────
@@ -604,6 +630,10 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
 
   invalidateStationsCache();
   ctx.waitUntil(syncStationToNotion(env, body.id));
+  if (isPending) {
+    ctx.waitUntil(notifyAdmin(env, 'Nueva estación pendiente',
+      `${body.name} (${type === 'residential' ? 'residencial' : 'pública'}) — propuesta por ${submittedBy}`));
+  }
   return json({ ok: true, pending: isPending }, 201);
 }
 
@@ -1488,6 +1518,8 @@ async function handlePatchStation(stationId: string, request: Request, env: Env,
     ).bind(stationId, user.email, JSON.stringify(changes)).run();
     const proposalId = result.meta.last_row_id;
     await eventStmt(env.DB, stationId, 'proposal_submitted', user, { proposal_id: proposalId, changes }).run();
+    ctx.waitUntil(notifyAdmin(env, 'Corrección pendiente',
+      `${station.name} — propuesta por ${user.email}`));
     return json({ ok: true, applied: false, pending: true });
   }
 
@@ -1571,6 +1603,8 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
     await eventStmt(env.DB, stationId, 'proposal_submitted', user, {
       proposal_id: result.meta.last_row_id, changes,
     }).run();
+    ctx.waitUntil(notifyAdmin(env, 'Corrección de ubicación pendiente',
+      `${station.name} — propuesta por ${user.email}`));
     return json({ ok: true, applied: false, pending: true });
   }
 
@@ -1652,6 +1686,19 @@ export default {
 
     if (url.pathname.startsWith('/api/')) {
       const path = url.pathname.slice(5); // strip '/api/'
+
+      // Salud real (para monitoreo externo): confirma que D1 responde, no
+      // solo que el Worker está vivo — un check contra "/" pasaría aunque
+      // la base de datos esté caída.
+      if (path === 'health' && request.method === 'GET') {
+        if (!env.DB) return json({ ok: false, error: 'DB no configurada' }, 503);
+        try {
+          await env.DB.prepare('SELECT 1').first();
+          return json({ ok: true });
+        } catch (e) {
+          return json({ ok: false, error: String(e) }, 503);
+        }
+      }
 
       // Admin login (legacy): POST /api/admin/login
       if (path === 'admin/login' && request.method === 'POST') {
