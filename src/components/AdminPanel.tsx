@@ -346,8 +346,9 @@ function StationsTab() {
           <div key={station.id}
             className={`flex items-center gap-3 px-4 py-3 ${idx < filtered.length - 1 ? 'border-b border-gray-100' : ''}`}>
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-              station.status === 'active' ? 'bg-green-500' :
-              station.status === 'maintenance' ? 'bg-amber-400' : 'bg-red-500'}`} />
+              station.status === 'active'
+                ? ((station.type ?? 'public') === 'residential' ? 'bg-blue-500' : 'bg-green-500')
+                : station.status === 'maintenance' ? 'bg-amber-400' : 'bg-red-500'}`} />
 
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-gray-900 truncate">
@@ -382,10 +383,14 @@ function StationsTab() {
       <div className="flex items-center gap-4 mt-3">
         {STATUS_OPTIONS.map(opt => (
           <div key={opt.value} className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className={`w-2 h-2 rounded-full ${opt.color}`} />
-            {opt.label}
+            <span className={`w-2 h-2 rounded-full ${opt.value === 'active' ? 'bg-green-500' : opt.color}`} />
+            {opt.value === 'active' ? 'Activo (pública)' : opt.label}
           </div>
         ))}
+        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          <span className="w-2 h-2 rounded-full bg-blue-500" />
+          Activo (residencial)
+        </div>
       </div>
 
       {editStation && (
