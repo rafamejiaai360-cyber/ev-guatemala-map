@@ -1808,6 +1808,27 @@ export default {
         }
       }
 
+      // Geocode a free-text address (Guatemala only) → approximate coordinates, to
+      // pre-center the "Elegir en el mapa" picker before the user fine-tunes the pin.
+      // Proxied server-side because Nominatim's usage policy requires an identifying
+      // User-Agent, which browsers won't let client-side fetch() set.
+      if (path === 'geocode' && request.method === 'GET') {
+        const q = url.searchParams.get('q');
+        if (!q || !q.trim()) return apiError('q requerido');
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=gt&q=${encodeURIComponent(q.trim())}`,
+            { headers: { 'User-Agent': 'EVGuatemalaMap/1.0 (https://ev-guatemala-map.rafamejia-ai360.workers.dev)' }, signal: AbortSignal.timeout(8000) }
+          );
+          if (!res.ok) return apiError('Error del servicio de geocodificación');
+          const results = await res.json() as { lat: string; lon: string }[];
+          if (!results.length) return apiError('No se encontró esa dirección. Ajusta el pin manualmente.');
+          return json({ lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) });
+        } catch (e) {
+          return apiError('Error geocodificando: ' + String(e));
+        }
+      }
+
       // Dynamic stations: GET /api/stations/dynamic, POST /api/stations
       // Fase 2 (lectura en sombra): /api/stations lee D1; /api/stations/dynamic
       // sigue leyendo Notion hasta completar el corte de lecturas (Fase 3).
