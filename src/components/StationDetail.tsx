@@ -48,9 +48,14 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function StationDetail({ station, onBack }: Props) {
-  const { currentUser } = useStore();
+  const { currentUser, userLocation } = useStore();
   const [showEdit, setShowEdit] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
+
+  const destination = encodeURIComponent(`${station.name}, ${station.address}, ${station.zone || 'Guatemala'}`);
+  const mapsUrl = userLocation
+    ? `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${destination}&travelmode=driving`
+    : `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
 
   return (
     <div className="flex flex-col h-full">
@@ -74,6 +79,18 @@ export default function StationDetail({ station, onBack }: Props) {
         {/* Station info */}
         <div className="px-4 py-3 border-b border-gray-100 space-y-2">
           <p className="text-xs text-gray-600 leading-relaxed">{station.address}</p>
+
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-2 rounded-xl transition-colors"
+          >
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+            Cómo llegar — Google Maps
+          </a>
 
           <div className="flex flex-wrap gap-1">
             {station.connectors.map((c, i) => (
