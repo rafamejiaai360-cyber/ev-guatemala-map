@@ -327,7 +327,7 @@ function GeolocationButton() {
     <button
       onClick={locate}
       title="Mi ubicación"
-      className="absolute bottom-8 right-4 z-[1000] w-10 h-10 bg-white rounded-full shadow-md border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+      className="absolute bottom-8 right-4 z-[700] w-10 h-10 bg-white rounded-full shadow-md border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
     >
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#3b82f6" strokeWidth={2}>
         <circle cx="12" cy="12" r="3" />
@@ -431,7 +431,7 @@ function UserMarker() {
 function ZoomControls() {
   const map = useMap();
   return (
-    <div className="absolute bottom-8 right-[3.75rem] z-[1000] flex flex-col gap-1">
+    <div className="absolute bottom-8 right-[3.75rem] z-[700] flex flex-col gap-1">
       <button
         onClick={() => map.zoomIn()}
         className="w-10 h-10 bg-white rounded-full shadow-md border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors text-gray-700 text-lg font-light"
