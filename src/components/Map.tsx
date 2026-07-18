@@ -3,10 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-l
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useStore } from '../store/useStore';
-import { haversineKm, formatDistance } from '../utils/geo';
 import type { ChargerStation } from '../types';
-import StationPhotos from './StationPhotos';
-import StationReviews from './StationReviews';
 
 const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
@@ -57,21 +54,6 @@ const userIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
-const ACCESS_LABELS: Record<string, string> = {
-  public: 'Público',
-  'semi-public': 'Semi-público',
-  private: 'Privado',
-};
-
-const CONNECTOR_COLORS: Record<string, string> = {
-  CCS2: 'bg-blue-100 text-blue-700',
-  CHAdeMO: 'bg-purple-100 text-purple-700',
-  Type2: 'bg-teal-100 text-teal-700',
-  J1772: 'bg-orange-100 text-orange-700',
-  GBT: 'bg-rose-100 text-rose-700',
-  CCS1: 'bg-indigo-100 text-indigo-700',
-};
-
 const CONNECTOR_LEVEL_STYLE: Record<string, React.CSSProperties> = {
   DC: { background: '#fef3c7', color: '#92400e' },
   L2: { background: '#f3f4f6', color: '#374151' },
@@ -82,15 +64,6 @@ const STATUS_COLOR: Record<string, string> = {
   active: '#22c55e',
   maintenance: '#f59e0b',
   offline: '#ef4444',
-};
-
-const TYPE_LABEL: Record<string, string> = {
-  public: '🔌 Pública',
-  residential: '🏠 Residencial',
-};
-const TYPE_BADGE_CLASS: Record<string, string> = {
-  public: 'text-green-700 bg-green-50',
-  residential: 'text-blue-700 bg-blue-50',
 };
 
 function StationTooltipContent({ station }: { station: ChargerStation }) {
@@ -133,144 +106,7 @@ function StationTooltipContent({ station }: { station: ChargerStation }) {
   );
 }
 
-
-function StationPopupContent({ station }: { station: ChargerStation }) {
-  const { userLocation } = useStore();
-  const dist = userLocation
-    ? haversineKm(userLocation.lat, userLocation.lng, station.lat, station.lng)
-    : null;
-
-  const destination = encodeURIComponent(`${station.name}, ${station.address}, ${station.zone || 'Guatemala'}`);
-  const mapsUrl = userLocation
-    ? `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${destination}&travelmode=driving`
-    : `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
-
-  function copyAddress() {
-    navigator.clipboard?.writeText(`${station.name}\n${station.address}\n${station.zone || 'Guatemala'}`);
-  }
-
-  const statusColor = {
-    active: 'text-green-600 bg-green-50',
-    maintenance: 'text-amber-600 bg-amber-50',
-    offline: 'text-red-600 bg-red-50',
-  }[station.status];
-
-  const statusLabel = {
-    active: 'Activo',
-    maintenance: 'Mantenimiento',
-    offline: 'Fuera de servicio',
-  }[station.status];
-
-  const stationType = station.type ?? 'public';
-
-  return (
-    <div className="w-72 font-[Inter,system-ui,sans-serif]">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 leading-tight">{station.name}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{station.address}</p>
-          </div>
-          <div className="flex-shrink-0 flex flex-col items-end gap-1">
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColor}`}>
-              {statusLabel}
-            </span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_BADGE_CLASS[stationType]}`}>
-              {TYPE_LABEL[stationType]}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 mt-2">
-          <span className="text-xs text-gray-500">{station.zone}</span>
-          <span className="text-xs text-gray-400">·</span>
-          <span className="text-xs text-gray-500">{ACCESS_LABELS[station.access]}</span>
-          {dist !== null && (
-            <>
-              <span className="text-xs text-gray-400">·</span>
-              <span className="text-xs font-medium text-blue-600">{formatDistance(dist)}</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Connectors */}
-      <div className="px-4 py-3 border-b border-gray-100">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Conectores</p>
-        <div className="flex flex-col gap-1.5">
-          {station.connectors.map((c, i) => (
-            <div key={i} className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CONNECTOR_COLORS[c.type] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {c.type}
-                </span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${c.level === 'DC' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-600'}`}>
-                  {c.level}
-                </span>
-              </div>
-              <span className="text-xs font-semibold text-gray-700">{c.power_kw} kW</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Network & notes */}
-      <div className="px-4 py-3 border-b border-gray-100">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500">Red</span>
-          <span className="text-xs font-medium text-gray-800">{station.network}</span>
-        </div>
-        {station.notes && (
-          <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">{station.notes}</p>
-        )}
-      </div>
-
-      {/* Address + copy */}
-      <div className="px-4 py-3 border-b border-gray-100">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Dirección</p>
-            <p className="text-xs text-gray-700 leading-relaxed">{station.address}{station.zone ? `, ${station.zone}` : ''}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">Guatemala</p>
-          </div>
-          <button
-            onClick={copyAddress}
-            title="Copiar dirección"
-            className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <rect x="9" y="9" width="13" height="13" rx="2" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* User photos */}
-      <StationPhotos stationId={station.id} stationName={station.name} />
-
-      {/* Reviews */}
-      <StationReviews stationId={station.id} stationName={station.name} compact />
-
-      {/* Actions */}
-      <div className="px-4 py-3">
-        <a
-          href={mapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-2 rounded-xl transition-colors"
-        >
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-          </svg>
-          Cómo llegar — Google Maps
-        </a>
-      </div>
-    </div>
-  );
-}
-
-function MapController({ markerRefs }: { markerRefs: React.MutableRefObject<Record<string, L.Marker | null>> }) {
+function MapController() {
   const { selectedStationId, stations, userLocation } = useStore();
   const map = useMap();
   const prevSelectedRef = useRef<string | null>(null);
@@ -280,17 +116,10 @@ function MapController({ markerRefs }: { markerRefs: React.MutableRefObject<Reco
       const station = stations.find((s) => s.id === selectedStationId);
       if (station) {
         map.setView([station.lat, station.lng], Math.max(map.getZoom(), 15), { animate: true });
-        // Open popup after map pan/zoom finishes
-        const timer = setTimeout(() => {
-          markerRefs.current[selectedStationId]?.openPopup();
-        }, 350);
-        return () => clearTimeout(timer);
       }
-    } else if (!selectedStationId && prevSelectedRef.current) {
-      markerRefs.current[prevSelectedRef.current]?.closePopup();
     }
     prevSelectedRef.current = selectedStationId;
-  }, [selectedStationId, stations, map, markerRefs]);
+  }, [selectedStationId, stations, map]);
 
   useEffect(() => {
     if (userLocation) {
@@ -340,7 +169,6 @@ function GeolocationButton() {
 
 export default function EVMap() {
   const { stations, filteredStations, selectedVehicle, filters } = useStore();
-  const markerRefs = useRef<Record<string, L.Marker | null>>({});
 
   const hasActiveFilters =
     selectedVehicle !== null ||
@@ -370,7 +198,7 @@ export default function EVMap() {
           updateWhenIdle={true}
         />
 
-        <MapController markerRefs={markerRefs} />
+        <MapController />
         {isTouch && <DisableTap />}
 
         {stations.map((station) => {
@@ -379,7 +207,6 @@ export default function EVMap() {
           return (
             <Marker
               key={station.id}
-              ref={(r) => { markerRefs.current[station.id] = r; }}
               position={[station.lat, station.lng]}
               icon={makeStationIcon(station.type ?? 'public', station.status, dimmed)}
               eventHandlers={{
@@ -392,9 +219,6 @@ export default function EVMap() {
               }}
               opacity={dimmed ? 0.25 : 1}
             >
-              <Popup maxHeight={520}>
-                <StationPopupContent station={station} />
-              </Popup>
               {!isTouch && (
                 <Tooltip className="station-tooltip" direction="top" offset={[0, -18]} opacity={1}>
                   <StationTooltipContent station={station} />
