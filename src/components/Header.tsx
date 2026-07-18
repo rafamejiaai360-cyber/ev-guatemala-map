@@ -27,19 +27,19 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-[900] bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm">
-      <div className="flex items-center gap-3 px-4 py-3 flex-wrap lg:flex-nowrap">
+      <div className="flex items-center gap-2 px-3 py-2 flex-wrap lg:flex-nowrap">
         {/* Logo */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <button
-            className="lg:hidden -m-2 p-3 text-gray-500 hover:text-gray-800 active:text-gray-900 transition-colors rounded-xl touch-manipulation"
+            className="lg:hidden -m-1.5 p-2.5 text-gray-500 hover:text-gray-800 active:text-gray-900 transition-colors rounded-xl touch-manipulation"
             onClick={() => setSidebarOpen(!sidebarOpen)}
             aria-label="Toggle sidebar"
           >
-            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="text-lg font-semibold text-gray-900 tracking-tight select-none">
+          <span className="text-base sm:text-lg font-semibold text-gray-900 tracking-tight select-none">
             ⚡ <span className="text-green-500">EV</span> Guatemala
           </span>
         </div>
@@ -50,17 +50,17 @@ export default function Header() {
         </div>
 
         {/* Right side */}
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
           <FilterBar />
 
           {/* Status badge */}
           {selectedVehicle ? (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full text-xs font-medium text-green-700 whitespace-nowrap">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full text-xs font-medium text-green-700 whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
               {compatibleCount} compatibles
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-full text-xs font-medium text-gray-600 whitespace-nowrap">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-full text-xs font-medium text-gray-600 whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
               {activeCount} activas
             </span>
@@ -75,7 +75,7 @@ export default function Header() {
               <a
                 href="/admin"
                 title="Panel de administrador"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200"
               >
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0H3" />
@@ -85,7 +85,7 @@ export default function Header() {
               <button
                 onClick={() => setAddStationModalOpen(true)}
                 title="Agregar nueva estación"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
               >
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -95,7 +95,7 @@ export default function Header() {
               <button
                 onClick={() => setScanModalOpen(true)}
                 title="Buscar cargadores nuevos"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
               >
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <circle cx="11" cy="11" r="8" />
@@ -112,7 +112,7 @@ export default function Header() {
             <button
               onClick={() => setAddStationModalOpen(true)}
               title="Proponer nueva estación"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
             >
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -126,7 +126,7 @@ export default function Header() {
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen(o => !o)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 ${currentUser.role === 'admin' ? 'bg-green-600' : 'bg-blue-500'}`}>
                   {currentUser.name.charAt(0).toUpperCase()}
@@ -183,7 +183,7 @@ export default function Header() {
           ) : (
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200"
             >
               <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />

@@ -112,7 +112,7 @@ export default function VehicleSelector() {
     <div ref={ref} className="relative">
       <button
         onClick={handleToggle}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-sm text-gray-700 hover:border-gray-300 transition-all duration-200 min-w-[180px] max-w-[260px]"
+        className="flex items-center gap-2 px-2.5 py-1 rounded-full border border-gray-200 bg-white text-sm text-gray-700 hover:border-gray-300 transition-all duration-200 min-w-[150px] max-w-[260px]"
       >
         <span className="text-green-500 text-base">🔌</span>
         <span className="truncate flex-1 text-left">

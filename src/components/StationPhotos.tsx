@@ -117,7 +117,7 @@ export default function StationPhotos({ stationId, stationName = '', padding = '
 
           {/* Upload button */}
           <label className={`flex-shrink-0 w-16 h-16 border-2 border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-colors gap-1 ${uploading ? 'border-green-300 bg-green-50 cursor-wait' : 'border-gray-200 hover:border-green-400 hover:bg-green-50'}`}>
-            <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={handleUpload} disabled={uploading} />
+            <input type="file" accept="image/*" className="sr-only" onChange={handleUpload} disabled={uploading} />
             {uploading ? (
               <>
                 <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">

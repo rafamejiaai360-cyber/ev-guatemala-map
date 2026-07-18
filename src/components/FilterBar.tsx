@@ -110,14 +110,14 @@ export default function FilterBar() {
   ) : null;
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-1.5 flex-wrap">
       {/* Station type filter (pública / residencial) */}
       <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5">
         {TYPE_OPTIONS.map((opt) => (
           <button
             key={opt.value}
             onClick={() => setFilters({ stationType: opt.value })}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
+            className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
               filters.stationType === opt.value
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
@@ -134,7 +134,7 @@ export default function FilterBar() {
           <button
             key={opt.value}
             onClick={() => setFilters({ status: opt.value })}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
+            className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
               filters.status === opt.value
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
@@ -149,7 +149,7 @@ export default function FilterBar() {
       <button
         ref={btnRef}
         onClick={handleToggle}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all duration-200 ${
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all duration-200 ${
           filters.connectorTypes.length > 0
             ? 'border-green-400 bg-green-50 text-green-700'
             : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
@@ -171,7 +171,7 @@ export default function FilterBar() {
           <button
             key={opt.value}
             onClick={() => setFilters({ level: opt.value })}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
+            className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
               filters.level === opt.value
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
