@@ -768,7 +768,7 @@ export default function AdminPanel() {
 
       {/* Tabs */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6">
-        <div className="max-w-3xl mx-auto flex gap-0">
+        <div className="max-w-3xl mx-auto flex gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {([
             { id: 'stations', label: 'Estaciones', icon: 'M17.657 16.657 13.414 20.9a1.998 1.998 0 0 1-2.827 0l-4.244-4.243a8 8 0 1 1 11.314 0z' },
             { id: 'add', label: 'Agregar', icon: 'M12 4v16m8-8H4' },
@@ -776,7 +776,7 @@ export default function AdminPanel() {
             { id: 'users', label: 'Usuarios', icon: 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z' },
           ] as const).map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
                 tab === t.id
                   ? 'text-green-700 border-green-500'
                   : 'text-gray-500 border-transparent hover:text-gray-700'

@@ -59,7 +59,10 @@ export default function FilterBar() {
   function handleToggle() {
     if (!connectorOpen && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
-      setDropdownPos({ top: rect.bottom + 8, left: rect.left });
+      const margin = 12;
+      const dropdownWidth = 160;
+      const left = Math.min(Math.max(margin, rect.left), window.innerWidth - dropdownWidth - margin);
+      setDropdownPos({ top: rect.bottom + 8, left });
     }
     setConnectorOpen((o) => !o);
   }
@@ -110,9 +113,9 @@ export default function FilterBar() {
   ) : null;
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto min-w-0 max-w-full py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:overflow-visible lg:flex-wrap">
       {/* Station type filter (pública / residencial) */}
-      <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5">
+      <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5 flex-shrink-0">
         {TYPE_OPTIONS.map((opt) => (
           <button
             key={opt.value}
@@ -129,7 +132,7 @@ export default function FilterBar() {
       </div>
 
       {/* Status filter */}
-      <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5">
+      <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5 flex-shrink-0">
         {STATUS_OPTIONS.map((opt) => (
           <button
             key={opt.value}
@@ -149,7 +152,7 @@ export default function FilterBar() {
       <button
         ref={btnRef}
         onClick={handleToggle}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all duration-200 ${
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all duration-200 flex-shrink-0 whitespace-nowrap ${
           filters.connectorTypes.length > 0
             ? 'border-green-400 bg-green-50 text-green-700'
             : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
@@ -166,7 +169,7 @@ export default function FilterBar() {
       {dropdown}
 
       {/* Level filter */}
-      <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5">
+      <div className="flex items-center gap-1 bg-gray-100 rounded-full p-0.5 flex-shrink-0">
         {LEVEL_OPTIONS.map((opt) => (
           <button
             key={opt.value}

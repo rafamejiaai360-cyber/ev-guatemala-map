@@ -45,7 +45,10 @@ export default function VehicleSelector() {
   function handleToggle() {
     if (!open && ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      setDropdownPos({ top: rect.bottom + 8, left: rect.left, width: Math.max(288, rect.width) });
+      const margin = 12;
+      const width = Math.min(Math.max(288, rect.width), window.innerWidth - margin * 2);
+      const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
+      setDropdownPos({ top: rect.bottom + 8, left, width });
     }
     setOpen((o) => !o);
   }

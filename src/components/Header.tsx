@@ -45,12 +45,12 @@ export default function Header() {
         </div>
 
         {/* Vehicle selector — center */}
-        <div className="flex-1 flex justify-center">
+        <div className="w-full lg:w-auto lg:flex-1 flex justify-center order-3 lg:order-none">
           <VehicleSelector />
         </div>
 
         {/* Right side */}
-        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+        <div className="w-full lg:w-auto min-w-0 flex items-center gap-1.5 flex-wrap justify-end order-4 lg:order-none">
           <FilterBar />
 
           {/* Status badge */}

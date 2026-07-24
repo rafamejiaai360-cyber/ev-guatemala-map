@@ -34,7 +34,7 @@ export default function ProfileModal() {
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) setProfileModalOpen(false); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
         <div className="px-6 pt-6 pb-4 text-center border-b border-gray-100">
