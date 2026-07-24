@@ -75,34 +75,34 @@ export default function Header() {
               <a
                 href="/admin"
                 title="Panel de administrador"
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200 whitespace-nowrap flex-shrink-0"
               >
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="flex-shrink-0">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0H3" />
                 </svg>
-                <span className="hidden sm:inline">Panel</span>
+                Panel
               </a>
               <button
                 onClick={() => setAddStationModalOpen(true)}
                 title="Agregar nueva estación"
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium whitespace-nowrap flex-shrink-0"
               >
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className="flex-shrink-0">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                <span className="hidden sm:inline">Agregar</span>
+                Agregar
               </button>
               <button
                 onClick={() => setScanModalOpen(true)}
                 title="Buscar cargadores nuevos"
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200 whitespace-nowrap flex-shrink-0"
               >
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="flex-shrink-0">
                   <circle cx="11" cy="11" r="8" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11 8v6M8 11h6" />
                 </svg>
-                <span className="hidden sm:inline">Explorar red</span>
+                Explorar red
               </button>
             </>
           )}
@@ -112,12 +112,12 @@ export default function Header() {
             <button
               onClick={() => setAddStationModalOpen(true)}
               title="Proponer nueva estación"
-              className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-white bg-green-600 hover:bg-green-700 transition-colors font-medium whitespace-nowrap flex-shrink-0"
             >
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className="flex-shrink-0">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              <span className="hidden sm:inline">Proponer</span>
+              Proponer
             </button>
           )}
 
@@ -183,12 +183,12 @@ export default function Header() {
           ) : (
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors border border-gray-200 whitespace-nowrap flex-shrink-0"
             >
-              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="flex-shrink-0">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
               </svg>
-              <span className="hidden sm:inline">Ingresar</span>
+              Ingresar
             </button>
           )}
 
