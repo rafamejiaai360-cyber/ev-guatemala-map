@@ -576,12 +576,13 @@ function PendingTab() {
 // ─── Users Tab ────────────────────────────────────────────────────────────────
 
 function UsersTab() {
-  const { authToken } = useStore();
+  const { authToken, currentUser } = useStore();
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [subEnd, setSubEnd] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savingRoleEmail, setSavingRoleEmail] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -606,6 +607,29 @@ function UsersTab() {
     } finally { setSaving(false); }
   }
 
+  async function saveRole(email: string, role: 'admin' | 'user') {
+    setSavingRoleEmail(email);
+    try {
+      const res = await fetch('/api/auth/set-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ email, role }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? `Error ${res.status}`);
+      }
+      setUsers(prev => prev.map(u => u.email === email ? { ...u, role } : u));
+      setSavedMsg(`Rol de ${email} actualizado a ${role === 'admin' ? 'Admin' : 'Usuario'}`);
+      setTimeout(() => setSavedMsg(null), 4000);
+    } catch (e) {
+      setSavedMsg(e instanceof Error ? e.message : 'Error al cambiar el rol');
+      setTimeout(() => setSavedMsg(null), 4000);
+    } finally {
+      setSavingRoleEmail(null);
+    }
+  }
+
   if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Cargando usuarios…</p>;
 
   return (
@@ -622,12 +646,12 @@ function UsersTab() {
         {users.map((user, idx) => (
           <div key={user.email}
             className={`px-4 py-3 ${idx < users.length - 1 ? 'border-b border-gray-100' : ''}`}>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${user.role === 'admin' ? 'bg-green-600' : 'bg-blue-500'}`}>
                 {user.name.charAt(0).toUpperCase()}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-[160px]">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-gray-900">{user.name}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                     user.role === 'admin' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
@@ -646,10 +670,22 @@ function UsersTab() {
                 </div>
               </div>
 
-              <button onClick={() => { setEditingEmail(editingEmail === user.email ? null : user.email); setSubEnd(user.subscriptionEnd ?? ''); }}
-                className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-gray-600 flex-shrink-0">
-                {editingEmail === user.email ? 'Cancelar' : 'Suscripción'}
-              </button>
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
+                {user.email !== currentUser?.email && (
+                  <button
+                    onClick={() => saveRole(user.email, user.role === 'admin' ? 'user' : 'admin')}
+                    disabled={savingRoleEmail === user.email}
+                    title={user.role === 'admin' ? 'Quitar rol de administrador' : 'Hacer administrador'}
+                    className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded-lg transition-colors text-gray-600 flex-shrink-0"
+                  >
+                    {savingRoleEmail === user.email ? 'Guardando…' : user.role === 'admin' ? 'Quitar admin' : 'Hacer admin'}
+                  </button>
+                )}
+                <button onClick={() => { setEditingEmail(editingEmail === user.email ? null : user.email); setSubEnd(user.subscriptionEnd ?? ''); }}
+                  className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-gray-600 flex-shrink-0">
+                  {editingEmail === user.email ? 'Cancelar' : 'Suscripción'}
+                </button>
+              </div>
             </div>
 
             {/* Subscription editor */}

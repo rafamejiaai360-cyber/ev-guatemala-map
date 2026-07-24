@@ -1476,6 +1476,21 @@ async function handleSetSubscription(request: Request, env: Env): Promise<Respon
   return json({ ok: true });
 }
 
+async function handleSetRole(request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores pueden cambiar roles', 403);
+  const body = await request.json() as { email?: string; role?: string };
+  if (!body.email) return apiError('email requerido');
+  if (body.role !== 'admin' && body.role !== 'user') return apiError('role debe ser "admin" o "user"');
+  if (body.email.toLowerCase().trim() === requester.email && body.role !== 'admin') {
+    return apiError('No puedes quitarte tu propio rol de administrador');
+  }
+  const target = await getUser(body.email, env);
+  if (!target) return apiError('Usuario no encontrado', 404);
+  await saveUser({ ...target, role: body.role }, env);
+  return json({ ok: true });
+}
+
 async function handleListUsers(request: Request, env: Env): Promise<Response> {
   const requester = await getUserFromToken(request, env);
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
@@ -1741,6 +1756,7 @@ export default {
       if (path === 'auth/me' && request.method === 'PATCH') return handleUpdateProfile(request, env);
       if (path === 'auth/change-password' && request.method === 'POST') return handleChangePassword(request, env);
       if (path === 'auth/set-subscription' && request.method === 'POST') return handleSetSubscription(request, env);
+      if (path === 'auth/set-role' && request.method === 'POST') return handleSetRole(request, env);
       if (path === 'auth/users' && request.method === 'GET') return handleListUsers(request, env);
 
       // Scan: GET /api/scan
