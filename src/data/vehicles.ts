@@ -1,5 +1,12 @@
 import type { Vehicle } from '../types';
 
+// Ficha de exportación general de la marca — no confirmado contra la unidad
+// real que se vende en Guatemala. Verifica el puerto físico de tu auto: no
+// se puede asumir CCS2/Type2 solo porque así lo indique la marca para otros
+// mercados — el Deepal S07 vendido aquí por CAISA, por ejemplo, trae GB/T.
+const UNVERIFIED_GT_NOTE =
+  'Conector según ficha de exportación general de la marca — no confirmado contra la unidad que se vende en Guatemala. Verifica el puerto físico de tu auto antes de asumir compatibilidad (el Deepal S07 vendido aquí, por ejemplo, trae GB/T en vez de CCS2/Type2).';
+
 export const vehicles: Vehicle[] = [
   // ── Deepal (CAISA) ────────────────────────────────────────────────────
   {
@@ -9,7 +16,8 @@ export const vehicles: Vehicle[] = [
     year: '2025',
     battery_kwh: 80.1,
     range_km: 520,
-    compatible_connectors: ['CCS2', 'Type2'],
+    compatible_connectors: ['GBT'],
+    adapter_note: 'La unidad vendida en Guatemala (CAISA) trae puerto GB/T de fábrica, no CCS2/Type2 — hoy ninguna estación de esta red tiene conector GB/T, así que la carga rápida pública no está disponible sin adaptador. Existen adaptadores GB/T→CCS2 para DC, aunque son poco comunes localmente; en la práctica la carga se hace en casa (AC).',
   },
   // ── BYD (CABI) ───────────────────────────────────────────────────────
   {
@@ -20,6 +28,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 44.9,
     range_km: 340,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-atto3',
@@ -29,6 +38,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 60.5,
     range_km: 420,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-seal',
@@ -38,6 +48,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 82.5,
     range_km: 570,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-seal-u',
@@ -47,6 +58,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 82.5,
     range_km: 482,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-han',
@@ -56,6 +68,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 85.4,
     range_km: 605,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-tang',
@@ -65,6 +78,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 108.8,
     range_km: 400,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── MG ───────────────────────────────────────────────────────────────
   {
@@ -75,6 +89,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 50.3,
     range_km: 320,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'mg-marvel-r',
@@ -84,6 +99,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 70.0,
     range_km: 400,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── Great Wall / ORA ─────────────────────────────────────────────────
   {
@@ -94,6 +110,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 63.0,
     range_km: 420,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── Chery ─────────────────────────────────────────────────────────────
   {
@@ -104,6 +121,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 61.0,
     range_km: 430,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── JETOUR ────────────────────────────────────────────────────────────
   {
@@ -114,6 +132,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 70.0,
     range_km: 450,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── JAC ──────────────────────────────────────────────────────────────
   {
@@ -124,6 +143,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 55.0,
     range_km: 350,
     compatible_connectors: ['CCS2', 'Type2'],
+    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── Tesla ────────────────────────────────────────────────────────────
   {
