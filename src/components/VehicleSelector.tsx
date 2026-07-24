@@ -104,6 +104,12 @@ export default function VehicleSelector() {
             <div className="text-xs text-gray-400 mt-0.5">
               {v.battery_kwh} kWh · {v.range_km} km · {v.compatible_connectors.join(', ')}
             </div>
+            {v.adapter_note && (
+              <div className="flex items-start gap-1 text-[11px] text-amber-600 mt-1 leading-snug">
+                <span className="flex-shrink-0">⚠️</span>
+                <span>{v.adapter_note}</span>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -121,6 +127,9 @@ export default function VehicleSelector() {
         <span className="truncate flex-1 text-left">
           {selectedVehicle ? `${selectedVehicle.brand} ${selectedVehicle.model}` : 'Mi vehículo'}
         </span>
+        {selectedVehicle?.adapter_note && (
+          <span title={selectedVehicle.adapter_note} className="text-amber-500 flex-shrink-0">⚠️</span>
+        )}
         {selectedVehicle ? (
           <span
             onClick={clear}

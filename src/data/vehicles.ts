@@ -129,20 +129,22 @@ export const vehicles: Vehicle[] = [
   {
     id: 'tesla-model3',
     brand: 'Tesla',
-    model: 'Model 3 (adaptador CCS)',
+    model: 'Model 3',
     year: '2024',
     battery_kwh: 75.0,
     range_km: 554,
     compatible_connectors: ['CCS2'],
+    adapter_note: 'Tesla no tiene distribuidor oficial en Guatemala — casi todas las unidades son importadas de EE. UU. con puerto NACS y necesitan un adaptador NACS→CCS2 para cargar en esta red. Si tu unidad viene de otro mercado (Europa, Asia), puede traer puerto CCS2 nativo. Verifica el puerto de tu auto antes de salir.',
   },
   {
     id: 'tesla-model-y',
     brand: 'Tesla',
-    model: 'Model Y (adaptador CCS)',
+    model: 'Model Y',
     year: '2024',
     battery_kwh: 75.0,
     range_km: 533,
     compatible_connectors: ['CCS2'],
+    adapter_note: 'Tesla no tiene distribuidor oficial en Guatemala — casi todas las unidades son importadas de EE. UU. con puerto NACS y necesitan un adaptador NACS→CCS2 para cargar en esta red. Si tu unidad viene de otro mercado (Europa, Asia), puede traer puerto CCS2 nativo. Verifica el puerto de tu auto antes de salir.',
   },
   // ── Hyundai ──────────────────────────────────────────────────────────
   {
@@ -313,5 +315,6 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 25.9,
     range_km: 90,
     compatible_connectors: ['Type2', 'J1772'],
+    adapter_note: 'Es un híbrido enchufable: solo carga en AC (nivel L2), no en cargadores DC rápidos. El conector físico depende del origen de importación — unidades de mercado europeo traen Type 2, unidades importadas de EE. UU. traen J1772. Verifica el puerto de tu auto.',
   },
 ];

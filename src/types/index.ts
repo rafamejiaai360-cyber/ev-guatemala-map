@@ -65,4 +65,7 @@ export interface Vehicle {
   battery_kwh: number;
   range_km: number;
   compatible_connectors: ConnectorType[];
+  /** Aclaración cuando el conector físico varía según el origen de importación
+   *  (p. ej. requiere adaptador) — se muestra al usuario junto al vehículo. */
+  adapter_note?: string;
 }
