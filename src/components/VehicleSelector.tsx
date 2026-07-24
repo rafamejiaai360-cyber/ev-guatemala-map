@@ -102,14 +102,12 @@ export default function VehicleSelector() {
               <span className="text-gray-400 text-xs ml-1">{v.year}</span>
             </div>
             <div className="text-xs text-gray-400 mt-0.5">
-              {v.battery_kwh} kWh · {v.range_km} km · {v.compatible_connectors.join(', ')}
+              {v.range_km} km
+              {v.battery_kwh != null && ` · ${v.battery_kwh} kWh`}
+              {v.compatible_connectors && v.compatible_connectors.length > 0
+                ? ` · ${v.compatible_connectors.join(', ')}`
+                : ' · specs por confirmar'}
             </div>
-            {v.adapter_note && (
-              <div className="flex items-start gap-1 text-[11px] text-amber-600 mt-1 leading-snug">
-                <span className="flex-shrink-0">⚠️</span>
-                <span>{v.adapter_note}</span>
-              </div>
-            )}
           </li>
         ))}
       </ul>

@@ -1,12 +1,5 @@
 import type { Vehicle } from '../types';
 
-// Ficha de exportación general de la marca — no confirmado contra la unidad
-// real que se vende en Guatemala. Verifica el puerto físico de tu auto: no
-// se puede asumir CCS2/Type2 solo porque así lo indique la marca para otros
-// mercados — el Deepal S07 vendido aquí por CAISA, por ejemplo, trae GB/T.
-const UNVERIFIED_GT_NOTE =
-  'Conector según ficha de exportación general de la marca — no confirmado contra la unidad que se vende en Guatemala. Verifica el puerto físico de tu auto antes de asumir compatibilidad (el Deepal S07 vendido aquí, por ejemplo, trae GB/T en vez de CCS2/Type2).';
-
 export const vehicles: Vehicle[] = [
   // ── Deepal (CAISA) ────────────────────────────────────────────────────
   {
@@ -14,10 +7,10 @@ export const vehicles: Vehicle[] = [
     brand: 'Deepal',
     model: 'S07',
     year: '2025',
-    battery_kwh: 80.1,
     range_km: 520,
+    battery_kwh: 80.1,
     compatible_connectors: ['GBT'],
-    adapter_note: 'La unidad vendida en Guatemala (CAISA) trae puerto GB/T de fábrica, no CCS2/Type2 — hoy ninguna estación de esta red tiene conector GB/T, así que la carga rápida pública no está disponible sin adaptador. Existen adaptadores GB/T→CCS2 para DC, aunque son poco comunes localmente; en la práctica la carga se hace en casa (AC).',
+    adapter_note: 'Puerto GB/T — hoy sin estaciones compatibles en esta red.',
   },
   // ── BYD (CABI) ───────────────────────────────────────────────────────
   {
@@ -25,60 +18,42 @@ export const vehicles: Vehicle[] = [
     brand: 'BYD',
     model: 'Dolphin',
     year: '2024',
-    battery_kwh: 44.9,
     range_km: 340,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-atto3',
     brand: 'BYD',
     model: 'Atto 3',
     year: '2025',
-    battery_kwh: 60.5,
     range_km: 420,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-seal',
     brand: 'BYD',
     model: 'Seal',
     year: '2025',
-    battery_kwh: 82.5,
     range_km: 570,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-seal-u',
     brand: 'BYD',
     model: 'Seal U',
     year: '2025',
-    battery_kwh: 82.5,
     range_km: 482,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-han',
     brand: 'BYD',
     model: 'Han',
     year: '2025',
-    battery_kwh: 85.4,
     range_km: 605,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'byd-tang',
     brand: 'BYD',
     model: 'Tang EV',
     year: '2025',
-    battery_kwh: 108.8,
     range_km: 400,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── MG ───────────────────────────────────────────────────────────────
   {
@@ -86,20 +61,14 @@ export const vehicles: Vehicle[] = [
     brand: 'MG',
     model: 'ZS EV',
     year: '2025',
-    battery_kwh: 50.3,
     range_km: 320,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   {
     id: 'mg-marvel-r',
     brand: 'MG',
     model: 'Marvel R Electric',
     year: '2024',
-    battery_kwh: 70.0,
     range_km: 400,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── Great Wall / ORA ─────────────────────────────────────────────────
   {
@@ -107,10 +76,7 @@ export const vehicles: Vehicle[] = [
     brand: 'ORA',
     model: 'Funky Cat (03)',
     year: '2024',
-    battery_kwh: 63.0,
     range_km: 420,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── Chery ─────────────────────────────────────────────────────────────
   {
@@ -118,10 +84,7 @@ export const vehicles: Vehicle[] = [
     brand: 'Chery',
     model: 'Omoda EQ5',
     year: '2024',
-    battery_kwh: 61.0,
     range_km: 430,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── JETOUR ────────────────────────────────────────────────────────────
   {
@@ -129,10 +92,7 @@ export const vehicles: Vehicle[] = [
     brand: 'JETOUR',
     model: 'Dashing EV',
     year: '2025',
-    battery_kwh: 70.0,
     range_km: 450,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── JAC ──────────────────────────────────────────────────────────────
   {
@@ -140,10 +100,7 @@ export const vehicles: Vehicle[] = [
     brand: 'JAC',
     model: 'iEV7s',
     year: '2024',
-    battery_kwh: 55.0,
     range_km: 350,
-    compatible_connectors: ['CCS2', 'Type2'],
-    adapter_note: UNVERIFIED_GT_NOTE,
   },
   // ── Tesla ────────────────────────────────────────────────────────────
   {
@@ -154,7 +111,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 75.0,
     range_km: 554,
     compatible_connectors: ['CCS2'],
-    adapter_note: 'Tesla no tiene distribuidor oficial en Guatemala — casi todas las unidades son importadas de EE. UU. con puerto NACS y necesitan un adaptador NACS→CCS2 para cargar en esta red. Si tu unidad viene de otro mercado (Europa, Asia), puede traer puerto CCS2 nativo. Verifica el puerto de tu auto antes de salir.',
+    adapter_note: 'Suele requerir adaptador NACS→CCS2 (importación de EE. UU.).',
   },
   {
     id: 'tesla-model-y',
@@ -164,7 +121,7 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 75.0,
     range_km: 533,
     compatible_connectors: ['CCS2'],
-    adapter_note: 'Tesla no tiene distribuidor oficial en Guatemala — casi todas las unidades son importadas de EE. UU. con puerto NACS y necesitan un adaptador NACS→CCS2 para cargar en esta red. Si tu unidad viene de otro mercado (Europa, Asia), puede traer puerto CCS2 nativo. Verifica el puerto de tu auto antes de salir.',
+    adapter_note: 'Suele requerir adaptador NACS→CCS2 (importación de EE. UU.).',
   },
   // ── Hyundai ──────────────────────────────────────────────────────────
   {
@@ -335,6 +292,6 @@ export const vehicles: Vehicle[] = [
     battery_kwh: 25.9,
     range_km: 90,
     compatible_connectors: ['Type2', 'J1772'],
-    adapter_note: 'Es un híbrido enchufable: solo carga en AC (nivel L2), no en cargadores DC rápidos. El conector físico depende del origen de importación — unidades de mercado europeo traen Type 2, unidades importadas de EE. UU. traen J1772. Verifica el puerto de tu auto.',
+    adapter_note: 'Solo carga AC — confirma si tu puerto es Type2 o J1772.',
   },
 ];

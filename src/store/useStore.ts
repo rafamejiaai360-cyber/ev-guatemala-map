@@ -156,7 +156,9 @@ function computeFiltered(
     if (filters.level !== 'all') {
       if (!s.connectors.some((c) => c.level === filters.level)) return false;
     }
-    if (selectedVehicle) {
+    // Sin conector confirmado para el vehículo no filtramos por compatibilidad —
+    // mejor no afirmar nada a asumir un conector que todavía no se ha verificado.
+    if (selectedVehicle && selectedVehicle.compatible_connectors?.length) {
       const stationTypes = s.connectors.map((c) => c.type);
       if (!selectedVehicle.compatible_connectors.some((t) => stationTypes.includes(t))) return false;
     }

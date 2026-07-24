@@ -57,7 +57,7 @@ export default function Header() {
         {/* Badge + actions — own centered line on mobile */}
         <div className="w-full lg:w-auto min-w-0 flex items-center gap-1.5 flex-wrap justify-center lg:justify-end order-4 lg:order-none">
           {/* Status badge */}
-          {selectedVehicle ? (
+          {selectedVehicle && selectedVehicle.compatible_connectors?.length ? (
             <span className="flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full text-xs font-medium text-green-700 whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
               {compatibleCount} compatibles

@@ -62,10 +62,14 @@ export interface Vehicle {
   brand: string;
   model: string;
   year: string;
-  battery_kwh: number;
   range_km: number;
-  compatible_connectors: ConnectorType[];
-  /** Aclaración cuando el conector físico varía según el origen de importación
-   *  (p. ej. requiere adaptador) — se muestra al usuario junto al vehículo. */
+  /** Ausentes hasta confirmar el dato contra la unidad real vendida en
+   *  Guatemala — no se muestran ni se usan para filtrar por compatibilidad
+   *  mientras no estén confirmados. */
+  battery_kwh?: number;
+  compatible_connectors?: ConnectorType[];
+  /** Aclaración corta (tooltip) para casos confirmados donde el conector
+   *  físico varía según el origen de importación — no usar para datos
+   *  simplemente no confirmados, esos deben quedar sin battery_kwh/connectors. */
   adapter_note?: string;
 }
