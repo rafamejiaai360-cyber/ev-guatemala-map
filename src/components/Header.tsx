@@ -44,15 +44,18 @@ export default function Header() {
           </span>
         </div>
 
-        {/* Vehicle selector — center */}
-        <div className="w-full lg:w-auto lg:flex-1 flex justify-center order-3 lg:order-none">
+        {/* Vehicle selector — shares the first line with the logo */}
+        <div className="flex-1 flex justify-center order-2 lg:order-none">
           <VehicleSelector />
         </div>
 
-        {/* Right side */}
-        <div className="w-full lg:w-auto min-w-0 flex items-center gap-1.5 flex-wrap justify-end order-4 lg:order-none">
+        {/* Filters — own centered line on mobile */}
+        <div className="w-full lg:w-auto flex items-center justify-center gap-1.5 order-3 lg:order-none">
           <FilterBar />
+        </div>
 
+        {/* Badge + actions — own centered line on mobile */}
+        <div className="w-full lg:w-auto min-w-0 flex items-center gap-1.5 flex-wrap justify-center lg:justify-end order-4 lg:order-none">
           {/* Status badge */}
           {selectedVehicle ? (
             <span className="flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full text-xs font-medium text-green-700 whitespace-nowrap">
