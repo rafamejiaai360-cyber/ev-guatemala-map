@@ -126,6 +126,24 @@ CREATE TABLE IF NOT EXISTS photos (
 CREATE INDEX IF NOT EXISTS idx_photos_station ON photos(station_id);
 
 -- ============================================================
+-- SOLICITUDES DE USO — estaciones residenciales (fase piloto).
+-- El admin media el primer contacto entre dueño y solicitante.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS station_requests (
+  id TEXT PRIMARY KEY,
+  station_id TEXT NOT NULL REFERENCES stations(id),
+  requester_name TEXT NOT NULL,
+  requester_phone TEXT NOT NULL,
+  vehicle TEXT,
+  preferred_date TEXT,
+  message TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',      -- pending | shared | declined
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_requests_station ON station_requests(station_id);
+CREATE INDEX IF NOT EXISTS idx_requests_status ON station_requests(status, created_at);
+
+-- ============================================================
 -- METADATOS DE SINCRONIZACIÓN Y RESPALDO (observabilidad)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ops_log (

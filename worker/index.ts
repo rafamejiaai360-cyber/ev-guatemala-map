@@ -1689,6 +1689,36 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
   return json({ ok: true, applied: true, openReports: openReporters });
 }
 
+// Solicitud de uso de una estación residencial (fase piloto): no toca datos
+// de la estación ni expone contacto del dueño — solo notifica al admin, que
+// media el primer contacto manualmente (por teléfono/Telegram).
+async function handlePostStationRequest(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const body = await request.json() as {
+    name?: string; phone?: string; vehicle?: string; preferredDate?: string; message?: string;
+  };
+  const { name, phone, vehicle = '', preferredDate = '', message = '' } = body;
+  if (!name || !phone) return apiError('name y phone son requeridos');
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
+  if (station.type !== 'residential') return apiError('Esta estación no admite solicitudes de uso');
+
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO station_requests (id, station_id, requester_name, requester_phone, vehicle, preferred_date, message)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, stationId, name, phone, vehicle, preferredDate, message).run();
+
+  ctx.waitUntil(notifyAdmin(
+    env,
+    'Nueva solicitud de uso',
+    `${station.name}\nSolicitante: ${name} (${phone})\nVehículo: ${vehicle || 'N/D'}\nFecha deseada: ${preferredDate || 'N/D'}${message ? `\nMensaje: ${message}` : ''}`,
+  ));
+
+  return json({ ok: true, id }, 201);
+}
+
 async function handleDeleteStation(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user || user.role !== 'admin') return apiError('Solo administradores pueden eliminar estaciones', 403);
@@ -1953,6 +1983,12 @@ export default {
       const stationVerifyMatch = path.match(/^stations\/([^/]+)\/verify$/);
       if (stationVerifyMatch && request.method === 'POST') {
         return handleVerifyStation(stationVerifyMatch[1], request, env, ctx);
+      }
+
+      // Solicitud de uso de estación residencial: POST /api/stations/:id/request-use
+      const stationRequestMatch = path.match(/^stations\/([^/]+)\/request-use$/);
+      if (stationRequestMatch && request.method === 'POST') {
+        return handlePostStationRequest(stationRequestMatch[1], request, env, ctx);
       }
 
       // Station edit / delete: PATCH|DELETE /api/stations/:id

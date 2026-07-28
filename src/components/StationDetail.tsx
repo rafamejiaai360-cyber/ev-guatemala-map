@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ChargerStation } from '../types';
 import { useStore } from '../store/useStore';
 import EditStationModal from './EditStationModal';
+import RequestUseModal from './RequestUseModal';
 import StationPhotos from './StationPhotos';
 import StationReviews from './StationReviews';
 import StationVerification from './StationVerification';
@@ -51,6 +52,8 @@ export default function StationDetail({ station, onBack }: Props) {
   const { currentUser, userLocation } = useStore();
   const [showEdit, setShowEdit] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
+  const [showRequestUse, setShowRequestUse] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
 
   const destination = encodeURIComponent(`${station.name}, ${station.address}, ${station.zone || 'Guatemala'}`);
   const mapsUrl = userLocation
@@ -91,6 +94,22 @@ export default function StationDetail({ station, onBack }: Props) {
             </svg>
             Cómo llegar — Google Maps
           </a>
+
+          {station.type === 'residential' && (
+            <div>
+              <button
+                onClick={() => { setRequestSent(false); setShowRequestUse(true); }}
+                className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-xl transition-colors"
+              >
+                🔌 Solicitar uso de esta estación
+              </button>
+              {requestSent && (
+                <p className="text-[10px] text-blue-600 mt-1">
+                  Solicitud enviada — un administrador te contactará pronto.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-1">
             {station.connectors.map((c, i) => (
@@ -150,6 +169,14 @@ export default function StationDetail({ station, onBack }: Props) {
               ? 'Gracias — tu propuesta fue enviada y un administrador la revisará antes de publicarla.'
               : 'Cambios guardados.');
           }}
+        />
+      )}
+
+      {showRequestUse && (
+        <RequestUseModal
+          station={station}
+          onClose={() => setShowRequestUse(false)}
+          onSent={() => { setShowRequestUse(false); setRequestSent(true); }}
         />
       )}
     </div>
