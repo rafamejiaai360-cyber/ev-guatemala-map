@@ -979,33 +979,45 @@ interface StationRow {
   notes: string | null;
   verification_status: string;
   google_maps_url: string | null;
+  submitted_by: string | null;
+  submitted_by_name: string | null;
 }
 
 // Caché en memoria del isolate: a esta escala evita ir a D1 en cada carga del
-// mapa. Los writes (Fase 4) deben llamar invalidateStationsCache().
+// mapa. Los writes (Fase 4) deben llamar invalidateStationsCache(). Cachés
+// separadas para público/admin: la respuesta de admin incluye quién dio de
+// alta cada estación (createdByName/createdByEmail) y esos datos NUNCA deben
+// colarse en la respuesta cacheada que ven usuarios anónimos o no-admin.
 let stationsCache: { body: string; expires: number } | null = null;
+let stationsCacheAdmin: { body: string; expires: number } | null = null;
 const STATIONS_CACHE_TTL_MS = 60_000;
 
 export function invalidateStationsCache(): void {
   stationsCache = null;
+  stationsCacheAdmin = null;
 }
 
-async function handleGetStationsFromD1(env: Env): Promise<Response> {
+async function handleGetStationsFromD1(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  if (stationsCache && Date.now() < stationsCache.expires) {
-    return new Response(stationsCache.body, {
+  const requester = await getUserFromToken(request, env);
+  const isAdmin = requester?.role === 'admin';
+
+  const cache = isAdmin ? stationsCacheAdmin : stationsCache;
+  if (cache && Date.now() < cache.expires) {
+    return new Response(cache.body, {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'hit' },
     });
   }
 
   const { results } = await env.DB.prepare(
-    `SELECT id, type, name, address, zone, lat, lng, status, connectors, network, access,
-            notes, verification_status, google_maps_url, last_confirmed_at,
-            confirm_count, open_reports
-       FROM stations
-      WHERE approval_status = 'active' AND status IN ('active', 'maintenance')
-      ORDER BY id`
+    `SELECT s.id, s.type, s.name, s.address, s.zone, s.lat, s.lng, s.status, s.connectors, s.network, s.access,
+            s.notes, s.verification_status, s.google_maps_url, s.last_confirmed_at,
+            s.confirm_count, s.open_reports, s.submitted_by, u.name AS submitted_by_name
+       FROM stations s
+       LEFT JOIN users u ON u.email = s.submitted_by
+      WHERE s.approval_status = 'active' AND s.status IN ('active', 'maintenance')
+      ORDER BY s.id`
   ).all<StationRow & { last_confirmed_at: string | null; confirm_count: number; open_reports: number }>();
 
   const stations = results.map((r) => {
@@ -1039,11 +1051,21 @@ async function handleGetStationsFromD1(env: Env): Promise<Response> {
       confirmCount: r.confirm_count,
       openReports: r.open_reports,
       googleMapsUrl: r.google_maps_url || undefined,
+      // Quién dio de alta la estación: solo para el admin (protege al usuario
+      // que registró una residencial de exponerse a otros usuarios/público).
+      ...(isAdmin ? {
+        createdByEmail: r.submitted_by || null,
+        createdByName: r.submitted_by_name || null,
+      } : {}),
     };
   });
 
   const body = JSON.stringify(stations);
-  stationsCache = { body, expires: Date.now() + STATIONS_CACHE_TTL_MS };
+  if (isAdmin) {
+    stationsCacheAdmin = { body, expires: Date.now() + STATIONS_CACHE_TTL_MS };
+  } else {
+    stationsCache = { body, expires: Date.now() + STATIONS_CACHE_TTL_MS };
+  }
   return new Response(body, {
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'miss' },
   });
@@ -1966,7 +1988,7 @@ export default {
       // Dynamic stations: GET /api/stations/dynamic, POST /api/stations
       // Fase 2 (lectura en sombra): /api/stations lee D1; /api/stations/dynamic
       // sigue leyendo Notion hasta completar el corte de lecturas (Fase 3).
-      if (path === 'stations' && request.method === 'GET') return handleGetStationsFromD1(env);
+      if (path === 'stations' && request.method === 'GET') return handleGetStationsFromD1(request, env);
       if (path === 'stations/dynamic' && request.method === 'GET') return handleGetDynamicStations(env);
       if (path === 'stations/pending' && request.method === 'GET') return handleGetPendingStations(request, env);
       if (path === 'stations' && request.method === 'POST') return handlePostStation(request, env, ctx);
