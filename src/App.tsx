@@ -25,7 +25,7 @@ export default function App() {
   if (isAdminPanel) return <AdminPanel />;
 
   return (
-    <div className="flex flex-col h-screen bg-[#FAFAFA]">
+    <div className="flex flex-col h-[var(--app-height)] bg-[#FAFAFA]">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop sidebar */}

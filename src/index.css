@@ -13,6 +13,25 @@ html, body, #root {
   color: #111827;
 }
 
+/* `100vh` en Safari móvil mide el viewport con las barras del navegador
+   OCULTAS — cuando la barra de direcciones/toolbar está visible (p. ej. al
+   cargar la página), el layout queda más alto que el área realmente visible
+   y el contenido pegado abajo (botones flotantes del mapa, hoja inferior en
+   móvil) termina tapado por esa barra. `dvh` mide el viewport visible real;
+   se usa vía variable con fallback a vh para navegadores sin soporte.
+   `--safe-bottom` suma el "home indicator" (notch inferior) en iPhones sin
+   botón físico, para que nada quede pegado justo detrás de esa franja. */
+:root {
+  --app-height: 100vh;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --app-height: 100dvh;
+  }
+}
+
 /* iOS Safari zooms the page when a focused input/select/textarea has a
    computed font-size below 16px. Force 16px on touch-sized viewports so
    tapping search boxes or the vehicle selector doesn't trigger that zoom. */
