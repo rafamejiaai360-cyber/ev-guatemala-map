@@ -88,7 +88,7 @@ export default function Sidebar() {
           flex flex-col
           transition-transform duration-300
           ${sidebarOpen
-            ? 'translate-y-0 h-[70vh] lg:h-full'
+            ? 'translate-y-0 h-[calc(var(--app-height)*0.7)] lg:h-full'
             : 'translate-y-full lg:translate-y-0 lg:h-full'}
         `}
       >
