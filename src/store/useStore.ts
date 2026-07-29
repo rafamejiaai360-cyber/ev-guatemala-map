@@ -7,9 +7,13 @@ import { getAllRatings } from '../utils/reviewsApi';
 async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
   // Fuente principal: D1 (/api/stations). Si falla, degrada al endpoint
   // legado de Notion y, en última instancia, el caller usa la semilla estática.
+  // Se manda el token si existe para que el Worker, si quien pregunta es
+  // admin, incluya createdByName/createdByEmail (dato oculto al resto).
+  const token = localStorage.getItem('ev_auth_token');
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
   for (const endpoint of ['/api/stations', '/api/stations/dynamic']) {
     try {
-      const res = await fetch(endpoint);
+      const res = await fetch(endpoint, { headers });
       if (!res.ok) continue;
       return await res.json() as ChargerStation[];
     } catch {
@@ -329,6 +333,9 @@ export const useStore = create<AppState>((set, get) => ({
       set({ isAdminAuthenticated: true });
     }
     set({ authToken: data.token, currentUser: data.user });
+    // Vuelve a pedir las estaciones con el token ya guardado: si es admin,
+    // la respuesta ahora trae quién dio de alta cada una.
+    if (data.user.role === 'admin') await get().loadDynamicStations();
   },
 
   registerUser: async (email, password, name, phone) => {

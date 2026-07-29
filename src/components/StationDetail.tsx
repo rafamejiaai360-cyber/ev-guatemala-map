@@ -138,6 +138,14 @@ export default function StationDetail({ station, onBack }: Props) {
             <p className="text-[10px] text-gray-400 italic leading-relaxed">{station.notes}</p>
           )}
 
+          {currentUser?.role === 'admin' && (station.createdByName || station.createdByEmail) && (
+            <div className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+              <span className="font-semibold">🔒 Solo admin — dada de alta por:</span>{' '}
+              {station.createdByName || 'Sin nombre'}
+              {station.createdByEmail && <span className="text-amber-700/70"> · {station.createdByEmail}</span>}
+            </div>
+          )}
+
           {currentUser && (
             <button
               onClick={() => { setEditMsg(null); setShowEdit(true); }}

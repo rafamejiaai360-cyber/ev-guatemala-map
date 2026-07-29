@@ -40,6 +40,11 @@ export interface ChargerStation {
   confirmCount?: number;
   openReports?: number;
   googleMapsUrl?: string;
+  /** Quién dio de alta la estación. Solo viene poblado cuando la API lo
+   *  entrega a un admin (ver worker/index.ts handleGetStationsFromD1) —
+   *  protege a quien registró una estación residencial. */
+  createdByEmail?: string | null;
+  createdByName?: string | null;
 }
 
 export interface Review {
