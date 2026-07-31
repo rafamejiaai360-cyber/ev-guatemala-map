@@ -1535,6 +1535,49 @@ async function handleListUsers(request: Request, env: Env): Promise<Response> {
   })));
 }
 
+// ─── Visitas (contador simple; visibilidad solo para admin) ──────────────────
+// No se guarda IP, user-agent ni ningún identificador — cada fila es solo un
+// timestamp. Alcanza para "cuántas veces se abrió el mapa" sin capturar datos
+// personales.
+
+async function handleTrackVisit(env: Env): Promise<Response> {
+  if (!env.DB) return json({ ok: true }); // no bloquea la carga del mapa si falta D1
+  try {
+    await env.DB.prepare('INSERT INTO page_views (created_at) VALUES (datetime(\'now\'))').run();
+  } catch {
+    // Falla en silencio (ej. tabla no migrada todavía) — nunca debe romper la carga del mapa.
+  }
+  return json({ ok: true });
+}
+
+async function handleGetVisitStats(request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+
+  const [totalRow, todayRow, last7Row, last30Row, daily] = await Promise.all([
+    env.DB.prepare('SELECT COUNT(*) AS n FROM page_views').first<{ n: number }>(),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM page_views WHERE created_at >= datetime('now', 'start of day')").first<{ n: number }>(),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM page_views WHERE created_at >= datetime('now', '-6 days', 'start of day')").first<{ n: number }>(),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM page_views WHERE created_at >= datetime('now', '-29 days', 'start of day')").first<{ n: number }>(),
+    env.DB.prepare(
+      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
+         FROM page_views
+        WHERE created_at >= datetime('now', '-29 days', 'start of day')
+        GROUP BY day
+        ORDER BY day`
+    ).all<{ day: string; n: number }>(),
+  ]);
+
+  return json({
+    total: totalRow?.n ?? 0,
+    today: todayRow?.n ?? 0,
+    last7Days: last7Row?.n ?? 0,
+    last30Days: last30Row?.n ?? 0,
+    daily: daily.results.map(r => ({ day: r.day, count: r.n })),
+  });
+}
+
 // ─── Station PATCH handler ────────────────────────────────────────────────────
 
 // Normalize an incoming edit payload to the subset of fields users are
@@ -2059,6 +2102,14 @@ export default {
       if (photoMatch) {
         if (request.method === 'GET') return handleGetPhoto(photoMatch[1], env);
       }
+
+      // Contador de visitas: POST público (lo llama el frontend al cargar);
+      // GET solo admin (estadísticas para el panel).
+      if (path === 'visits' && request.method === 'POST') {
+        ctx.waitUntil(handleTrackVisit(env));
+        return json({ ok: true });
+      }
+      if (path === 'visits' && request.method === 'GET') return handleGetVisitStats(request, env);
 
       return apiError('Ruta no encontrada', 404);
     }

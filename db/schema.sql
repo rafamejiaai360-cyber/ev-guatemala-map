@@ -144,6 +144,17 @@ CREATE INDEX IF NOT EXISTS idx_requests_station ON station_requests(station_id);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON station_requests(status, created_at);
 
 -- ============================================================
+-- VISITAS — contador simple de aperturas de la app, solo para el admin.
+-- Cada fila es únicamente un timestamp: sin IP, sin user-agent, sin
+-- identificador de usuario. No se necesita más para "cuántas visitas".
+-- ============================================================
+CREATE TABLE IF NOT EXISTS page_views (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_page_views_created ON page_views(created_at);
+
+-- ============================================================
 -- METADATOS DE SINCRONIZACIÓN Y RESPALDO (observabilidad)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ops_log (

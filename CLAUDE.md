@@ -147,6 +147,21 @@ teléfono vía `PATCH /api/auth/me` (`handleUpdateProfile`); email de solo
 lectura (es el identificador de la cuenta/JWT, cambiarlo queda fuera de
 alcance por ahora).
 
+**Contador de visitas (31 jul 2026)**: tabla D1 `page_views` — cada fila es
+solo un `created_at`, sin IP/user-agent/identificador, para no capturar
+datos personales. `POST /api/visits` (público, sin auth) inserta una fila;
+el frontend lo llama una vez al montar `App.tsx`, únicamente cuando
+`!isAdminPanel` (abrir `/admin` no cuenta como visita). `GET /api/visits`
+(solo admin, mismo patrón 403 que `handleListUsers`) agrega totales
+(hoy/7d/30d/histórico) y una serie diaria de 30 días. Pestaña "Visitas" en
+`AdminPanel.tsx` (`VisitsTab`) la muestra con tarjetas + una barra simple en
+CSS (sin librería de charts nueva). **Requiere migración manual**: la tabla
+no se crea sola — hay que correr
+`npx wrangler d1 execute ev-guatemala-db --remote --file=db/schema.sql`
+una vez (todo el archivo usa `IF NOT EXISTS`, así que es seguro re-correrlo
+contra prod). Sin la tabla, `POST /api/visits` falla en silencio (no rompe
+la carga del mapa) y `GET /api/visits` da 500 hasta que se aplique.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
