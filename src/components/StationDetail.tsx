@@ -134,7 +134,14 @@ export default function StationDetail({ station, onBack }: Props) {
             <span className="text-[10px] text-gray-400">{station.network}</span>
           </div>
 
-          {station.notes && (
+          {station.notes && station.type === 'residential' && (
+            <div className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+              <span className="font-semibold block mb-0.5">🔒 Solo admin — historial de verificación:</span>
+              <span className="italic leading-relaxed text-amber-700/90">{station.notes}</span>
+            </div>
+          )}
+
+          {station.notes && station.type !== 'residential' && (
             <p className="text-[10px] text-gray-400 italic leading-relaxed">{station.notes}</p>
           )}
 
