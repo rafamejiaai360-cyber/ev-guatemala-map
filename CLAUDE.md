@@ -116,6 +116,19 @@ Codificación de color acordada — **dos señales independientes, no una sola**
 - Filtro "🔌 Públicas / 🏠 Residenciales" en `FilterBar.tsx`; selector en
   `AddStationModal.tsx`, `EditStationModal.tsx` y `AdminPanel.tsx`.
 
+**Privacidad del historial de verificación en residenciales (31 jul 2026)**:
+el campo `stations.notes` acumula automáticamente el historial de
+confirmaciones/reportes/correcciones con el correo de quien los hizo (ej.
+`[Verificado en sitio por: correo@ejemplo.com, fecha]`, agregado en
+`handleVerifyStation` y `handleStationApprove` en `worker/index.ts`). Para
+`type='residential'` ese correo podía identificar indirectamente al dueño de
+la vivienda, así que `handleGetStationsFromD1` ahora omite `notes` de la
+respuesta salvo que quien pida sea admin (`isAdmin || r.type !== 'residential'`)
+— igual que ya pasaba con `createdByEmail`/`createdByName`. Las públicas
+siguen mostrando ese historial a cualquiera, sin cambio. En la UI,
+`StationDetail.tsx` marca ese bloque con "🔒 Solo admin" cuando es
+residencial (para admins; el resto de usuarios ya no lo recibe de la API).
+
 **Plataforma de usuarios (14 jul 2026)**: registro pide nombre completo,
 correo y **teléfono** (`users.phone`, 8 dígitos GT, con/sin `+502` — solo
 declarado, sin verificar por correo/SMS todavía). **Las estaciones

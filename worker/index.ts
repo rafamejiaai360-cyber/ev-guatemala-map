@@ -1044,7 +1044,11 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
       network: r.network || 'Desconocido',
       access: ['public', 'semi-public', 'private'].includes(r.access) ? r.access : 'public',
-      notes: r.notes || undefined,
+      // El historial de verificación incluido en `notes` lleva el correo de
+      // quien confirmó/reportó/corrigió — en una residencial eso puede
+      // identificar al dueño de la casa, así que solo el admin lo ve.
+      // Las públicas lo mantienen visible para cualquiera (como siempre).
+      notes: (isAdmin || r.type !== 'residential') ? (r.notes || undefined) : undefined,
       verification,
       freshness: r.verification_status,
       lastConfirmedAt: r.last_confirmed_at || undefined,
