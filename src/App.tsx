@@ -20,6 +20,7 @@ export default function App() {
     loadRatings();
     loadDynamicStations();
     loadCurrentUser();
+    if (!isAdminPanel) fetch('/api/visits', { method: 'POST' }).catch(() => {});
   }, []);
 
   if (isAdminPanel) return <AdminPanel />;

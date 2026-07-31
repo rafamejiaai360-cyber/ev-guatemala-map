@@ -6,7 +6,7 @@ import EditStationModal from './EditStationModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'stations' | 'add' | 'pending' | 'users';
+type Tab = 'stations' | 'add' | 'pending' | 'users' | 'visits';
 
 interface UserInfo {
   email: string;
@@ -722,6 +722,81 @@ function UsersTab() {
   );
 }
 
+// ─── Visits Tab ───────────────────────────────────────────────────────────────
+
+interface VisitStats {
+  total: number;
+  today: number;
+  last7Days: number;
+  last30Days: number;
+  daily: Array<{ day: string; count: number }>;
+}
+
+function VisitsTab() {
+  const { authToken } = useStore();
+  const [stats, setStats] = useState<VisitStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/visits', { headers: { Authorization: `Bearer ${authToken}` } })
+      .then(async r => {
+        if (!r.ok) { const e = await r.json() as { error?: string }; throw new Error(e.error ?? `Error ${r.status}`); }
+        return r.json() as Promise<VisitStats>;
+      })
+      .then(data => setStats(data))
+      .catch(e => setError(e instanceof Error ? e.message : 'Error al cargar visitas'))
+      .finally(() => setLoading(false));
+  }, [authToken]);
+
+  if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Cargando visitas…</p>;
+  if (error) return <p className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{error}</p>;
+  if (!stats) return null;
+
+  const maxDaily = Math.max(1, ...stats.daily.map(d => d.count));
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        {[
+          { label: 'Hoy', value: stats.today },
+          { label: 'Últimos 7 días', value: stats.last7Days },
+          { label: 'Últimos 30 días', value: stats.last30Days },
+          { label: 'Total histórico', value: stats.total },
+        ].map(card => (
+          <div key={card.label} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+            <div className="text-xl font-semibold text-gray-900">{card.value.toLocaleString('es-GT')}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{card.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+        <p className="text-xs font-medium text-gray-700 mb-3">Visitas por día (últimos 30 días)</p>
+        {stats.daily.length === 0 ? (
+          <p className="text-xs text-gray-400 text-center py-6">Todavía no hay visitas registradas</p>
+        ) : (
+          <div className="flex items-end gap-[3px] h-32">
+            {stats.daily.map(d => (
+              <div key={d.day} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                <div
+                  title={`${new Date(d.day + 'T00:00:00').toLocaleDateString('es-GT', { day: 'numeric', month: 'short' })}: ${d.count} visita${d.count !== 1 ? 's' : ''}`}
+                  className="w-full bg-green-500 hover:bg-green-600 rounded-t transition-colors min-h-[2px]"
+                  style={{ height: `${(d.count / maxDaily) * 100}%` }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <p className="text-xs text-gray-400 mt-3">
+        Se cuenta cada carga del mapa público (no incluye el panel de admin). No se guarda IP ni identidad de quien visita.
+      </p>
+    </div>
+  );
+}
+
 // ─── Main Admin Panel ─────────────────────────────────────────────────────────
 
 export default function AdminPanel() {
@@ -810,6 +885,7 @@ export default function AdminPanel() {
             { id: 'add', label: 'Agregar', icon: 'M12 4v16m8-8H4' },
             { id: 'pending', label: 'Pendientes', icon: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' },
             { id: 'users', label: 'Usuarios', icon: 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z' },
+            { id: 'visits', label: 'Visitas', icon: 'M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z' },
           ] as const).map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
@@ -860,6 +936,14 @@ export default function AdminPanel() {
             <h2 className="text-sm font-semibold text-gray-900 mb-1">Usuarios registrados</h2>
             <p className="text-xs text-gray-400 mb-5">Gestiona las cuentas y suscripciones de los usuarios</p>
             <UsersTab />
+          </div>
+        )}
+
+        {tab === 'visits' && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900 mb-1">Visitas</h2>
+            <p className="text-xs text-gray-400 mb-5">Cuántas veces se ha abierto el mapa</p>
+            <VisitsTab />
           </div>
         )}
       </div>
