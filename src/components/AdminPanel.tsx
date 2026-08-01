@@ -585,6 +585,8 @@ function UsersTab() {
   const [saving, setSaving] = useState(false);
   const [savingRoleEmail, setSavingRoleEmail] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
+  const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/auth/users', { headers: { Authorization: `Bearer ${authToken}` } })
@@ -628,6 +630,30 @@ function UsersTab() {
       setTimeout(() => setSavedMsg(null), 4000);
     } finally {
       setSavingRoleEmail(null);
+    }
+  }
+
+  async function deleteUser(email: string) {
+    setDeletingEmail(email);
+    try {
+      const res = await fetch('/api/auth/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? `Error ${res.status}`);
+      }
+      setUsers(prev => prev.filter(u => u.email !== email));
+      setConfirmDeleteEmail(null);
+      setSavedMsg(`Usuario ${email} eliminado`);
+      setTimeout(() => setSavedMsg(null), 4000);
+    } catch (e) {
+      setSavedMsg(e instanceof Error ? e.message : 'Error al eliminar el usuario');
+      setTimeout(() => setSavedMsg(null), 4000);
+    } finally {
+      setDeletingEmail(null);
     }
   }
 
@@ -687,8 +713,28 @@ function UsersTab() {
                   className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-gray-600 flex-shrink-0">
                   {editingEmail === user.email ? 'Cancelar' : 'Suscripción'}
                 </button>
+                {user.email !== currentUser?.email && (
+                  <button onClick={() => setConfirmDeleteEmail(confirmDeleteEmail === user.email ? null : user.email)}
+                    className="text-xs px-2.5 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg transition-colors text-red-600 flex-shrink-0">
+                    {confirmDeleteEmail === user.email ? 'Cancelar' : 'Eliminar'}
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Delete confirmation */}
+            {confirmDeleteEmail === user.email && (
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-3">
+                <p className="flex-1 text-xs text-gray-500">
+                  ¿Eliminar la cuenta de <span className="font-medium text-gray-700">{user.name}</span> ({user.email})?
+                  Ya no podrá iniciar sesión ni aparecerá en este listado.
+                </p>
+                <button onClick={() => deleteUser(user.email)} disabled={deletingEmail === user.email}
+                  className="text-xs px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition-colors flex-shrink-0">
+                  {deletingEmail === user.email ? 'Eliminando…' : 'Confirmar eliminación'}
+                </button>
+              </div>
+            )}
 
             {/* Subscription editor */}
             {editingEmail === user.email && (

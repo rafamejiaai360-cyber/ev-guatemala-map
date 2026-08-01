@@ -1524,6 +1524,24 @@ async function handleSetRole(request: Request, env: Env): Promise<Response> {
   return json({ ok: true });
 }
 
+async function handleDeleteUser(request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores pueden eliminar usuarios', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const body = await request.json() as { email?: string };
+  if (!body.email) return apiError('email requerido');
+  const email = body.email.toLowerCase().trim();
+  if (email === requester.email) return apiError('No puedes eliminar tu propia cuenta');
+  const target = await getUser(email, env);
+  if (!target) return apiError('Usuario no encontrado', 404);
+
+  // Sin borrado físico (misma regla que estaciones/reseñas): la cuenta
+  // queda deshabilitada, no desaparece de la base — deja de poder iniciar
+  // sesión y sale del listado del panel de admin.
+  await env.DB.prepare("UPDATE users SET account_status = 'disabled' WHERE email = ?").bind(email).run();
+  return json({ ok: true });
+}
+
 async function handleListUsers(request: Request, env: Env): Promise<Response> {
   const requester = await getUserFromToken(request, env);
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
@@ -1865,6 +1883,7 @@ export default {
       if (path === 'auth/set-subscription' && request.method === 'POST') return handleSetSubscription(request, env);
       if (path === 'auth/set-role' && request.method === 'POST') return handleSetRole(request, env);
       if (path === 'auth/users' && request.method === 'GET') return handleListUsers(request, env);
+      if (path === 'auth/delete-user' && request.method === 'POST') return handleDeleteUser(request, env);
 
       // Scan: GET /api/scan
       if (path === 'scan' && request.method === 'GET') return handleGetScan(env);
