@@ -49,10 +49,11 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function StationDetail({ station, onBack }: Props) {
-  const { currentUser, userLocation } = useStore();
+  const { currentUser, userLocation, setAuthModalOpen } = useStore();
   const [showEdit, setShowEdit] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
   const [showRequestUse, setShowRequestUse] = useState(false);
+  const [showRequestLoginGate, setShowRequestLoginGate] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
 
   const destination = encodeURIComponent(`${station.name}, ${station.address}, ${station.zone || 'Guatemala'}`);
@@ -98,11 +99,35 @@ export default function StationDetail({ station, onBack }: Props) {
           {station.type === 'residential' && (
             <div>
               <button
-                onClick={() => { setRequestSent(false); setShowRequestUse(true); }}
+                onClick={() => {
+                  if (!currentUser) {
+                    setShowRequestLoginGate(true);
+                    return;
+                  }
+                  setRequestSent(false);
+                  setShowRequestUse(true);
+                }}
                 className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-xl transition-colors"
               >
                 🔌 Solicitar uso de esta estación
               </button>
+              {showRequestLoginGate && !currentUser && (
+                <div className="mt-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 space-y-1.5">
+                  <p className="text-[11px] text-blue-800 font-medium">
+                    🔒 Necesitas una cuenta para solicitar el uso de esta estación
+                  </p>
+                  <p className="text-[10px] text-blue-700 leading-relaxed">
+                    Así el administrador sabe quién solicita y puede contactarte.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setShowRequestLoginGate(false); setAuthModalOpen(true); }}
+                    className="text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-1.5 transition-colors"
+                  >
+                    Iniciar sesión / Crear cuenta
+                  </button>
+                </div>
+              )}
               {requestSent && (
                 <p className="text-[10px] text-blue-600 mt-1">
                   Solicitud enviada — un administrador te contactará pronto.

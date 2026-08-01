@@ -9,11 +9,14 @@ export interface StationUseRequest {
   message?: string;
 }
 
-export async function requestStationUse(data: StationUseRequest): Promise<{ ok: boolean; id: string }> {
+export async function requestStationUse(data: StationUseRequest, authToken?: string | null): Promise<{ ok: boolean; id: string }> {
   const { stationId, ...body } = data;
   const res = await fetch(`${BASE}/stations/${encodeURIComponent(stationId)}/request-use`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {

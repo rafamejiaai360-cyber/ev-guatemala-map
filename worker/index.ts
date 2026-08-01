@@ -1788,6 +1788,9 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
 // de la estación ni expone contacto del dueño — solo notifica al admin, que
 // media el primer contacto manualmente (por teléfono/Telegram).
 async function handlePostStationRequest(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('Debes iniciar sesión para solicitar el uso de una estación residencial', 401);
+
   const body = await request.json() as {
     name?: string; phone?: string; vehicle?: string; preferredDate?: string; message?: string;
   };

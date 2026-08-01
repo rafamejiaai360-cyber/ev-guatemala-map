@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ChargerStation } from '../types';
+import { useStore } from '../store/useStore';
 import { requestStationUse } from '../utils/stationRequestsApi';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function RequestUseModal({ station, onClose, onSent }: Props) {
+  const { authToken } = useStore();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [vehicle, setVehicle] = useState('');
@@ -33,7 +35,7 @@ export default function RequestUseModal({ station, onClose, onSent }: Props) {
         vehicle: vehicle.trim(),
         preferredDate,
         message: message.trim(),
-      });
+      }, authToken);
       onSent();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar la solicitud. Intenta de nuevo.');
