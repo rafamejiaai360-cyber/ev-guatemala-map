@@ -1407,7 +1407,7 @@ async function getUserFromToken(request: Request, env: Env): Promise<UserRecord 
 
 // ─── Auth handlers ────────────────────────────────────────────────────────────
 
-async function handleRegister(request: Request, env: Env): Promise<Response> {
+async function handleRegister(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!env.JWT_SECRET) return apiError('Autenticación no configurada en el servidor', 503);
   const body = await request.json() as { email?: string; password?: string; name?: string; phone?: string };
   const email = body.email?.toLowerCase().trim() ?? '';
@@ -1431,6 +1431,13 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
   ).bind(email, name, phone, passwordHash, salt, role).run();
 
   const token = await signJWT({ sub: email, name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
+
+  ctx.waitUntil(notifyAdmin(
+    env,
+    'Nuevo usuario registrado',
+    `Nombre: ${name}\nCorreo: ${email}\nTeléfono: ${phone}\nRol: ${role}`,
+  ));
+
   return json({ token, user: { email, name, phone, role, subscriptionEnd: undefined } }, 201);
 }
 
@@ -1523,12 +1530,13 @@ async function handleListUsers(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json([]);
 
   const { results } = await env.DB.prepare(
-    "SELECT email, name, role, created_at, subscription_end FROM users WHERE account_status = 'active' ORDER BY created_at"
-  ).all<{ email: string; name: string; role: string; created_at: string; subscription_end: string | null }>();
+    "SELECT email, name, phone, role, created_at, subscription_end FROM users WHERE account_status = 'active' ORDER BY created_at"
+  ).all<{ email: string; name: string; phone: string | null; role: string; created_at: string; subscription_end: string | null }>();
 
   return json(results.map(u => ({
     email: u.email,
     name: u.name,
+    phone: u.phone ?? undefined,
     role: u.role,
     createdAt: u.created_at,
     subscriptionEnd: u.subscription_end ?? undefined,
@@ -1849,7 +1857,7 @@ export default {
       }
 
       // Auth endpoints
-      if (path === 'auth/register' && request.method === 'POST') return handleRegister(request, env);
+      if (path === 'auth/register' && request.method === 'POST') return handleRegister(request, env, ctx);
       if (path === 'auth/login' && request.method === 'POST') return handleLogin(request, env);
       if (path === 'auth/me' && request.method === 'GET') return handleGetMe(request, env);
       if (path === 'auth/me' && request.method === 'PATCH') return handleUpdateProfile(request, env);
