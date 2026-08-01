@@ -11,6 +11,7 @@ type Tab = 'stations' | 'add' | 'pending' | 'users' | 'visits';
 interface UserInfo {
   email: string;
   name: string;
+  phone?: string;
   role: 'admin' | 'user';
   createdAt: string;
   subscriptionEnd?: string;
@@ -659,6 +660,7 @@ function UsersTab() {
                   </span>
                 </div>
                 <div className="text-xs text-gray-400">{user.email}</div>
+                {user.phone && <div className="text-xs text-gray-400">📞 {user.phone}</div>}
                 <div className="text-xs text-gray-400 mt-0.5">
                   Registro: {new Date(user.createdAt).toLocaleDateString('es-GT')}
                   {user.subscriptionEnd && (
