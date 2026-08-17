@@ -139,6 +139,11 @@ interface AppState {
   profileModalOpen: boolean;
   setProfileModalOpen: (open: boolean) => void;
   updateProfile: (name: string, phone: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+
+  // Contact admin (public, no login required)
+  contactAdminModalOpen: boolean;
+  setContactAdminModalOpen: (open: boolean) => void;
 
   // Ratings (loaded from Worker API)
   ratings: Record<string, RatingInfo>;
@@ -390,6 +395,21 @@ export const useStore = create<AppState>((set, get) => ({
     if (!res.ok) throw new Error(data.error ?? 'Error al actualizar el perfil');
     set({ currentUser: data });
   },
+
+  changePassword: async (currentPassword, newPassword) => {
+    const token = get().authToken;
+    if (!token) throw new Error('No autenticado');
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await res.json() as { ok?: boolean; error?: string };
+    if (!res.ok) throw new Error(data.error ?? 'Error al cambiar la contraseña');
+  },
+
+  contactAdminModalOpen: false,
+  setContactAdminModalOpen: (open) => set({ contactAdminModalOpen: open }),
 
   ratings: {},
   loadRatings: async () => {

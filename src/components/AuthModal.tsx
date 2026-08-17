@@ -54,10 +54,23 @@ export default function AuthModal() {
     }
   }
 
-  function handleForgot(e: React.FormEvent) {
+  async function handleForgot(e: React.FormEvent) {
     e.preventDefault();
     reset();
-    setSuccess('Para recuperar tu contraseña, contacta al administrador del sistema. Esta función estará disponible próximamente con envío de correo automático.');
+    if (!email) { setError('Ingresa tu email'); return; }
+    setLoading(true);
+    try {
+      await fetch('/api/auth/request-password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+    } catch {
+      // El aviso al admin es best-effort — no bloquea el mensaje al usuario.
+    } finally {
+      setLoading(false);
+      setSuccess('Hemos avisado al administrador de tu solicitud. Te contactará para restablecer tu contraseña.');
+    }
   }
 
   return (
@@ -207,7 +220,7 @@ export default function AuthModal() {
           {tab === 'forgot' && (
             <form onSubmit={handleForgot} className="space-y-3">
               <p className="text-xs text-gray-500">
-                Ingresa tu email y te enviaremos instrucciones para recuperar tu contraseña.
+                Ingresa tu email y avisaremos al administrador para que te ayude a restablecer tu contraseña.
               </p>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
@@ -225,9 +238,10 @@ export default function AuthModal() {
               {!success && (
                 <button
                   type="submit"
-                  className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium rounded-xl transition-colors"
+                  disabled={loading}
+                  className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
                 >
-                  Enviar instrucciones
+                  {loading ? 'Enviando…' : 'Solicitar restablecimiento'}
                 </button>
               )}
               <button

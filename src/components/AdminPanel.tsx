@@ -587,6 +587,10 @@ function UsersTab() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
   const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [confirmResetEmail, setConfirmResetEmail] = useState<string | null>(null);
+  const [resettingEmail, setResettingEmail] = useState<string | null>(null);
+  const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch('/api/auth/users', { headers: { Authorization: `Bearer ${authToken}` } })
@@ -657,7 +661,35 @@ function UsersTab() {
     }
   }
 
+  async function resetPassword(email: string) {
+    setResettingEmail(email);
+    try {
+      const res = await fetch('/api/auth/admin-reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json() as { tempPassword?: string; error?: string };
+      if (!res.ok || !data.tempPassword) throw new Error(data.error ?? `Error ${res.status}`);
+      setTempPasswords(prev => ({ ...prev, [email]: data.tempPassword! }));
+      setConfirmResetEmail(null);
+    } catch (e) {
+      setSavedMsg(e instanceof Error ? e.message : 'Error al restablecer la contraseña');
+      setTimeout(() => setSavedMsg(null), 4000);
+    } finally {
+      setResettingEmail(null);
+    }
+  }
+
   if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Cargando usuarios…</p>;
+
+  const q = search.trim().toLowerCase();
+  const filteredUsers = q
+    ? users.filter(u =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        (u.phone ?? '').toLowerCase().includes(q))
+    : users;
 
   return (
     <div>
@@ -666,13 +698,44 @@ function UsersTab() {
           ✓ {savedMsg}
         </div>
       )}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {users.length === 0 && (
-          <p className="px-4 py-8 text-center text-sm text-gray-400">No hay usuarios registrados</p>
+
+      <div className="relative mb-3">
+        <svg
+          className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+          width="14" height="14" fill="none" viewBox="0 0 24 24"
+          stroke="#9ca3af" strokeWidth={2.5}
+        >
+          <circle cx="11" cy="11" r="8" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35" />
+        </svg>
+        <input
+          type="text"
+          placeholder="Buscar por nombre, email o teléfono…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-green-400 transition-colors"
+        />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         )}
-        {users.map((user, idx) => (
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {filteredUsers.length === 0 && (
+          <p className="px-4 py-8 text-center text-sm text-gray-400">
+            {search ? `Sin resultados para "${search}"` : 'No hay usuarios registrados'}
+          </p>
+        )}
+        {filteredUsers.map((user, idx) => (
           <div key={user.email}
-            className={`px-4 py-3 ${idx < users.length - 1 ? 'border-b border-gray-100' : ''}`}>
+            className={`px-4 py-3 ${idx < filteredUsers.length - 1 ? 'border-b border-gray-100' : ''}`}>
             <div className="flex items-center gap-3 flex-wrap">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${user.role === 'admin' ? 'bg-green-600' : 'bg-blue-500'}`}>
                 {user.name.charAt(0).toUpperCase()}
@@ -713,6 +776,10 @@ function UsersTab() {
                   className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-gray-600 flex-shrink-0">
                   {editingEmail === user.email ? 'Cancelar' : 'Suscripción'}
                 </button>
+                <button onClick={() => { setConfirmResetEmail(confirmResetEmail === user.email ? null : user.email); setTempPasswords(prev => Object.fromEntries(Object.entries(prev).filter(([e]) => e !== user.email))); }}
+                  className="text-xs px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors text-amber-700 flex-shrink-0">
+                  {confirmResetEmail === user.email ? 'Cancelar' : 'Restablecer contraseña'}
+                </button>
                 {user.email !== currentUser?.email && (
                   <button onClick={() => setConfirmDeleteEmail(confirmDeleteEmail === user.email ? null : user.email)}
                     className="text-xs px-2.5 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg transition-colors text-red-600 flex-shrink-0">
@@ -721,6 +788,48 @@ function UsersTab() {
                 )}
               </div>
             </div>
+
+            {/* Reset password confirmation */}
+            {confirmResetEmail === user.email && (
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-3">
+                <p className="flex-1 text-xs text-gray-500">
+                  ¿Generar una contraseña temporal nueva para <span className="font-medium text-gray-700">{user.name}</span>?
+                  La contraseña anterior dejará de funcionar de inmediato.
+                </p>
+                <button onClick={() => resetPassword(user.email)} disabled={resettingEmail === user.email}
+                  className="text-xs px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg transition-colors flex-shrink-0">
+                  {resettingEmail === user.email ? 'Generando…' : 'Confirmar restablecimiento'}
+                </button>
+              </div>
+            )}
+
+            {/* Revealed temp password — shown once, right after generating it */}
+            {tempPasswords[user.email] && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                  <p className="text-xs text-amber-800 mb-1.5">
+                    Contraseña temporal — cópiala y compártela con {user.name} por otro medio (teléfono, WhatsApp). No volverá a mostrarse.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-sm font-mono font-semibold text-amber-900 bg-white border border-amber-200 rounded px-2.5 py-1.5 select-all">
+                      {tempPasswords[user.email]}
+                    </code>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(tempPasswords[user.email])}
+                      className="text-xs px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors text-amber-800 flex-shrink-0"
+                    >
+                      Copiar
+                    </button>
+                    <button
+                      onClick={() => setTempPasswords(prev => Object.fromEntries(Object.entries(prev).filter(([e]) => e !== user.email)))}
+                      className="text-xs px-2.5 py-1.5 bg-white hover:bg-gray-50 border border-amber-200 rounded-lg transition-colors text-amber-700 flex-shrink-0"
+                    >
+                      Ocultar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Delete confirmation */}
             {confirmDeleteEmail === user.email && (
@@ -764,7 +873,9 @@ function UsersTab() {
         ))}
       </div>
       <p className="text-xs text-gray-400 mt-3">
-        {users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}
+        {search
+          ? `${filteredUsers.length} de ${users.length} usuario${users.length !== 1 ? 's' : ''}`
+          : `${users.length} usuario${users.length !== 1 ? 's' : ''} registrado${users.length !== 1 ? 's' : ''}`}
       </p>
     </div>
   );
