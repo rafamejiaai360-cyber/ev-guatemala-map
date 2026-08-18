@@ -1561,6 +1561,74 @@ async function handleListUsers(request: Request, env: Env): Promise<Response> {
   })));
 }
 
+// Genera una contraseña temporal legible (evita caracteres ambiguos como 0/O, 1/l/I).
+function generateTempPassword(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  return Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
+}
+
+// El admin nunca puede leer una contraseña existente (solo se guarda su hash
+// PBKDF2 — ver hashPassword). Lo que sí puede hacer es forzar una contraseña
+// temporal nueva y comunicársela al usuario fuera de la app (teléfono/WhatsApp);
+// por eso la respuesta trae el texto en claro una única vez, en el momento de
+// generarla, y no vuelve a estar disponible después.
+async function handleAdminResetPassword(request: Request, env: Env): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores pueden restablecer contraseñas', 403);
+  const body = await request.json() as { email?: string };
+  if (!body.email) return apiError('email requerido');
+  const target = await getUser(body.email, env);
+  if (!target) return apiError('Usuario no encontrado', 404);
+
+  const tempPassword = generateTempPassword();
+  const { hash, salt } = await hashPassword(tempPassword);
+  await saveUser({ ...target, passwordHash: hash, salt }, env);
+  return json({ ok: true, tempPassword });
+}
+
+// Solicitud pública de "olvidé mi contraseña": no hay envío de correo/SMS
+// transaccional integrado todavía (ver CLAUDE.md), así que en vez de un link
+// de recuperación esto solo avisa al admin por Telegram para que restablezca
+// la cuenta desde el panel y le pase la contraseña temporal al usuario por
+// otro medio. Responde siempre igual, exista o no la cuenta, para no filtrar
+// qué correos están registrados.
+async function handleRequestPasswordReset(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const body = await request.json() as { email?: string };
+  const email = body.email?.toLowerCase().trim() ?? '';
+  if (email) {
+    const target = await getUser(email, env);
+    if (target) {
+      ctx.waitUntil(notifyAdmin(
+        env,
+        'Solicitud de restablecer contraseña',
+        `Usuario: ${target.name}\nCorreo: ${target.email}${target.phone ? `\nTeléfono: ${target.phone}` : ''}`,
+      ));
+    }
+  }
+  return json({ ok: true });
+}
+
+// Formulario público de "contactar al administrador" — patrocinios, consultas,
+// o cualquier motivo. No requiere cuenta; solo avisa por Telegram, igual que
+// el resto de notificaciones al admin.
+async function handleContactAdmin(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const body = await request.json() as { name?: string; email?: string; phone?: string; message?: string };
+  const name = body.name?.trim() ?? '';
+  const email = body.email?.trim() ?? '';
+  const phone = normalizePhone(body.phone ?? '') ?? '';
+  const message = body.message?.trim() ?? '';
+  if (!email || !email.includes('@')) return apiError('Email inválido');
+  if (!message) return apiError('El mensaje es requerido');
+
+  ctx.waitUntil(notifyAdmin(
+    env,
+    'Nuevo mensaje de contacto',
+    `De: ${name || 'Sin nombre'} (${email})${phone ? `\nTeléfono: ${phone}` : ''}\n\n${message}`,
+  ));
+  return json({ ok: true });
+}
+
 // ─── Visitas (contador simple; visibilidad solo para admin) ──────────────────
 // No se guarda IP, user-agent ni ningún identificador — cada fila es solo un
 // timestamp. Alcanza para "cuántas veces se abrió el mapa" sin capturar datos
@@ -1887,6 +1955,9 @@ export default {
       if (path === 'auth/set-role' && request.method === 'POST') return handleSetRole(request, env);
       if (path === 'auth/users' && request.method === 'GET') return handleListUsers(request, env);
       if (path === 'auth/delete-user' && request.method === 'POST') return handleDeleteUser(request, env);
+      if (path === 'auth/admin-reset-password' && request.method === 'POST') return handleAdminResetPassword(request, env);
+      if (path === 'auth/request-password-reset' && request.method === 'POST') return handleRequestPasswordReset(request, env, ctx);
+      if (path === 'contact-admin' && request.method === 'POST') return handleContactAdmin(request, env, ctx);
 
       // Scan: GET /api/scan
       if (path === 'scan' && request.method === 'GET') return handleGetScan(env);
