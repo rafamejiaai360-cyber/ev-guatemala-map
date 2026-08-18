@@ -5,6 +5,7 @@ export default function ContactAdminModal() {
   const { setContactAdminModalOpen } = useStore();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -14,13 +15,15 @@ export default function ContactAdminModal() {
     e.preventDefault();
     setError(null);
     if (!email || !email.includes('@')) { setError('Ingresa un email válido'); return; }
+    const phoneDigits = phone.replace(/[^\d]/g, '').replace(/^502/, '');
+    if (phone && !/^\d{8}$/.test(phoneDigits)) { setError('El teléfono debe tener 8 dígitos (ej. 5512-3456)'); return; }
     if (!message.trim()) { setError('Escribe tu mensaje'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/contact-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), message: message.trim() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), phone: phoneDigits, message: message.trim() }),
       });
       const data = await res.json() as { ok?: boolean; error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Error al enviar el mensaje');
@@ -81,6 +84,16 @@ export default function ContactAdminModal() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="tu@email.com"
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-green-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Teléfono <span className="font-normal text-gray-400">(opcional)</span></label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="5512-3456"
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-green-400"
               />
             </div>

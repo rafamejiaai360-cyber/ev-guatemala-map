@@ -1613,9 +1613,10 @@ async function handleRequestPasswordReset(request: Request, env: Env, ctx: Execu
 // o cualquier motivo. No requiere cuenta; solo avisa por Telegram, igual que
 // el resto de notificaciones al admin.
 async function handleContactAdmin(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  const body = await request.json() as { name?: string; email?: string; message?: string };
+  const body = await request.json() as { name?: string; email?: string; phone?: string; message?: string };
   const name = body.name?.trim() ?? '';
   const email = body.email?.trim() ?? '';
+  const phone = normalizePhone(body.phone ?? '') ?? '';
   const message = body.message?.trim() ?? '';
   if (!email || !email.includes('@')) return apiError('Email inválido');
   if (!message) return apiError('El mensaje es requerido');
@@ -1623,7 +1624,7 @@ async function handleContactAdmin(request: Request, env: Env, ctx: ExecutionCont
   ctx.waitUntil(notifyAdmin(
     env,
     'Nuevo mensaje de contacto',
-    `De: ${name || 'Sin nombre'} (${email})\n\n${message}`,
+    `De: ${name || 'Sin nombre'} (${email})${phone ? `\nTeléfono: ${phone}` : ''}\n\n${message}`,
   ));
   return json({ ok: true });
 }

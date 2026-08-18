@@ -121,11 +121,8 @@ interface AppState {
   addStationModalOpen: boolean;
   setAddStationModalOpen: (open: boolean) => void;
 
-  // Admin auth (legacy)
+  // Admin flag — mirrors JWT role==='admin', set by login/register/loadCurrentUser
   isAdminAuthenticated: boolean;
-  setAdminAuthenticated: (val: boolean) => void;
-  adminLoginOpen: boolean;
-  setAdminLoginOpen: (open: boolean) => void;
 
   // User auth (JWT system)
   currentUser: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string } | null;
@@ -311,13 +308,6 @@ export const useStore = create<AppState>((set, get) => ({
   setAddStationModalOpen: (open) => set({ addStationModalOpen: open }),
 
   isAdminAuthenticated: localStorage.getItem('ev_admin_auth') === '1',
-  setAdminAuthenticated: (val) => {
-    if (val) localStorage.setItem('ev_admin_auth', '1');
-    else localStorage.removeItem('ev_admin_auth');
-    set({ isAdminAuthenticated: val });
-  },
-  adminLoginOpen: false,
-  setAdminLoginOpen: (open) => set({ adminLoginOpen: open }),
 
   currentUser: null,
   authToken: localStorage.getItem('ev_auth_token'),

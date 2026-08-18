@@ -13,8 +13,6 @@ export default function Header() {
     setScanModalOpen,
     setAddStationModalOpen,
     isAdminAuthenticated,
-    setAdminAuthenticated,
-    setAdminLoginOpen,
     currentUser,
     setAuthModalOpen,
     setProfileModalOpen,
@@ -205,29 +203,6 @@ export default function Header() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
               </svg>
               Ingresar
-            </button>
-          )}
-
-          {/* Admin lock button (legacy, hidden when using JWT auth) */}
-          {!currentUser && (
-            <button
-              onClick={() => isAdminAuthenticated ? setAdminAuthenticated(false) : setAdminLoginOpen(true)}
-              title={isAdminAuthenticated ? 'Cerrar sesión de administrador' : 'Acceso de administrador'}
-              className={`p-1.5 rounded-lg transition-colors ${
-                isAdminAuthenticated
-                  ? 'text-green-600 hover:bg-green-50'
-                  : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              {isAdminAuthenticated ? (
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                </svg>
-              ) : (
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                </svg>
-              )}
             </button>
           )}
         </div>
