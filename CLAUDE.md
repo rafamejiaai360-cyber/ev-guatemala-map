@@ -2,6 +2,16 @@
 
 Mapa de estaciones de carga para vehículos eléctricos en Guatemala. Frontend React + Worker de Cloudflare, con Notion como panel de curación de datos.
 
+## Cómo trabajar con Rafa (preferencia fija, 18 ago 2026)
+
+Rafa (dueño del proyecto) no tiene formación técnica. Para cualquier cambio de código:
+
+- **Explicar en lenguaje sencillo**, sin jerga sin traducir — el objetivo es que vaya entendiendo los términos poco a poco, sesión tras sesión, no abrumarlo.
+- **Siempre probar en una versión de prueba (staging) primero.** Nunca publicar directo a producción sin que él la haya probado y dado el visto bueno explícito.
+- **Avisar sin ambigüedad en qué versión estamos** en cada mensaje relevante: "esto es de prueba, no le llega a tus usuarios todavía" vs. "esto ya es la versión final, publicada para todos". No dar por hecho que él lo infiere del contexto técnico.
+- Flujo esperado: cambio en una rama → deploy a staging → Rafa prueba → visto bueno → merge a `main` (dispara el deploy automático a producción).
+- Si por algún motivo (como pasó el 18 ago 2026) el código termina publicado en producción antes de validarlo en staging, decirlo de inmediato y con claridad — no dejarlo implícito.
+
 ## Stack
 
 - **Frontend**: React 19 + TypeScript + Vite, Zustand (estado), Tailwind CSS, Leaflet/react-leaflet (mapa)
