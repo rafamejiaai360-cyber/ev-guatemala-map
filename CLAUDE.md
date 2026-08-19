@@ -172,6 +172,58 @@ una vez (todo el archivo usa `IF NOT EXISTS`, así que es seguro re-correrlo
 contra prod). Sin la tabla, `POST /api/visits` falla en silencio (no rompe
 la carga del mapa) y `GET /api/visits` da 500 hasta que se aplique.
 
+**Corrección de zona horaria + ubicación aproximada (19 ago 2026)**: los
+cortes "por día" (hoy/7d/30d/serie diaria) usaban `datetime('now')` de
+SQLite, que es UTC — como Guatemala es UTC-6 todo el año (sin horario de
+verano), una visita después de las 6pm hora Guatemala se contaba en el día
+siguiente. `handleGetVisitStats` ahora resta 6 horas (`GT_OFFSET`) antes de
+cortar la fecha, tanto al comparar como al agrupar. Además `page_views` ganó
+columnas `country`/`city`: `handleTrackVisit` las llena desde
+`request.cf.country`/`request.cf.city` (metadatos que Cloudflare ya adjunta
+a cada request en su borde) — **no se guarda la IP de nadie**, sigue el
+mismo principio de privacidad que el resto del contador. `GET /api/visits`
+agrega top 15 país y top 15 ciudad; `VisitsTab` los muestra en dos tarjetas
+nuevas y además lista los 30 días con su número exacto (antes solo se veía
+al pasar el mouse sobre la barra). **Requiere migración manual** en bases
+YA existentes (prod y staging): `page_views` no se recrea sola, hay que
+agregar las columnas a mano —
+`ALTER TABLE page_views ADD COLUMN country TEXT;` y
+`ALTER TABLE page_views ADD COLUMN city TEXT;` — antes de desplegar este
+cambio, o `handleTrackVisit` fallará en silencio al intentar insertar en
+columnas que no existen (no rompe la carga del mapa, pero deja de contar
+visitas hasta aplicar la migración). Visitas de antes de esta fecha quedan
+con país/ciudad en blanco. Estas dos migraciones ya se aplicaron a mano
+contra `ev-guatemala-db` y `ev-guatemala-db-staging` (vía el conector MCP de
+Cloudflare, sin wrangler CLI) — no hace falta repetirlas.
+
+**Departamento (region), mismo día, poco después**: a pedido de Rafa (el
+mapa opera principalmente en Guatemala) se agregó `page_views.region` —
+`handleTrackVisit` la llena desde `request.cf.region` (mismo mecanismo que
+country/city, sin IP). Para Guatemala esto normalmente da el nombre del
+departamento (subdivisión ISO 3166-2:GT); para visitas de otros países da
+su estado/provincia. **Ojo con la precisión**: en zonas rurales o con datos
+móviles, la geolocalización por IP a veces refleja la ubicación de la
+torre/proveedor del operador telefónico, no la del usuario exacto — se le
+avisó a Rafa de esta limitación. `GET /api/visits` agrega top 15
+departamento (`byRegion`); `VisitsTab` lo muestra en una tercera tarjeta
+"Por departamento" junto a país y ciudad (grid pasó de 2 a 3 columnas).
+Migración manual `ALTER TABLE page_views ADD COLUMN region TEXT;` — igual
+que arriba, ya aplicada a mano contra ambas bases.
+
+**Hallazgo sobre el despliegue automático de Cloudflare (19 ago 2026)**: al
+revisar por qué la pestaña "Visitas" fallaba justo después de este cambio,
+se descubrió que Cloudflare tiene su propia integración de Git (aparte del
+GitHub Action `deploy.yml`) que construye y publica **automáticamente**
+cada push a cualquier rama, incluidas las de prueba — y esa build usa la
+configuración de nivel superior de `wrangler.toml`, es decir, **la base de
+datos D1 de producción** (`ev-guatemala-db`), no una copia aislada. La URL
+que genera (tipo `<hash-o-rama>-ev-guatemala-map.<subdominio>.workers.dev`)
+no es la URL pública real ni el ambiente `staging` documentado arriba, pero
+sí lee/escribe contra los datos reales. No cambia el flujo de trabajo (el
+merge a `main` sigue siendo el único paso que afecta a usuarios reales en la
+URL pública), pero si alguien prueba una rama desde ese link automático,
+debe saber que no es una copia de prueba aislada — es la base real.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
