@@ -1631,12 +1631,17 @@ async function handleContactAdmin(request: Request, env: Env, ctx: ExecutionCont
 
 // ─── Visitas (contador simple; visibilidad solo para admin) ──────────────────
 // No se guarda IP, user-agent ni ningún identificador — cada fila es solo un
-// timestamp más país/departamento/ciudad aproximados. Vienen de los metadatos
-// que Cloudflare ya adjunta a cada request en el borde de su red (request.cf);
-// no requieren guardar la IP de quien visita. "region" es el departamento
-// (o estado/provincia si la visita viene de fuera de Guatemala) — aproximado
-// por IP, así que en zonas rurales o con datos móviles puede reflejar la
-// ubicación de la torre/proveedor en vez de la del usuario exacto.
+// timestamp más país/departamento/ciudad aproximados. Por defecto vienen de
+// los metadatos que Cloudflare ya adjunta a cada request en su borde
+// (request.cf) — aproximado por IP, así que en zonas rurales o con datos
+// móviles puede reflejar la ubicación de la torre/proveedor en vez de la del
+// usuario exacto. Si el visitante acepta el permiso de ubicación del
+// navegador (opcional, nunca bloquea la carga del mapa si lo rechaza o
+// ignora), el frontend manda lat/lng y aquí se resuelven a un departamento/
+// ciudad reales vía geocodificación inversa (Nominatim/OpenStreetMap) —
+// **las coordenadas nunca se guardan**, solo el nombre del lugar ya resuelto,
+// para no pasar de "ubicación aproximada" a "dato personal preciso".
+// geo_source ('gps' | 'ip') indica cuál de las dos fuentes se usó en cada fila.
 //
 // Los timestamps se guardan en UTC (estándar). Guatemala es UTC-6 todo el año
 // (no tiene horario de verano), así que para agrupar "por día" restamos 6
@@ -1644,13 +1649,62 @@ async function handleContactAdmin(request: Request, env: Env, ctx: ExecutionCont
 // (2am UTC del día siguiente) se contaría en el día equivocado.
 const GT_OFFSET = '-6 hours';
 
+// Resuelve coordenadas a país/departamento/ciudad usando Nominatim (gratuito,
+// sin API key). Nunca lanza — cualquier fallo (red, límite de tasa, etc.)
+// devuelve null y el llamador cae de vuelta a la ubicación aproximada por IP.
+async function reverseGeocode(lat: number, lng: number): Promise<{ country?: string; region?: string; city?: string } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1&accept-language=es`,
+      {
+        headers: { 'User-Agent': 'ev-guatemala-map (https://github.com/rafamejiaai360-cyber/ev-guatemala-map)' },
+        signal: controller.signal,
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as { address?: Record<string, string> };
+    const addr = data.address ?? {};
+    return {
+      country: addr.country_code?.toUpperCase(),
+      region: addr.state,
+      city: addr.city ?? addr.town ?? addr.village ?? addr.municipality,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ ok: true }); // no bloquea la carga del mapa si falta D1
   try {
     const cf = (request as { cf?: { country?: string; city?: string; region?: string } }).cf;
+    let country = cf?.country ?? null;
+    let region = cf?.region ?? null;
+    let city = cf?.city ?? null;
+    let geoSource = 'ip';
+
+    let body: { lat?: unknown; lng?: unknown } = {};
+    try { body = await request.json(); } catch { /* sin cuerpo o inválido — seguimos con IP */ }
+    const lat = typeof body.lat === 'number' && body.lat >= -90 && body.lat <= 90 ? body.lat : null;
+    const lng = typeof body.lng === 'number' && body.lng >= -180 && body.lng <= 180 ? body.lng : null;
+
+    if (lat !== null && lng !== null) {
+      const resolved = await reverseGeocode(lat, lng);
+      if (resolved) {
+        if (resolved.country) country = resolved.country;
+        if (resolved.region) region = resolved.region;
+        if (resolved.city) city = resolved.city;
+        geoSource = 'gps';
+      }
+    }
+
     await env.DB.prepare(
-      'INSERT INTO page_views (created_at, country, city, region) VALUES (datetime(\'now\'), ?, ?, ?)'
-    ).bind(cf?.country ?? null, cf?.city ?? null, cf?.region ?? null).run();
+      'INSERT INTO page_views (created_at, country, city, region, geo_source) VALUES (datetime(\'now\'), ?, ?, ?, ?)'
+    ).bind(country, city, region, geoSource).run();
   } catch {
     // Falla en silencio (ej. tabla no migrada todavía) — nunca debe romper la carga del mapa.
   }
@@ -1662,7 +1716,7 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
   if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  const [totalRow, todayRow, last7Row, last30Row, daily, byCountry, byRegion, byCity] = await Promise.all([
+  const [totalRow, todayRow, last7Row, last30Row, daily, byCountry, byRegion, byCity, geoSourceRows] = await Promise.all([
     env.DB.prepare('SELECT COUNT(*) AS n FROM page_views').first<{ n: number }>(),
     env.DB.prepare(`SELECT COUNT(*) AS n FROM page_views WHERE datetime(created_at, '${GT_OFFSET}') >= datetime('now', '${GT_OFFSET}', 'start of day')`).first<{ n: number }>(),
     env.DB.prepare(`SELECT COUNT(*) AS n FROM page_views WHERE datetime(created_at, '${GT_OFFSET}') >= datetime('now', '${GT_OFFSET}', '-6 days', 'start of day')`).first<{ n: number }>(),
@@ -1695,7 +1749,19 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
         ORDER BY n DESC
         LIMIT 15`
     ).all<{ city: string; country: string; n: number }>(),
+    env.DB.prepare(
+      `SELECT geo_source, COUNT(*) AS n
+         FROM page_views
+        WHERE geo_source IS NOT NULL
+        GROUP BY geo_source`
+    ).all<{ geo_source: string; n: number }>(),
   ]);
+
+  const geoSource = { gps: 0, ip: 0 };
+  for (const row of geoSourceRows.results) {
+    if (row.geo_source === 'gps') geoSource.gps = row.n;
+    else if (row.geo_source === 'ip') geoSource.ip = row.n;
+  }
 
   return json({
     total: totalRow?.n ?? 0,
@@ -1706,6 +1772,7 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
     byCountry: byCountry.results.map(r => ({ country: r.country, count: r.n })),
     byRegion: byRegion.results.map(r => ({ region: r.region, country: r.country, count: r.n })),
     byCity: byCity.results.map(r => ({ city: r.city, country: r.country, count: r.n })),
+    geoSource,
   });
 }
 
