@@ -1631,9 +1631,12 @@ async function handleContactAdmin(request: Request, env: Env, ctx: ExecutionCont
 
 // ─── Visitas (contador simple; visibilidad solo para admin) ──────────────────
 // No se guarda IP, user-agent ni ningún identificador — cada fila es solo un
-// timestamp más país/ciudad aproximados. País/ciudad vienen de los metadatos
+// timestamp más país/departamento/ciudad aproximados. Vienen de los metadatos
 // que Cloudflare ya adjunta a cada request en el borde de su red (request.cf);
-// no requieren guardar la IP de quien visita.
+// no requieren guardar la IP de quien visita. "region" es el departamento
+// (o estado/provincia si la visita viene de fuera de Guatemala) — aproximado
+// por IP, así que en zonas rurales o con datos móviles puede reflejar la
+// ubicación de la torre/proveedor en vez de la del usuario exacto.
 //
 // Los timestamps se guardan en UTC (estándar). Guatemala es UTC-6 todo el año
 // (no tiene horario de verano), así que para agrupar "por día" restamos 6
@@ -1644,10 +1647,10 @@ const GT_OFFSET = '-6 hours';
 async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ ok: true }); // no bloquea la carga del mapa si falta D1
   try {
-    const cf = (request as { cf?: { country?: string; city?: string } }).cf;
+    const cf = (request as { cf?: { country?: string; city?: string; region?: string } }).cf;
     await env.DB.prepare(
-      'INSERT INTO page_views (created_at, country, city) VALUES (datetime(\'now\'), ?, ?)'
-    ).bind(cf?.country ?? null, cf?.city ?? null).run();
+      'INSERT INTO page_views (created_at, country, city, region) VALUES (datetime(\'now\'), ?, ?, ?)'
+    ).bind(cf?.country ?? null, cf?.city ?? null, cf?.region ?? null).run();
   } catch {
     // Falla en silencio (ej. tabla no migrada todavía) — nunca debe romper la carga del mapa.
   }
@@ -1659,7 +1662,7 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
   if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  const [totalRow, todayRow, last7Row, last30Row, daily, byCountry, byCity] = await Promise.all([
+  const [totalRow, todayRow, last7Row, last30Row, daily, byCountry, byRegion, byCity] = await Promise.all([
     env.DB.prepare('SELECT COUNT(*) AS n FROM page_views').first<{ n: number }>(),
     env.DB.prepare(`SELECT COUNT(*) AS n FROM page_views WHERE datetime(created_at, '${GT_OFFSET}') >= datetime('now', '${GT_OFFSET}', 'start of day')`).first<{ n: number }>(),
     env.DB.prepare(`SELECT COUNT(*) AS n FROM page_views WHERE datetime(created_at, '${GT_OFFSET}') >= datetime('now', '${GT_OFFSET}', '-6 days', 'start of day')`).first<{ n: number }>(),
@@ -1679,6 +1682,13 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
         LIMIT 15`
     ).all<{ country: string; n: number }>(),
     env.DB.prepare(
+      `SELECT COALESCE(region, 'Desconocido') AS region, COALESCE(country, '') AS country, COUNT(*) AS n
+         FROM page_views
+        GROUP BY region, country
+        ORDER BY n DESC
+        LIMIT 15`
+    ).all<{ region: string; country: string; n: number }>(),
+    env.DB.prepare(
       `SELECT COALESCE(city, 'Desconocida') AS city, COALESCE(country, '') AS country, COUNT(*) AS n
          FROM page_views
         GROUP BY city, country
@@ -1694,6 +1704,7 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
     last30Days: last30Row?.n ?? 0,
     daily: daily.results.map(r => ({ day: r.day, count: r.n })),
     byCountry: byCountry.results.map(r => ({ country: r.country, count: r.n })),
+    byRegion: byRegion.results.map(r => ({ region: r.region, country: r.country, count: r.n })),
     byCity: byCity.results.map(r => ({ city: r.city, country: r.country, count: r.n })),
   });
 }

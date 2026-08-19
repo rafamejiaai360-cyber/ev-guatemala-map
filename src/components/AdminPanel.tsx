@@ -890,6 +890,7 @@ interface VisitStats {
   last30Days: number;
   daily: Array<{ day: string; count: number }>;
   byCountry: Array<{ country: string; count: number }>;
+  byRegion: Array<{ region: string; country: string; count: number }>;
   byCity: Array<{ city: string; country: string; count: number }>;
 }
 
@@ -964,7 +965,7 @@ function VisitsTab() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-3">
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
           <p className="text-xs font-medium text-gray-700 mb-3">Por país</p>
           {stats.byCountry.length === 0 ? (
@@ -974,6 +975,21 @@ function VisitsTab() {
               {stats.byCountry.map(c => (
                 <div key={c.country} className="flex items-center justify-between text-xs">
                   <span className="text-gray-600">{countryName(c.country)}</span>
+                  <span className="font-medium text-gray-900">{c.count.toLocaleString('es-GT')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+          <p className="text-xs font-medium text-gray-700 mb-3">Por departamento</p>
+          {stats.byRegion.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">Sin datos todavía</p>
+          ) : (
+            <div className="space-y-1.5">
+              {stats.byRegion.map(c => (
+                <div key={`${c.region}-${c.country}`} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600">{c.region}{c.country && c.country !== 'GT' ? `, ${countryName(c.country)}` : ''}</span>
                   <span className="font-medium text-gray-900">{c.count.toLocaleString('es-GT')}</span>
                 </div>
               ))}
@@ -998,9 +1014,11 @@ function VisitsTab() {
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
-        Se cuenta cada carga del mapa público (no incluye el panel de admin). El país/ciudad es una ubicación aproximada
-        que Cloudflare calcula al recibir la visita — no se guarda la IP ni ningún otro dato que identifique a quien visita.
-        Las visitas de antes del 19 de agosto de 2026 no tienen país/ciudad registrado.
+        Se cuenta cada carga del mapa público (no incluye el panel de admin). País/departamento/ciudad son una ubicación
+        aproximada que Cloudflare calcula al recibir la visita — no se guarda la IP ni ningún otro dato que identifique
+        a quien visita. En zonas rurales o con datos móviles el departamento puede reflejar la ubicación del proveedor
+        de internet en vez de la del usuario exacto. Las visitas de antes del 19 de agosto de 2026 no tienen esta
+        información registrada.
       </p>
     </div>
   );
