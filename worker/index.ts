@@ -1631,13 +1631,23 @@ async function handleContactAdmin(request: Request, env: Env, ctx: ExecutionCont
 
 // ─── Visitas (contador simple; visibilidad solo para admin) ──────────────────
 // No se guarda IP, user-agent ni ningún identificador — cada fila es solo un
-// timestamp. Alcanza para "cuántas veces se abrió el mapa" sin capturar datos
-// personales.
+// timestamp más país/ciudad aproximados. País/ciudad vienen de los metadatos
+// que Cloudflare ya adjunta a cada request en el borde de su red (request.cf);
+// no requieren guardar la IP de quien visita.
+//
+// Los timestamps se guardan en UTC (estándar). Guatemala es UTC-6 todo el año
+// (no tiene horario de verano), así que para agrupar "por día" restamos 6
+// horas antes de cortar la fecha — si no, una visita de las 8pm en Guatemala
+// (2am UTC del día siguiente) se contaría en el día equivocado.
+const GT_OFFSET = '-6 hours';
 
-async function handleTrackVisit(env: Env): Promise<Response> {
+async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json({ ok: true }); // no bloquea la carga del mapa si falta D1
   try {
-    await env.DB.prepare('INSERT INTO page_views (created_at) VALUES (datetime(\'now\'))').run();
+    const cf = (request as { cf?: { country?: string; city?: string } }).cf;
+    await env.DB.prepare(
+      'INSERT INTO page_views (created_at, country, city) VALUES (datetime(\'now\'), ?, ?)'
+    ).bind(cf?.country ?? null, cf?.city ?? null).run();
   } catch {
     // Falla en silencio (ej. tabla no migrada todavía) — nunca debe romper la carga del mapa.
   }
@@ -1649,18 +1659,32 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
   if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
   if (!env.DB) return apiError('Base de datos no configurada', 503);
 
-  const [totalRow, todayRow, last7Row, last30Row, daily] = await Promise.all([
+  const [totalRow, todayRow, last7Row, last30Row, daily, byCountry, byCity] = await Promise.all([
     env.DB.prepare('SELECT COUNT(*) AS n FROM page_views').first<{ n: number }>(),
-    env.DB.prepare("SELECT COUNT(*) AS n FROM page_views WHERE created_at >= datetime('now', 'start of day')").first<{ n: number }>(),
-    env.DB.prepare("SELECT COUNT(*) AS n FROM page_views WHERE created_at >= datetime('now', '-6 days', 'start of day')").first<{ n: number }>(),
-    env.DB.prepare("SELECT COUNT(*) AS n FROM page_views WHERE created_at >= datetime('now', '-29 days', 'start of day')").first<{ n: number }>(),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM page_views WHERE datetime(created_at, '${GT_OFFSET}') >= datetime('now', '${GT_OFFSET}', 'start of day')`).first<{ n: number }>(),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM page_views WHERE datetime(created_at, '${GT_OFFSET}') >= datetime('now', '${GT_OFFSET}', '-6 days', 'start of day')`).first<{ n: number }>(),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM page_views WHERE datetime(created_at, '${GT_OFFSET}') >= datetime('now', '${GT_OFFSET}', '-29 days', 'start of day')`).first<{ n: number }>(),
     env.DB.prepare(
-      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
+      `SELECT substr(datetime(created_at, '${GT_OFFSET}'), 1, 10) AS day, COUNT(*) AS n
          FROM page_views
-        WHERE created_at >= datetime('now', '-29 days', 'start of day')
+        WHERE datetime(created_at, '${GT_OFFSET}') >= datetime('now', '${GT_OFFSET}', '-29 days', 'start of day')
         GROUP BY day
         ORDER BY day`
     ).all<{ day: string; n: number }>(),
+    env.DB.prepare(
+      `SELECT COALESCE(country, 'Desconocido') AS country, COUNT(*) AS n
+         FROM page_views
+        GROUP BY country
+        ORDER BY n DESC
+        LIMIT 15`
+    ).all<{ country: string; n: number }>(),
+    env.DB.prepare(
+      `SELECT COALESCE(city, 'Desconocida') AS city, COALESCE(country, '') AS country, COUNT(*) AS n
+         FROM page_views
+        GROUP BY city, country
+        ORDER BY n DESC
+        LIMIT 15`
+    ).all<{ city: string; country: string; n: number }>(),
   ]);
 
   return json({
@@ -1669,6 +1693,8 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
     last7Days: last7Row?.n ?? 0,
     last30Days: last30Row?.n ?? 0,
     daily: daily.results.map(r => ({ day: r.day, count: r.n })),
+    byCountry: byCountry.results.map(r => ({ country: r.country, count: r.n })),
+    byCity: byCity.results.map(r => ({ city: r.city, country: r.country, count: r.n })),
   });
 }
 
@@ -2207,7 +2233,7 @@ export default {
       // Contador de visitas: POST público (lo llama el frontend al cargar);
       // GET solo admin (estadísticas para el panel).
       if (path === 'visits' && request.method === 'POST') {
-        ctx.waitUntil(handleTrackVisit(env));
+        ctx.waitUntil(handleTrackVisit(request, env));
         return json({ ok: true });
       }
       if (path === 'visits' && request.method === 'GET') return handleGetVisitStats(request, env);

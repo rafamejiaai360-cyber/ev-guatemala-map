@@ -889,6 +889,8 @@ interface VisitStats {
   last7Days: number;
   last30Days: number;
   daily: Array<{ day: string; count: number }>;
+  byCountry: Array<{ country: string; count: number }>;
+  byCity: Array<{ city: string; country: string; count: number }>;
 }
 
 function VisitsTab() {
@@ -913,6 +915,7 @@ function VisitsTab() {
   if (!stats) return null;
 
   const maxDaily = Math.max(1, ...stats.daily.map(d => d.count));
+  const daysDesc = [...stats.daily].reverse();
 
   return (
     <div>
@@ -930,30 +933,90 @@ function VisitsTab() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
-        <p className="text-xs font-medium text-gray-700 mb-3">Visitas por día (últimos 30 días)</p>
+      <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 mb-6">
+        <p className="text-xs font-medium text-gray-700 mb-3">Visitas por día (últimos 30 días, hora de Guatemala)</p>
         {stats.daily.length === 0 ? (
           <p className="text-xs text-gray-400 text-center py-6">Todavía no hay visitas registradas</p>
         ) : (
-          <div className="flex items-end gap-[3px] h-32">
-            {stats.daily.map(d => (
-              <div key={d.day} className="flex-1 flex flex-col items-center justify-end h-full group relative">
-                <div
-                  title={`${new Date(d.day + 'T00:00:00').toLocaleDateString('es-GT', { day: 'numeric', month: 'short' })}: ${d.count} visita${d.count !== 1 ? 's' : ''}`}
-                  className="w-full bg-green-500 hover:bg-green-600 rounded-t transition-colors min-h-[2px]"
-                  style={{ height: `${(d.count / maxDaily) * 100}%` }}
-                />
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="flex items-end gap-[3px] h-32">
+              {stats.daily.map(d => (
+                <div key={d.day} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                  <div
+                    title={`${new Date(d.day + 'T00:00:00').toLocaleDateString('es-GT', { day: 'numeric', month: 'short' })}: ${d.count} visita${d.count !== 1 ? 's' : ''}`}
+                    className="w-full bg-green-500 hover:bg-green-600 rounded-t transition-colors min-h-[2px]"
+                    style={{ height: `${(d.count / maxDaily) * 100}%` }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 max-h-40 overflow-y-auto divide-y divide-gray-100">
+              {daysDesc.map(d => (
+                <div key={d.day} className="flex items-center justify-between py-1.5 text-xs">
+                  <span className="text-gray-500">
+                    {new Date(d.day + 'T00:00:00').toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </span>
+                  <span className="font-medium text-gray-900">{d.count.toLocaleString('es-GT')}</span>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+          <p className="text-xs font-medium text-gray-700 mb-3">Por país</p>
+          {stats.byCountry.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">Sin datos todavía</p>
+          ) : (
+            <div className="space-y-1.5">
+              {stats.byCountry.map(c => (
+                <div key={c.country} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600">{countryName(c.country)}</span>
+                  <span className="font-medium text-gray-900">{c.count.toLocaleString('es-GT')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+          <p className="text-xs font-medium text-gray-700 mb-3">Por ciudad</p>
+          {stats.byCity.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">Sin datos todavía</p>
+          ) : (
+            <div className="space-y-1.5">
+              {stats.byCity.map(c => (
+                <div key={`${c.city}-${c.country}`} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600">{c.city}{c.country ? `, ${countryName(c.country)}` : ''}</span>
+                  <span className="font-medium text-gray-900">{c.count.toLocaleString('es-GT')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       <p className="text-xs text-gray-400 mt-3">
-        Se cuenta cada carga del mapa público (no incluye el panel de admin). No se guarda IP ni identidad de quien visita.
+        Se cuenta cada carga del mapa público (no incluye el panel de admin). El país/ciudad es una ubicación aproximada
+        que Cloudflare calcula al recibir la visita — no se guarda la IP ni ningún otro dato que identifique a quien visita.
+        Las visitas de antes del 19 de agosto de 2026 no tienen país/ciudad registrado.
       </p>
     </div>
   );
+}
+
+const regionNames = typeof Intl !== 'undefined' && 'DisplayNames' in Intl
+  ? new Intl.DisplayNames(['es'], { type: 'region' })
+  : null;
+
+function countryName(code: string): string {
+  if (!code || code === 'Desconocido') return 'Desconocido';
+  try {
+    return regionNames?.of(code) ?? code;
+  } catch {
+    return code;
+  }
 }
 
 // ─── Main Admin Panel ─────────────────────────────────────────────────────────

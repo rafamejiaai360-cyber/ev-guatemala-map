@@ -145,12 +145,17 @@ CREATE INDEX IF NOT EXISTS idx_requests_status ON station_requests(status, creat
 
 -- ============================================================
 -- VISITAS — contador simple de aperturas de la app, solo para el admin.
--- Cada fila es únicamente un timestamp: sin IP, sin user-agent, sin
--- identificador de usuario. No se necesita más para "cuántas visitas".
+-- Cada fila es únicamente un timestamp más país/ciudad aproximados: sin IP,
+-- sin user-agent, sin identificador de usuario. País/ciudad vienen de los
+-- metadatos que Cloudflare ya adjunta a cada request (no de guardar la IP).
+-- country/city agregados 19 ago 2026 — en bases ya existentes (prod/staging)
+-- requieren ALTER TABLE manual, ver nota de migración abajo.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS page_views (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  country TEXT,                                -- código de país (ej. 'GT'), aproximado, de Cloudflare
+  city TEXT                                     -- ciudad aproximada, de Cloudflare
 );
 CREATE INDEX IF NOT EXISTS idx_page_views_created ON page_views(created_at);
 

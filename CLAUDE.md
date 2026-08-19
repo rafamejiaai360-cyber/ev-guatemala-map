@@ -172,6 +172,28 @@ una vez (todo el archivo usa `IF NOT EXISTS`, así que es seguro re-correrlo
 contra prod). Sin la tabla, `POST /api/visits` falla en silencio (no rompe
 la carga del mapa) y `GET /api/visits` da 500 hasta que se aplique.
 
+**Corrección de zona horaria + ubicación aproximada (19 ago 2026)**: los
+cortes "por día" (hoy/7d/30d/serie diaria) usaban `datetime('now')` de
+SQLite, que es UTC — como Guatemala es UTC-6 todo el año (sin horario de
+verano), una visita después de las 6pm hora Guatemala se contaba en el día
+siguiente. `handleGetVisitStats` ahora resta 6 horas (`GT_OFFSET`) antes de
+cortar la fecha, tanto al comparar como al agrupar. Además `page_views` ganó
+columnas `country`/`city`: `handleTrackVisit` las llena desde
+`request.cf.country`/`request.cf.city` (metadatos que Cloudflare ya adjunta
+a cada request en su borde) — **no se guarda la IP de nadie**, sigue el
+mismo principio de privacidad que el resto del contador. `GET /api/visits`
+agrega top 15 país y top 15 ciudad; `VisitsTab` los muestra en dos tarjetas
+nuevas y además lista los 30 días con su número exacto (antes solo se veía
+al pasar el mouse sobre la barra). **Requiere migración manual** en bases
+YA existentes (prod y staging): `page_views` no se recrea sola, hay que
+agregar las columnas a mano —
+`ALTER TABLE page_views ADD COLUMN country TEXT;` y
+`ALTER TABLE page_views ADD COLUMN city TEXT;` — antes de desplegar este
+cambio, o `handleTrackVisit` fallará en silencio al intentar insertar en
+columnas que no existen (no rompe la carga del mapa, pero deja de contar
+visitas hasta aplicar la migración). Visitas de antes de esta fecha quedan
+con país/ciudad en blanco.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
