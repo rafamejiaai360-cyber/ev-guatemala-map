@@ -210,6 +210,48 @@ departamento (`byRegion`); `VisitsTab` lo muestra en una tercera tarjeta
 Migración manual `ALTER TABLE page_views ADD COLUMN region TEXT;` — igual
 que arriba, ya aplicada a mano contra ambas bases.
 
+**Ubicación real opcional vía permiso del navegador (19 ago 2026, mismo día,
+más tarde)**: Rafa notó en persona que el departamento por IP falla en
+móvil — probó desde Jutiapa y le salió Ciudad de Guatemala (el tráfico de su
+operador sale centralizado por la capital). A su pedido, se agregó una
+segunda fuente de ubicación, siempre opcional: `App.tsx` (`getOptionalCoords`)
+pide el permiso de geolocalización del navegador al cargar el mapa público
+(no en `/admin`), con timeout de ~4-5s; si el usuario lo rechaza, lo ignora,
+o el navegador no lo soporta, resuelve a `null` **sin bloquear ni retrasar**
+la carga del mapa (el mapa se renderiza aparte, de inmediato, sin esperar
+esta promesa). Si acepta, `App.tsx` manda `{lat, lng}` en el body de
+`POST /api/visits`. En el Worker, `reverseGeocode()` resuelve esas
+coordenadas a país/departamento/ciudad vía Nominatim (OpenStreetMap,
+gratuito, sin API key) — **las coordenadas nunca se guardan**, ni siquiera
+temporalmente más allá de esa única llamada; solo se guarda el nombre del
+lugar ya resuelto, igual que la ubicación por IP. Nueva columna
+`page_views.geo_source` (`'gps'` | `'ip'`) registra cuál de las dos fuentes
+se usó en cada fila — cuando hay GPS disponible, sus valores de
+país/departamento/ciudad reemplazan a los de Cloudflare para esa visita.
+`GET /api/visits` agrega `geoSource: {gps, ip}`; `VisitsTab` muestra ese
+desglose en un aviso arriba del texto de privacidad, para que Rafa sepa
+cuánto de lo que ve es preciso vs. aproximado. Migración manual
+`ALTER TABLE page_views ADD COLUMN geo_source TEXT;` — ya aplicada a mano
+contra ambas bases. Nominatim tiene límite de uso (≈1 req/seg, requiere
+User-Agent identificando la app) — con el tráfico de este mapa no debería
+ser problema, pero si `reverseGeocode()` empieza a fallar seguido conviene
+revisar la política de uso de Nominatim antes de cambiar de proveedor.
+
+**Ese mismo permiso también centra el mapa (19 ago 2026, poco después)**: a
+pedido de Rafa, si el visitante acepta el permiso de ubicación (el mismo que
+ya se pedía para el contador de visitas, no uno nuevo — no se le pregunta
+dos veces), `App.tsx` reutiliza esas coordenadas para llamar a
+`setUserLocation()` del store. Ya existía toda la mecánica para esto desde
+antes (el botón manual "Mi ubicación" en `Map.tsx`, `GeolocationButton`, usa
+el mismo `setUserLocation`; `MapController` centra el mapa a zoom 14 cuando
+`userLocation` cambia) — este cambio solo dispara ese mismo flujo
+automáticamente al cargar, en vez de requerir que el usuario toque el botón.
+Sigue siendo enteramente opcional y no bloqueante: si rechaza/ignora el
+permiso, el mapa se queda centrado en Guatemala (el valor por defecto) como
+siempre. Las coordenadas para esto viven solo en el estado del navegador
+(Zustand) — nunca se mandan al servidor más que en la llamada aparte,
+descartable, de `POST /api/visits` descrita arriba.
+
 **Hallazgo sobre el despliegue automático de Cloudflare (19 ago 2026)**: al
 revisar por qué la pestaña "Visitas" fallaba justo después de este cambio,
 se descubrió que Cloudflare tiene su propia integración de Git (aparte del

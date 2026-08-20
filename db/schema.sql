@@ -146,18 +146,23 @@ CREATE INDEX IF NOT EXISTS idx_requests_status ON station_requests(status, creat
 -- ============================================================
 -- VISITAS — contador simple de aperturas de la app, solo para el admin.
 -- Cada fila es únicamente un timestamp más país/departamento/ciudad
--- aproximados: sin IP, sin user-agent, sin identificador de usuario. Vienen
--- de los metadatos que Cloudflare ya adjunta a cada request (no de guardar
--- la IP). country/city agregados 19 ago 2026, region agregada el mismo día
--- (poco después) — en bases ya existentes (prod/staging) requieren ALTER
--- TABLE manual, ver nota de migración en CLAUDE.md.
+-- aproximados: sin IP, sin user-agent, sin identificador de usuario, y SIN
+-- coordenadas exactas — solo el nombre del lugar ya resuelto. Por defecto
+-- vienen de los metadatos que Cloudflare ya adjunta a cada request; si el
+-- visitante acepta el permiso de ubicación del navegador (opcional, nunca
+-- bloquea la carga del mapa), se resuelven en el Worker vía geocodificación
+-- inversa (Nominatim) a partir de sus coordenadas, que nunca se guardan.
+-- country/city agregados 19 ago 2026, region agregada el mismo día (poco
+-- después), geo_source agregada el mismo día (aún más tarde) — en bases ya
+-- existentes (prod/staging) requieren ALTER TABLE manual, ver CLAUDE.md.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS page_views (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  country TEXT,                                -- código de país (ej. 'GT'), aproximado, de Cloudflare
-  city TEXT,                                    -- ciudad aproximada, de Cloudflare
-  region TEXT                                   -- departamento (o estado/provincia fuera de GT), aproximado
+  country TEXT,                                -- código de país (ej. 'GT'), aproximado
+  city TEXT,                                    -- ciudad aproximada
+  region TEXT,                                  -- departamento (o estado/provincia fuera de GT), aproximado
+  geo_source TEXT                                -- 'gps' (permiso del navegador) | 'ip' (metadatos de Cloudflare)
 );
 CREATE INDEX IF NOT EXISTS idx_page_views_created ON page_views(created_at);
 

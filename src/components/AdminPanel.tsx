@@ -892,6 +892,7 @@ interface VisitStats {
   byCountry: Array<{ country: string; count: number }>;
   byRegion: Array<{ region: string; country: string; count: number }>;
   byCity: Array<{ city: string; country: string; count: number }>;
+  geoSource: { gps: number; ip: number };
 }
 
 function VisitsTab() {
@@ -1013,12 +1014,23 @@ function VisitsTab() {
         </div>
       </div>
 
+      {(stats.geoSource.gps > 0 || stats.geoSource.ip > 0) && (
+        <p className="text-xs text-gray-500 bg-gray-100 rounded-xl px-4 py-3 mb-3">
+          De las visitas con ubicación registrada: <strong>{stats.geoSource.gps.toLocaleString('es-GT')}</strong> usaron
+          la ubicación real del navegador (el visitante aceptó el permiso — mucho más precisa) y{' '}
+          <strong>{stats.geoSource.ip.toLocaleString('es-GT')}</strong> son aproximadas por IP (el visitante no dio
+          permiso, o su navegador no lo soporta).
+        </p>
+      )}
+
       <p className="text-xs text-gray-400 mt-3">
-        Se cuenta cada carga del mapa público (no incluye el panel de admin). País/departamento/ciudad son una ubicación
-        aproximada que Cloudflare calcula al recibir la visita — no se guarda la IP ni ningún otro dato que identifique
-        a quien visita. En zonas rurales o con datos móviles el departamento puede reflejar la ubicación del proveedor
-        de internet en vez de la del usuario exacto. Las visitas de antes del 19 de agosto de 2026 no tienen esta
-        información registrada.
+        Se cuenta cada carga del mapa público (no incluye el panel de admin). El navegador le pide, de forma opcional,
+        permiso de ubicación al visitante — si lo acepta, se usa esa ubicación real; si lo rechaza o lo ignora, el mapa
+        funciona exactamente igual y se usa una aproximación por IP (Cloudflare) en su lugar. En ningún caso se guardan
+        coordenadas exactas, IP, ni ningún otro dato que identifique a quien visita — solo el nombre del país/departamento/
+        ciudad ya resuelto. En zonas rurales o con datos móviles, la aproximación por IP puede reflejar la ubicación del
+        proveedor de internet en vez de la del usuario exacto. Las visitas de antes del 19 de agosto de 2026 no tienen
+        esta información registrada.
       </p>
     </div>
   );
