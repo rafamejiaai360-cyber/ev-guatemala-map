@@ -1652,9 +1652,18 @@ const GT_OFFSET = '-6 hours';
 // Resuelve coordenadas a país/departamento/ciudad usando Nominatim (gratuito,
 // sin API key). Nunca lanza — cualquier fallo (red, límite de tasa, etc.)
 // devuelve null y el llamador cae de vuelta a la ubicación aproximada por IP.
-async function reverseGeocode(lat: number, lng: number): Promise<{ country?: string; region?: string; city?: string } | null> {
+// Deja rastro en ops_log ante cualquier fallo (op='reverse_geocode', ok=0) —
+// Nominatim nunca ha resuelto una sola visita en producción todavía, así que
+// hace falta ver la razón real (¿403 por política de uso contra IPs de
+// datacenter compartidas como las de Cloudflare Workers? ¿timeout? ¿otra
+// cosa?) en vez de seguir adivinando.
+async function reverseGeocode(env: Env, lat: number, lng: number): Promise<{ country?: string; region?: string; city?: string } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4000);
+  const logFailure = (detail: string) => {
+    if (!env.DB) return;
+    env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('reverse_geocode', 0, ?)").bind(detail).run().catch(() => {});
+  };
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1&accept-language=es`,
@@ -1663,7 +1672,10 @@ async function reverseGeocode(lat: number, lng: number): Promise<{ country?: str
         signal: controller.signal,
       }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logFailure(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      return null;
+    }
     const data = await res.json() as { address?: Record<string, string> };
     const addr = data.address ?? {};
     return {
@@ -1671,7 +1683,8 @@ async function reverseGeocode(lat: number, lng: number): Promise<{ country?: str
       region: addr.state,
       city: addr.city ?? addr.town ?? addr.village ?? addr.municipality,
     };
-  } catch {
+  } catch (err) {
+    logFailure(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
     return null;
   } finally {
     clearTimeout(timer);
@@ -1693,7 +1706,7 @@ async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
     const lng = typeof body.lng === 'number' && body.lng >= -180 && body.lng <= 180 ? body.lng : null;
 
     if (lat !== null && lng !== null) {
-      const resolved = await reverseGeocode(lat, lng);
+      const resolved = await reverseGeocode(env, lat, lng);
       if (resolved) {
         if (resolved.country) country = resolved.country;
         if (resolved.region) region = resolved.region;
