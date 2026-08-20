@@ -29,11 +29,16 @@ function getOptionalCoords(): Promise<{ lat: number; lng: number } | null> {
       settled = true;
       resolve(value);
     };
-    setTimeout(() => finish(null), 5000);
+    setTimeout(() => finish(null), 10000);
     navigator.geolocation.getCurrentPosition(
       pos => finish({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => finish(null),
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 300000 }
+      // Mismos parámetros que el botón manual "Mi ubicación" (GeolocationButton
+      // en Map.tsx), que sí funciona de forma confiable — enableHighAccuracy:false
+      // (WiFi/torre celular) resultó no dar una posición a tiempo en pruebas
+      // reales (visto 20 ago 2026: nunca llegó a resolver, ni una vez, con
+      // permiso ya concedido), así que se alinea con GPS + más tiempo.
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
     );
   });
 }
