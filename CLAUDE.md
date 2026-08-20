@@ -252,6 +252,28 @@ siempre. Las coordenadas para esto viven solo en el estado del navegador
 (Zustand) — nunca se mandan al servidor más que en la llamada aparte,
 descartable, de `POST /api/visits` descrita arriba.
 
+**No contar visitas de sesiones admin (20 ago 2026)**: Rafa notó que sus
+propias revisiones del mapa público (logueado como admin, no en `/admin`)
+se estaban contando como visitas, y además con su ubicación real (que él no
+consideraba representativa del "impacto de usuarios reales"). `App.tsx`
+ahora revisa, justo antes de mandar `POST /api/visits`,
+`useStore.getState().isAdminAuthenticated || currentUser?.role === 'admin'`
+— si es una sesión de admin, no manda la llamada (el centrado del mapa en
+`setUserLocation` sí se sigue disparando, porque esa parte es solo
+conveniencia visual para quien esté viendo el mapa, no estadística). Se lee
+con `getState()` dentro del `.then()` de la geolocalización —no como
+dependencia del efecto— porque `isAdminAuthenticated` ya está disponible al
+instante desde `localStorage` (`ev_admin_auth`), pero además puede haberse
+resuelto `currentUser` durante los ~5s que tarda la geolocalización, así que
+conviene leer el estado más fresco en ese momento, no el capturado al
+montar. **Limitación reconocida**: las visitas de antes de este cambio que
+vinieron de sesiones admin ya están mezcladas en `page_views` y no se
+pueden separar retroactivamente — por diseño, cada fila solo tiene
+timestamp + ubicación aproximada, sin ningún identificador de quién la
+generó (ni siquiera de si era admin), así que no hay manera de filtrarlas
+después del hecho. El impacto en los números totales debería ser mínimo
+frente al tráfico real, y de aquí en adelante quedan limpios.
+
 **Hallazgo sobre el despliegue automático de Cloudflare (19 ago 2026)**: al
 revisar por qué la pestaña "Visitas" fallaba justo después de este cambio,
 se descubrió que Cloudflare tiene su propia integración de Git (aparte del

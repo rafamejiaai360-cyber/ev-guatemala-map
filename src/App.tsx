@@ -48,6 +48,11 @@ export default function App() {
     if (!isAdminPanel) {
       getOptionalCoords().then(coords => {
         if (coords) setUserLocation(coords);
+        // No contar visitas de sesiones con acceso de administrador (ej. Rafa
+        // revisando el mapa público ya logueado) — el contador es para medir
+        // impacto real de usuarios, no las propias revisiones del admin.
+        const { isAdminAuthenticated, currentUser } = useStore.getState();
+        if (isAdminAuthenticated || currentUser?.role === 'admin') return;
         fetch('/api/visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
