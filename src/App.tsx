@@ -13,12 +13,13 @@ const EVMap = lazy(() => import('./components/Map'));
 
 const isAdminPanel = window.location.pathname === '/admin';
 
-// Pide la ubicación del navegador de forma opcional: si el usuario acepta,
-// se usa para contar la visita con mayor precisión (departamento/ciudad real
-// en vez de la aproximación por IP); si la rechaza, la ignora, o el
-// navegador no la soporta, resuelve a null sin bloquear ni afectar el uso
-// del mapa. Nunca se guardan las coordenadas — solo se envían una vez, para
-// que el Worker las resuelva a un nombre de lugar y las descarte.
+// Pide la ubicación del navegador de forma opcional: si el usuario acepta, se
+// usa para (a) centrar el mapa ahí y mostrarle las estaciones cercanas, y
+// (b) contar la visita con mayor precisión (departamento/ciudad real en vez
+// de la aproximación por IP); si la rechaza, la ignora, o el navegador no la
+// soporta, resuelve a null sin bloquear ni afectar el uso del mapa. Nunca se
+// guardan las coordenadas en el servidor — solo se envían una vez, para que
+// el Worker las resuelva a un nombre de lugar y las descarte.
 function getOptionalCoords(): Promise<{ lat: number; lng: number } | null> {
   return new Promise(resolve => {
     if (!('geolocation' in navigator)) return resolve(null);
@@ -38,7 +39,7 @@ function getOptionalCoords(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export default function App() {
-  const { scanModalOpen, addStationModalOpen, authModalOpen, profileModalOpen, contactAdminModalOpen, loadRatings, loadDynamicStations, loadCurrentUser } = useStore();
+  const { scanModalOpen, addStationModalOpen, authModalOpen, profileModalOpen, contactAdminModalOpen, loadRatings, loadDynamicStations, loadCurrentUser, setUserLocation } = useStore();
 
   useEffect(() => {
     loadRatings();
@@ -46,6 +47,7 @@ export default function App() {
     loadCurrentUser();
     if (!isAdminPanel) {
       getOptionalCoords().then(coords => {
+        if (coords) setUserLocation(coords);
         fetch('/api/visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

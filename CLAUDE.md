@@ -237,6 +237,21 @@ User-Agent identificando la app) — con el tráfico de este mapa no debería
 ser problema, pero si `reverseGeocode()` empieza a fallar seguido conviene
 revisar la política de uso de Nominatim antes de cambiar de proveedor.
 
+**Ese mismo permiso también centra el mapa (19 ago 2026, poco después)**: a
+pedido de Rafa, si el visitante acepta el permiso de ubicación (el mismo que
+ya se pedía para el contador de visitas, no uno nuevo — no se le pregunta
+dos veces), `App.tsx` reutiliza esas coordenadas para llamar a
+`setUserLocation()` del store. Ya existía toda la mecánica para esto desde
+antes (el botón manual "Mi ubicación" en `Map.tsx`, `GeolocationButton`, usa
+el mismo `setUserLocation`; `MapController` centra el mapa a zoom 14 cuando
+`userLocation` cambia) — este cambio solo dispara ese mismo flujo
+automáticamente al cargar, en vez de requerir que el usuario toque el botón.
+Sigue siendo enteramente opcional y no bloqueante: si rechaza/ignora el
+permiso, el mapa se queda centrado en Guatemala (el valor por defecto) como
+siempre. Las coordenadas para esto viven solo en el estado del navegador
+(Zustand) — nunca se mandan al servidor más que en la llamada aparte,
+descartable, de `POST /api/visits` descrita arriba.
+
 **Hallazgo sobre el despliegue automático de Cloudflare (19 ago 2026)**: al
 revisar por qué la pestaña "Visitas" fallaba justo después de este cambio,
 se descubrió que Cloudflare tiene su propia integración de Git (aparte del
