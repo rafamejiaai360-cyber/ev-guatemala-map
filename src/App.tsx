@@ -20,19 +20,26 @@ const isAdminPanel = window.location.pathname === '/admin';
 // soporta, resuelve a null sin bloquear ni afectar el uso del mapa. Nunca se
 // guardan las coordenadas en el servidor — solo se envían una vez, para que
 // el Worker las resuelva a un nombre de lugar y las descarte.
-function getOptionalCoords(): Promise<{ lat: number; lng: number } | null> {
+//
+// `reason` diagnostica por qué no hubo coordenadas (visto 21 ago 2026: en
+// pruebas reales, con permiso ya concedido, en Safari iPhone Y Chrome, nunca
+// se obtuvo una posición ni una sola vez — se manda este código de error al
+// servidor, junto al conteo de la visita, para poder ver la causa real en
+// vez de seguir adivinando; no identifica a nadie, solo dice qué código de
+// error dio el navegador).
+function getOptionalCoords(): Promise<{ coords: { lat: number; lng: number } | null; reason: string | null }> {
   return new Promise(resolve => {
-    if (!('geolocation' in navigator)) return resolve(null);
+    if (!('geolocation' in navigator)) return resolve({ coords: null, reason: 'no-api' });
     let settled = false;
-    const finish = (value: { lat: number; lng: number } | null) => {
+    const finish = (coords: { lat: number; lng: number } | null, reason: string | null) => {
       if (settled) return;
       settled = true;
-      resolve(value);
+      resolve({ coords, reason });
     };
-    setTimeout(() => finish(null), 10000);
+    setTimeout(() => finish(null, 'timeout-outer-10s'), 10000);
     navigator.geolocation.getCurrentPosition(
-      pos => finish({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => finish(null),
+      pos => finish({ lat: pos.coords.latitude, lng: pos.coords.longitude }, null),
+      err => finish(null, `code:${err.code} msg:${err.message}`),
       // Mismos parámetros que el botón manual "Mi ubicación" (GeolocationButton
       // en Map.tsx), que sí funciona de forma confiable — enableHighAccuracy:false
       // (WiFi/torre celular) resultó no dar una posición a tiempo en pruebas
@@ -51,7 +58,7 @@ export default function App() {
     loadDynamicStations();
     loadCurrentUser();
     if (!isAdminPanel) {
-      getOptionalCoords().then(coords => {
+      getOptionalCoords().then(({ coords, reason }) => {
         if (coords) setUserLocation(coords);
         // No contar visitas de sesiones con acceso de administrador (ej. Rafa
         // revisando el mapa público ya logueado) — el contador es para medir
@@ -61,7 +68,7 @@ export default function App() {
         fetch('/api/visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(coords ?? {}),
+          body: JSON.stringify({ ...(coords ?? {}), geoError: coords ? undefined : reason }),
         }).catch(() => {});
       });
     }

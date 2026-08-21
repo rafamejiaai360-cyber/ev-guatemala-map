@@ -1700,7 +1700,7 @@ async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
     let city = cf?.city ?? null;
     let geoSource = 'ip';
 
-    let body: { lat?: unknown; lng?: unknown } = {};
+    let body: { lat?: unknown; lng?: unknown; geoError?: unknown } = {};
     try { body = await request.json(); } catch { /* sin cuerpo o inválido — seguimos con IP */ }
     const lat = typeof body.lat === 'number' && body.lat >= -90 && body.lat <= 90 ? body.lat : null;
     const lng = typeof body.lng === 'number' && body.lng >= -180 && body.lng <= 180 ? body.lng : null;
@@ -1713,6 +1713,12 @@ async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
         if (resolved.city) city = resolved.city;
         geoSource = 'gps';
       }
+    } else if (typeof body.geoError === 'string') {
+      // Diagnóstico (visto 21 ago 2026: reverseGeocode nunca se invocó en
+      // ninguna prueba real) — por qué el navegador no dio coordenadas.
+      // No identifica a nadie, solo el código de error de geolocalización.
+      env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('geo_client_error', 0, ?)")
+        .bind(body.geoError.slice(0, 200)).run().catch(() => {});
     }
 
     await env.DB.prepare(
