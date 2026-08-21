@@ -20,20 +20,21 @@ const isAdminPanel = window.location.pathname === '/admin';
 // soporta, resuelve a null sin bloquear ni afectar el uso del mapa. Nunca se
 // guardan las coordenadas en el servidor — solo se envían una vez, para que
 // el Worker las resuelva a un nombre de lugar y las descarte.
-function getOptionalCoords(): Promise<{ lat: number; lng: number } | null> {
+function getOptionalCoords(): Promise<{ coords: { lat: number; lng: number } | null; reason: string | null }> {
   return new Promise(resolve => {
-    if (!('geolocation' in navigator)) return resolve(null);
+    if (!('geolocation' in navigator)) return resolve({ coords: null, reason: 'no-api' });
     let settled = false;
-    const finish = (value: { lat: number; lng: number } | null) => {
+    const finish = (coords: { lat: number; lng: number } | null, reason: string | null) => {
       if (settled) return;
       settled = true;
-      resolve(value);
+      resolve({ coords, reason });
     };
-    setTimeout(() => finish(null), 5000);
+    setTimeout(() => finish(null, 'timeout-outer-10s'), 10000);
     navigator.geolocation.getCurrentPosition(
-      pos => finish({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => finish(null),
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 300000 }
+      pos => finish({ lat: pos.coords.latitude, lng: pos.coords.longitude }, null),
+      err => finish(null, `code:${err.code} msg:${err.message}`),
+      // Mismos parámetros que el botón manual "Mi ubicación" (GeolocationButton en Map.tsx).
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
     );
   });
 }
@@ -46,12 +47,17 @@ export default function App() {
     loadDynamicStations();
     loadCurrentUser();
     if (!isAdminPanel) {
-      getOptionalCoords().then(coords => {
+      getOptionalCoords().then(({ coords, reason }) => {
         if (coords) setUserLocation(coords);
+        // No contar visitas de sesiones con acceso de administrador (ej. Rafa
+        // revisando el mapa público ya logueado) — el contador es para medir
+        // impacto real de usuarios, no las propias revisiones del admin.
+        const { isAdminAuthenticated, currentUser } = useStore.getState();
+        if (isAdminAuthenticated || currentUser?.role === 'admin') return;
         fetch('/api/visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(coords ?? {}),
+          body: JSON.stringify({ ...(coords ?? {}), geoError: coords ? undefined : reason }),
         }).catch(() => {});
       });
     }

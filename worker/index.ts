@@ -1652,9 +1652,17 @@ const GT_OFFSET = '-6 hours';
 // Resuelve coordenadas a país/departamento/ciudad usando Nominatim (gratuito,
 // sin API key). Nunca lanza — cualquier fallo (red, límite de tasa, etc.)
 // devuelve null y el llamador cae de vuelta a la ubicación aproximada por IP.
-async function reverseGeocode(lat: number, lng: number): Promise<{ country?: string; region?: string; city?: string } | null> {
+// Deja rastro en ops_log ante cualquier fallo (op='reverse_geocode', ok=0)
+// para poder ver la causa si Nominatim empieza a fallar seguido.
+async function reverseGeocode(env: Env, lat: number, lng: number): Promise<{ country?: string; region?: string; city?: string } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4000);
+  const logFailure = async (detail: string) => {
+    if (!env.DB) return;
+    try {
+      await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('reverse_geocode', 0, ?)").bind(detail).run();
+    } catch { /* no hay nada razonable que hacer si el log mismo falla */ }
+  };
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1&accept-language=es`,
@@ -1663,7 +1671,10 @@ async function reverseGeocode(lat: number, lng: number): Promise<{ country?: str
         signal: controller.signal,
       }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      await logFailure(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      return null;
+    }
     const data = await res.json() as { address?: Record<string, string> };
     const addr = data.address ?? {};
     return {
@@ -1671,14 +1682,15 @@ async function reverseGeocode(lat: number, lng: number): Promise<{ country?: str
       region: addr.state,
       city: addr.city ?? addr.town ?? addr.village ?? addr.municipality,
     };
-  } catch {
+  } catch (err) {
+    await logFailure(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
     return null;
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
+async function handleTrackVisit(request: Request, env: Env, rawBody: string): Promise<Response> {
   if (!env.DB) return json({ ok: true }); // no bloquea la carga del mapa si falta D1
   try {
     const cf = (request as { cf?: { country?: string; city?: string; region?: string } }).cf;
@@ -1687,19 +1699,30 @@ async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
     let city = cf?.city ?? null;
     let geoSource = 'ip';
 
-    let body: { lat?: unknown; lng?: unknown } = {};
-    try { body = await request.json(); } catch { /* sin cuerpo o inválido — seguimos con IP */ }
+    // El cuerpo se lee ANTES de responder al navegador (en el manejador de
+    // rutas, no aquí) y se pasa ya listo — Cloudflare corta el flujo de la
+    // petición apenas se envía la respuesta, así que leerlo después nunca
+    // funciona.
+    let body: { lat?: unknown; lng?: unknown; geoError?: unknown } = {};
+    if (rawBody) {
+      try { body = JSON.parse(rawBody); } catch { /* cuerpo inválido — seguimos con IP */ }
+    }
     const lat = typeof body.lat === 'number' && body.lat >= -90 && body.lat <= 90 ? body.lat : null;
     const lng = typeof body.lng === 'number' && body.lng >= -180 && body.lng <= 180 ? body.lng : null;
 
     if (lat !== null && lng !== null) {
-      const resolved = await reverseGeocode(lat, lng);
+      const resolved = await reverseGeocode(env, lat, lng);
       if (resolved) {
         if (resolved.country) country = resolved.country;
         if (resolved.region) region = resolved.region;
         if (resolved.city) city = resolved.city;
         geoSource = 'gps';
       }
+    } else if (typeof body.geoError === 'string') {
+      // Por qué el navegador no dio coordenadas (rechazo, timeout, sin
+      // soporte). No identifica a nadie, solo el código de error.
+      await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('geo_client_error', 0, ?)")
+        .bind(body.geoError.slice(0, 200)).run().catch(() => {});
     }
 
     await env.DB.prepare(
@@ -2311,7 +2334,12 @@ export default {
       // Contador de visitas: POST público (lo llama el frontend al cargar);
       // GET solo admin (estadísticas para el panel).
       if (path === 'visits' && request.method === 'POST') {
-        ctx.waitUntil(handleTrackVisit(request, env));
+        // El cuerpo se lee AQUÍ, antes de contestar — Cloudflare corta el
+        // flujo de la petición apenas se envía la respuesta, así que leerlo
+        // más tarde (dentro de ctx.waitUntil) nunca funciona. Ver nota en
+        // handleTrackVisit.
+        const rawBody = await request.text().catch(() => '');
+        ctx.waitUntil(handleTrackVisit(request, env, rawBody));
         return json({ ok: true });
       }
       if (path === 'visits' && request.method === 'GET') return handleGetVisitStats(request, env);

@@ -252,6 +252,28 @@ siempre. Las coordenadas para esto viven solo en el estado del navegador
 (Zustand) — nunca se mandan al servidor más que en la llamada aparte,
 descartable, de `POST /api/visits` descrita arriba.
 
+**No contar visitas de sesiones admin (20 ago 2026)**: Rafa notó que sus
+propias revisiones del mapa público (logueado como admin, no en `/admin`)
+se estaban contando como visitas, y además con su ubicación real (que él no
+consideraba representativa del "impacto de usuarios reales"). `App.tsx`
+ahora revisa, justo antes de mandar `POST /api/visits`,
+`useStore.getState().isAdminAuthenticated || currentUser?.role === 'admin'`
+— si es una sesión de admin, no manda la llamada (el centrado del mapa en
+`setUserLocation` sí se sigue disparando, porque esa parte es solo
+conveniencia visual para quien esté viendo el mapa, no estadística). Se lee
+con `getState()` dentro del `.then()` de la geolocalización —no como
+dependencia del efecto— porque `isAdminAuthenticated` ya está disponible al
+instante desde `localStorage` (`ev_admin_auth`), pero además puede haberse
+resuelto `currentUser` durante los ~5s que tarda la geolocalización, así que
+conviene leer el estado más fresco en ese momento, no el capturado al
+montar. **Limitación reconocida**: las visitas de antes de este cambio que
+vinieron de sesiones admin ya están mezcladas en `page_views` y no se
+pueden separar retroactivamente — por diseño, cada fila solo tiene
+timestamp + ubicación aproximada, sin ningún identificador de quién la
+generó (ni siquiera de si era admin), así que no hay manera de filtrarlas
+después del hecho. El impacto en los números totales debería ser mínimo
+frente al tráfico real, y de aquí en adelante quedan limpios.
+
 **Hallazgo sobre el despliegue automático de Cloudflare (19 ago 2026)**: al
 revisar por qué la pestaña "Visitas" fallaba justo después de este cambio,
 se descubrió que Cloudflare tiene su propia integración de Git (aparte del
@@ -265,6 +287,29 @@ sí lee/escribe contra los datos reales. No cambia el flujo de trabajo (el
 merge a `main` sigue siendo el único paso que afecta a usuarios reales en la
 URL pública), pero si alguien prueba una rama desde ese link automático,
 debe saber que no es una copia de prueba aislada — es la base real.
+
+**Bug real de la ubicación GPS en el contador de visitas (21 ago 2026)**:
+tras la función del 19 ago 2026 (permiso del navegador → ubicación
+precisa), Rafa probó muchas veces desde Villa Nueva y nunca se registró —
+siempre quedaba "Guatemala City" (la aproximación por IP). Varias hipótesis
+se descartaron con evidencia real contra la base de datos (permisos de
+Safari/Chrome, caché del navegador/CDN, Service Workers,
+Permissions-Policy) antes de encontrar la causa real: en
+`handleTrackVisit`, las coordenadas se leían del cuerpo de la petición
+(`request.json()`) **dentro** de la tarea en segundo plano pasada a
+`ctx.waitUntil()`, es decir, después de que el Worker ya le había
+contestado `HTTP 200` al navegador. Cloudflare corta el flujo del cuerpo de
+la petición apenas se envía la respuesta ("Can't read from request stream
+after response has been sent") — así que ese texto nunca llegaba a leerse,
+sin importar que el navegador sí lo hubiera mandado bien (confirmado con un
+banner de diagnóstico en pantalla, temporal, ya quitado). La solución fue
+mover la lectura del cuerpo (`request.text()`) al manejador principal de
+rutas, **antes** de `ctx.waitUntil()` y del `return`, y pasarle el texto ya
+leído a `handleTrackVisit` como parámetro. **Lección para cualquier ruta
+futura que use `ctx.waitUntil()` para procesar algo en segundo plano**: si
+la tarea en segundo plano necesita el cuerpo de la petición, hay que leerlo
+antes de devolver la respuesta al cliente — nunca dentro de la tarea
+diferida.
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
