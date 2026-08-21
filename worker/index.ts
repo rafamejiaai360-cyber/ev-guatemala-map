@@ -1652,19 +1652,11 @@ const GT_OFFSET = '-6 hours';
 // Resuelve coordenadas a país/departamento/ciudad usando Nominatim (gratuito,
 // sin API key). Nunca lanza — cualquier fallo (red, límite de tasa, etc.)
 // devuelve null y el llamador cae de vuelta a la ubicación aproximada por IP.
-// Deja rastro en ops_log ante cualquier fallo (op='reverse_geocode', ok=0) —
-// Nominatim nunca ha resuelto una sola visita en producción todavía, así que
-// hace falta ver la razón real (¿403 por política de uso contra IPs de
-// datacenter compartidas como las de Cloudflare Workers? ¿timeout? ¿otra
-// cosa?) en vez de seguir adivinando.
+// Deja rastro en ops_log ante cualquier fallo (op='reverse_geocode', ok=0)
+// para poder ver la causa si Nominatim empieza a fallar seguido.
 async function reverseGeocode(env: Env, lat: number, lng: number): Promise<{ country?: string; region?: string; city?: string } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4000);
-  // Bug encontrado 21 ago 2026: estas llamadas de log no se esperaban
-  // (fire-and-forget), así que en la práctica Cloudflare cortaba el
-  // ExecutionContext antes de que el INSERT llegara a completarse — por
-  // eso ops_log se quedaba vacío en cada prueba real, aunque el código
-  // "corriera" bien. Ahora se espera (`await`) antes de devolver null.
   const logFailure = async (detail: string) => {
     if (!env.DB) return;
     try {
@@ -1707,17 +1699,13 @@ async function handleTrackVisit(request: Request, env: Env, rawBody: string): Pr
     let city = cf?.city ?? null;
     let geoSource = 'ip';
 
-    // Causa real encontrada 21 ago 2026: el cuerpo se leía DENTRO de la
-    // tarea en segundo plano (ctx.waitUntil), después de que el Worker ya
-    // le había contestado HTTP 200 al navegador — Cloudflare corta el flujo
-    // del cuerpo de la petición ni bien se envía la respuesta ("Can't read
-    // from request stream after response has been sent"), así que nunca
-    // llegaban coordenadas. Ahora rawBody se lee ANTES, en el manejador
-    // principal, y se pasa ya listo a esta función.
-    let bodyParseError: string | null = null;
+    // El cuerpo se lee ANTES de responder al navegador (en el manejador de
+    // rutas, no aquí) y se pasa ya listo — Cloudflare corta el flujo de la
+    // petición apenas se envía la respuesta, así que leerlo después nunca
+    // funciona.
     let body: { lat?: unknown; lng?: unknown; geoError?: unknown } = {};
     if (rawBody) {
-      try { body = JSON.parse(rawBody); } catch (e) { bodyParseError = `JSON.parse(): ${e instanceof Error ? e.message : String(e)}`; }
+      try { body = JSON.parse(rawBody); } catch { /* cuerpo inválido — seguimos con IP */ }
     }
     const lat = typeof body.lat === 'number' && body.lat >= -90 && body.lat <= 90 ? body.lat : null;
     const lng = typeof body.lng === 'number' && body.lng >= -180 && body.lng <= 180 ? body.lng : null;
@@ -1731,27 +1719,17 @@ async function handleTrackVisit(request: Request, env: Env, rawBody: string): Pr
         geoSource = 'gps';
       }
     } else if (typeof body.geoError === 'string') {
-      // Diagnóstico (visto 21 ago 2026: reverseGeocode nunca se invocó en
-      // ninguna prueba real) — por qué el navegador no dio coordenadas.
-      // No identifica a nadie, solo el código de error de geolocalización.
+      // Por qué el navegador no dio coordenadas (rechazo, timeout, sin
+      // soporte). No identifica a nadie, solo el código de error.
       await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('geo_client_error', 0, ?)")
         .bind(body.geoError.slice(0, 200)).run().catch(() => {});
-    } else {
-      // Ni lat/lng válidos ni geoError — registrar el cuerpo crudo tal cual
-      // llegó para ver qué está pasando de verdad en el servidor. Temporal:
-      // quitar una vez resuelto.
-      await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('visit_debug', 0, ?)")
-        .bind(JSON.stringify({ rawBody: rawBody.slice(0, 300), bodyParseError, contentType: request.headers.get('content-type') })).run().catch(() => {});
     }
 
     await env.DB.prepare(
       'INSERT INTO page_views (created_at, country, city, region, geo_source) VALUES (datetime(\'now\'), ?, ?, ?, ?)'
     ).bind(country, city, region, geoSource).run();
-  } catch (e) {
-    try {
-      await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('visit_debug', 0, ?)")
-        .bind(`outer catch: ${e instanceof Error ? e.message : String(e)}`).run();
-    } catch { /* no hay nada razonable que hacer si hasta el log falla */ }
+  } catch {
+    // Falla en silencio (ej. tabla no migrada todavía) — nunca debe romper la carga del mapa.
   }
   return json({ ok: true });
 }
