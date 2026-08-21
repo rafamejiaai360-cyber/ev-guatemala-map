@@ -1698,7 +1698,7 @@ async function reverseGeocode(env: Env, lat: number, lng: number): Promise<{ cou
   }
 }
 
-async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
+async function handleTrackVisit(request: Request, env: Env, rawBody: string): Promise<Response> {
   if (!env.DB) return json({ ok: true }); // no bloquea la carga del mapa si falta D1
   try {
     const cf = (request as { cf?: { country?: string; city?: string; region?: string } }).cf;
@@ -1707,16 +1707,14 @@ async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
     let city = cf?.city ?? null;
     let geoSource = 'ip';
 
-    // Diagnóstico (21 ago 2026): se cambió de request.json() a leer el texto
-    // crudo primero — con lat/lng confirmados en pantalla del lado del
-    // navegador (banner ?debug=1) pero geo_source siempre en 'ip' y sin
-    // ninguna fila nueva en ops_log (ni reverse_geocode ni geo_client_error),
-    // la única explicación que queda es que el cuerpo nunca se está
-    // interpretando como se espera en el servidor. Esto lo deja ver tal cual
-    // llega, en vez de seguir adivinando.
-    let rawBody = '';
+    // Causa real encontrada 21 ago 2026: el cuerpo se leía DENTRO de la
+    // tarea en segundo plano (ctx.waitUntil), después de que el Worker ya
+    // le había contestado HTTP 200 al navegador — Cloudflare corta el flujo
+    // del cuerpo de la petición ni bien se envía la respuesta ("Can't read
+    // from request stream after response has been sent"), así que nunca
+    // llegaban coordenadas. Ahora rawBody se lee ANTES, en el manejador
+    // principal, y se pasa ya listo a esta función.
     let bodyParseError: string | null = null;
-    try { rawBody = await request.text(); } catch (e) { bodyParseError = `text(): ${e instanceof Error ? e.message : String(e)}`; }
     let body: { lat?: unknown; lng?: unknown; geoError?: unknown } = {};
     if (rawBody) {
       try { body = JSON.parse(rawBody); } catch (e) { bodyParseError = `JSON.parse(): ${e instanceof Error ? e.message : String(e)}`; }
@@ -2358,7 +2356,12 @@ export default {
       // Contador de visitas: POST público (lo llama el frontend al cargar);
       // GET solo admin (estadísticas para el panel).
       if (path === 'visits' && request.method === 'POST') {
-        ctx.waitUntil(handleTrackVisit(request, env));
+        // El cuerpo se lee AQUÍ, antes de contestar — Cloudflare corta el
+        // flujo de la petición apenas se envía la respuesta, así que leerlo
+        // más tarde (dentro de ctx.waitUntil) nunca funciona. Ver nota en
+        // handleTrackVisit.
+        const rawBody = await request.text().catch(() => '');
+        ctx.waitUntil(handleTrackVisit(request, env, rawBody));
         return json({ ok: true });
       }
       if (path === 'visits' && request.method === 'GET') return handleGetVisitStats(request, env);
