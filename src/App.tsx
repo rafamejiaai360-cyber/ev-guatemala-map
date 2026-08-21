@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import AdminPanel from './components/AdminPanel';
@@ -50,8 +50,17 @@ function getOptionalCoords(): Promise<{ coords: { lat: number; lng: number } | n
   });
 }
 
+// Diagnóstico temporal en pantalla (21 ago 2026): el registro del lado del
+// servidor no bastó para encontrar por qué nunca llega la ubicación real —
+// esto muestra el resultado exacto de geolocalización directo en la
+// página, con ?debug=1 en la URL, para verlo sin depender de la base de
+// datos ni de que el visitante entienda nada técnico. Quitar una vez
+// resuelto.
+const debugMode = new URLSearchParams(window.location.search).has('debug');
+
 export default function App() {
   const { scanModalOpen, addStationModalOpen, authModalOpen, profileModalOpen, contactAdminModalOpen, loadRatings, loadDynamicStations, loadCurrentUser, setUserLocation } = useStore();
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
 
   useEffect(() => {
     loadRatings();
@@ -59,17 +68,25 @@ export default function App() {
     loadCurrentUser();
     if (!isAdminPanel) {
       getOptionalCoords().then(({ coords, reason }) => {
+        if (debugMode) {
+          setDebugInfo(coords ? `OK: lat=${coords.lat.toFixed(4)} lng=${coords.lng.toFixed(4)}` : `SIN COORDENADAS — razón: ${reason}`);
+        }
         if (coords) setUserLocation(coords);
         // No contar visitas de sesiones con acceso de administrador (ej. Rafa
         // revisando el mapa público ya logueado) — el contador es para medir
         // impacto real de usuarios, no las propias revisiones del admin.
         const { isAdminAuthenticated, currentUser } = useStore.getState();
-        if (isAdminAuthenticated || currentUser?.role === 'admin') return;
+        if (isAdminAuthenticated || currentUser?.role === 'admin') {
+          if (debugMode) setDebugInfo(prev => `${prev} · (sesión admin — no se contó la visita)`);
+          return;
+        }
         fetch('/api/visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...(coords ?? {}), geoError: coords ? undefined : reason }),
-        }).catch(() => {});
+        })
+          .then(r => { if (debugMode) setDebugInfo(prev => `${prev} · POST /api/visits: HTTP ${r.status}`); })
+          .catch(err => { if (debugMode) setDebugInfo(prev => `${prev} · POST /api/visits FALLÓ: ${err}`); });
       });
     }
   }, []);
@@ -78,6 +95,11 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-[var(--app-height)] bg-[#FAFAFA]">
+      {debugMode && debugInfo && (
+        <div className="bg-black text-white text-xs px-3 py-2 break-words" style={{ zIndex: 9999 }}>
+          🛠️ {debugInfo}
+        </div>
+      )}
       <Header />
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop sidebar */}
