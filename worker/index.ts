@@ -1707,8 +1707,20 @@ async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
     let city = cf?.city ?? null;
     let geoSource = 'ip';
 
+    // Diagnóstico (21 ago 2026): se cambió de request.json() a leer el texto
+    // crudo primero — con lat/lng confirmados en pantalla del lado del
+    // navegador (banner ?debug=1) pero geo_source siempre en 'ip' y sin
+    // ninguna fila nueva en ops_log (ni reverse_geocode ni geo_client_error),
+    // la única explicación que queda es que el cuerpo nunca se está
+    // interpretando como se espera en el servidor. Esto lo deja ver tal cual
+    // llega, en vez de seguir adivinando.
+    let rawBody = '';
+    let bodyParseError: string | null = null;
+    try { rawBody = await request.text(); } catch (e) { bodyParseError = `text(): ${e instanceof Error ? e.message : String(e)}`; }
     let body: { lat?: unknown; lng?: unknown; geoError?: unknown } = {};
-    try { body = await request.json(); } catch { /* sin cuerpo o inválido — seguimos con IP */ }
+    if (rawBody) {
+      try { body = JSON.parse(rawBody); } catch (e) { bodyParseError = `JSON.parse(): ${e instanceof Error ? e.message : String(e)}`; }
+    }
     const lat = typeof body.lat === 'number' && body.lat >= -90 && body.lat <= 90 ? body.lat : null;
     const lng = typeof body.lng === 'number' && body.lng >= -180 && body.lng <= 180 ? body.lng : null;
 
@@ -1724,15 +1736,24 @@ async function handleTrackVisit(request: Request, env: Env): Promise<Response> {
       // Diagnóstico (visto 21 ago 2026: reverseGeocode nunca se invocó en
       // ninguna prueba real) — por qué el navegador no dio coordenadas.
       // No identifica a nadie, solo el código de error de geolocalización.
-      env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('geo_client_error', 0, ?)")
+      await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('geo_client_error', 0, ?)")
         .bind(body.geoError.slice(0, 200)).run().catch(() => {});
+    } else {
+      // Ni lat/lng válidos ni geoError — registrar el cuerpo crudo tal cual
+      // llegó para ver qué está pasando de verdad en el servidor. Temporal:
+      // quitar una vez resuelto.
+      await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('visit_debug', 0, ?)")
+        .bind(JSON.stringify({ rawBody: rawBody.slice(0, 300), bodyParseError, contentType: request.headers.get('content-type') })).run().catch(() => {});
     }
 
     await env.DB.prepare(
       'INSERT INTO page_views (created_at, country, city, region, geo_source) VALUES (datetime(\'now\'), ?, ?, ?, ?)'
     ).bind(country, city, region, geoSource).run();
-  } catch {
-    // Falla en silencio (ej. tabla no migrada todavía) — nunca debe romper la carga del mapa.
+  } catch (e) {
+    try {
+      await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('visit_debug', 0, ?)")
+        .bind(`outer catch: ${e instanceof Error ? e.message : String(e)}`).run();
+    } catch { /* no hay nada razonable que hacer si hasta el log falla */ }
   }
   return json({ ok: true });
 }
