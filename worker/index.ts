@@ -1660,9 +1660,16 @@ const GT_OFFSET = '-6 hours';
 async function reverseGeocode(env: Env, lat: number, lng: number): Promise<{ country?: string; region?: string; city?: string } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4000);
-  const logFailure = (detail: string) => {
+  // Bug encontrado 21 ago 2026: estas llamadas de log no se esperaban
+  // (fire-and-forget), así que en la práctica Cloudflare cortaba el
+  // ExecutionContext antes de que el INSERT llegara a completarse — por
+  // eso ops_log se quedaba vacío en cada prueba real, aunque el código
+  // "corriera" bien. Ahora se espera (`await`) antes de devolver null.
+  const logFailure = async (detail: string) => {
     if (!env.DB) return;
-    env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('reverse_geocode', 0, ?)").bind(detail).run().catch(() => {});
+    try {
+      await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('reverse_geocode', 0, ?)").bind(detail).run();
+    } catch { /* no hay nada razonable que hacer si el log mismo falla */ }
   };
   try {
     const res = await fetch(
@@ -1673,7 +1680,7 @@ async function reverseGeocode(env: Env, lat: number, lng: number): Promise<{ cou
       }
     );
     if (!res.ok) {
-      logFailure(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      await logFailure(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
       return null;
     }
     const data = await res.json() as { address?: Record<string, string> };
@@ -1684,7 +1691,7 @@ async function reverseGeocode(env: Env, lat: number, lng: number): Promise<{ cou
       city: addr.city ?? addr.town ?? addr.village ?? addr.municipality,
     };
   } catch (err) {
-    logFailure(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+    await logFailure(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
     return null;
   } finally {
     clearTimeout(timer);
