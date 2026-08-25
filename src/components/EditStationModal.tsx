@@ -174,9 +174,14 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
 
           {/* Name */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nombre *</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              {type === 'residential' ? 'Nombre de referencia con el que se publicará tu estación *' : 'Nombre *'}
+            </label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400" />
+            {type === 'residential' && (
+              <p className="text-[11px] text-gray-400 mt-1">No necesitás usar tu nombre real.</p>
+            )}
           </div>
 
           {/* Address + Zone */}
