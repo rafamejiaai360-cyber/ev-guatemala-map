@@ -286,13 +286,15 @@ export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
         style={{ width: '100%', height: '100%' }}
         zoomControl={false}
       >
-        {/* Mapa base minimalista (CARTO "Positron"): grises suaves para que los
-            pines sean lo único que resalte. Mismos datos de OpenStreetMap. */}
+        {/* Mapa base: las mismas imágenes de OpenStreetMap de siempre (gratis,
+            sin clave), pasadas a grises suaves con un filtro CSS (.ev-tiles en
+            index.css) para que los pines sean lo único que resalte.
+            Nota (oct 2026): CARTO "Positron" se descartó porque ahora exige
+            API key fuera de localhost y mostraba "API KEY REQUIRED". */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
+          className="ev-tiles"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           keepBuffer={2}
           updateWhenZooming={false}
           updateWhenIdle={true}

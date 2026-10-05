@@ -73,6 +73,12 @@ html, body, #root {
   z-index: 10;
 }
 
+/* Mapa base en grises suaves: mismas imágenes de OpenStreetMap, con un toque
+   mínimo de color para que agua y parques se sigan distinguiendo. */
+.ev-tiles {
+  filter: saturate(.18) brightness(1.05) contrast(.9);
+}
+
 /* Pines de estación (ver makeStationIcon en Map.tsx).
    Relleno = tipo (verde pública / azul residencial / gris fuera de servicio);
    punto en la esquina = estado cuando no está activa. */

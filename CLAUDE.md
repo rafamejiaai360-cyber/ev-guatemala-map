@@ -321,7 +321,9 @@ hoja "Filtros", que reutiliza FilterBar y VehicleSelector), tarjeta flotante al
 tocar un pin y ficha completa (`StationScreen.tsx`) con Waze/Google Maps. La
 ficha conserva las mismas reglas de privacidad que `StationDetail.tsx`. La vista
 de computadora no cambió de estructura. Cambios compartidos por ambas vistas
-(`Map.tsx`): mapa base CARTO "Positron" (grises suaves, mismos datos de OSM),
+(`Map.tsx`): mapa base de OpenStreetMap pasado a grises suaves con un filtro
+CSS (`.ev-tiles` en `index.css`) — se probó CARTO "Positron" pero ahora exige
+API key fuera de localhost (mostraba "API KEY REQUIRED" en cada cuadro),
 pin en forma de gota con enchufe (relleno = tipo, gris si fuera de servicio;
 puntito ámbar/rojo = estado, en lugar del borde grueso), agrupación propia de
 estaciones cercanas (sin librería nueva) y las estaciones filtradas ahora se
