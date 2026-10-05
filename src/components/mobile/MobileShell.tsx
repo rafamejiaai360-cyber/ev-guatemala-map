@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useStore } from '../../store/useStore';
 import type { ChargerStation, StationType } from '../../types';
 import { getMyContributionStationIds } from '../../utils/myContributions';
@@ -17,10 +17,23 @@ const EVMap = lazy(() => import('../Map'));
 type Tab = 'map' | 'activity' | 'saved' | 'profile';
 const BACK_LABEL: Record<Tab, string> = { map: 'Mapa', activity: 'Actividad', saved: 'Guardadas', profile: 'Perfil' };
 
-// Navegación de la app (oct 2026), la misma en celular y computadora: barra inferior con 4 pestañas y botón
-// central "Aportar", Mapa/Lista arriba, tarjeta flotante al tocar un pin y
-// ficha completa. En pantallas anchas (>= 1024 px) mobile.css acomoda todo en
-// una columna a la izquierda y deja el mapa visible a la derecha.
+// Computadora (>= 1024 px): barra superior + lista fija a la izquierda + mapa
+// (opción "A · Barra superior" elegida por Rafa, oct 2026). Celular: barra
+// inferior flotante. Misma lógica y mismas pantallas en ambos.
+const wideQuery = window.matchMedia('(min-width: 1024px)');
+function useIsWide() {
+  return useSyncExternalStore(
+    (cb) => { wideQuery.addEventListener('change', cb); return () => wideQuery.removeEventListener('change', cb); },
+    () => wideQuery.matches,
+  );
+}
+
+// Navegación de la app (oct 2026). En celular: barra inferior con 4 pestañas y
+// botón central "Aportar", Mapa/Lista arriba, tarjeta flotante al tocar un pin
+// y ficha completa. En computadora: barra superior con las mismas secciones,
+// lista siempre visible a la izquierda (donde también se abre la ficha) y el
+// mapa a la derecha. El acomodo lo hace mobile.css; aquí solo cambia que en
+// computadora tocar un pin abre la ficha directo (no hay tarjeta flotante).
 export default function MobileShell() {
   const {
     stations, filteredStations, filters, setFilters, selectedVehicle,
@@ -36,17 +49,29 @@ export default function MobileShell() {
   const [sheet, setSheet] = useState<'none' | 'aportar' | 'filters'>('none');
   const [query, setQuery] = useState('');
 
+  const isWide = useIsWide();
   const byId = useMemo(() => new Map(stations.map((s) => [s.id, s])), [stations]);
-  const detailStation = detailId ? byId.get(detailId) ?? null : null;
+  // En computadora, la estación elegida en el mapa se muestra directo en la
+  // ficha del panel izquierdo (sin tarjeta flotante intermedia).
+  const shownDetailId = detailId ?? (isWide && tab === 'map' ? selectedStationId : null);
+  const detailStation = shownDetailId ? byId.get(shownDetailId) ?? null : null;
+  const backLabel = isWide && tab === 'map' ? 'Estaciones' : detailFrom;
   const peekStation = selectedStationId ? byId.get(selectedStationId) ?? null : null;
   const isAdmin = isAdminAuthenticated || currentUser?.role === 'admin';
 
   function openDetail(id: string) {
     setDetailFrom(tab === 'map' ? (mode === 'list' ? 'Lista' : 'Mapa') : BACK_LABEL[tab]);
     setDetailId(id);
+    // En computadora el mapa queda visible: marcar y centrar la estación.
+    if (isWide) setSelectedStationId(id);
+  }
+  function closeDetail() {
+    setDetailId(null);
+    if (isWide) setSelectedStationId(null);
   }
   function goTab(next: Tab) {
     setDetailId(null);
+    if (isWide) setSelectedStationId(null);
     setTab(next);
   }
   function changeMode(next: 'map' | 'list') {
@@ -69,6 +94,26 @@ export default function MobileShell() {
   const allPressed = filters.status === 'all' && filters.stationType === 'all';
   const activeCount = stations.filter((s) => s.status === 'active').length;
 
+  const chipButtons = (
+    <>
+      <button type="button" className="m-chip m-glass" aria-pressed={allPressed}
+        onClick={() => setFilters({ status: 'all', stationType: 'all' })}>Todas</button>
+      <button type="button" className="m-chip m-glass" aria-pressed={filters.status === 'active'}
+        onClick={() => setFilters({ status: filters.status === 'active' ? 'all' : 'active' })}>
+        <i style={{ background: '#22c55e' }} />Activas
+      </button>
+      <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'public'}
+        onClick={() => setFilters({ stationType: filters.stationType === 'public' ? 'all' : 'public' })}>Públicas</button>
+      <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'residential'}
+        onClick={() => setFilters({ stationType: filters.stationType === 'residential' ? 'all' : 'residential' })}>
+        <i style={{ background: '#3b82f6' }} />Residenciales
+      </button>
+      <button type="button" className="m-chip m-glass" aria-pressed={advancedCount > 0} onClick={() => setSheet('filters')}>
+        {Icon.sliders}Filtros{advancedCount > 0 && <span className="n">{advancedCount}</span>}
+      </button>
+    </>
+  );
+
   const listed = useMemo(() => {
     const q = query.trim().toLowerCase();
     return filteredStations
@@ -88,23 +133,29 @@ export default function MobileShell() {
         </div>
 
         <div className="m-list m-scroll">
-          <label className="m-search">
-            {Icon.search}
-            <input
-              id="m-search"
-              type="search"
-              placeholder="Buscar por nombre, zona o red"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          <div className="m-lhead">
-            {listed.length} {listed.length === 1 ? 'estación' : 'estaciones'} · {userLocation ? 'ordenadas por cercanía' : 'ordenadas por nombre'}
+          <div className="m-listtop">
+            <label className="m-search">
+              {Icon.search}
+              <input
+                id="m-search"
+                type="search"
+                placeholder="Buscar por nombre, zona o red"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+            <div className="m-chips-inline">{chipButtons}</div>
           </div>
-          {listed.map(({ s, km }) => (
-            <StationCard key={s.id} station={s} km={km} rating={ratings[s.id]} onOpen={openDetail} />
-          ))}
-          {listed.length === 0 && <div className="m-empty-line">No hay estaciones con estos filtros.</div>}
+          <div className="m-listbody">
+            <div className="m-lhead">
+              <span>{listed.length} {listed.length === 1 ? 'estación' : 'estaciones'} · {userLocation ? 'por cercanía' : 'por nombre'}</span>
+              <span className="m-lcount"><i /><b>{activeCount}</b> activas</span>
+            </div>
+            {listed.map(({ s, km }) => (
+              <StationCard key={s.id} station={s} km={km} rating={ratings[s.id]} onOpen={openDetail} selected={s.id === selectedStationId} />
+            ))}
+            {listed.length === 0 && <div className="m-empty-line">No hay estaciones con estos filtros.</div>}
+          </div>
         </div>
 
         <div className="m-topfade" />
@@ -122,23 +173,7 @@ export default function MobileShell() {
           <button type="button" aria-pressed={mode === 'map'} onClick={() => changeMode('map')}>{Icon.map}Mapa</button>
           <button type="button" aria-pressed={mode === 'list'} onClick={() => changeMode('list')}>{Icon.list}Lista</button>
         </div>
-        <div className="m-chips">
-          <button type="button" className="m-chip m-glass" aria-pressed={allPressed}
-            onClick={() => setFilters({ status: 'all', stationType: 'all' })}>Todas</button>
-          <button type="button" className="m-chip m-glass" aria-pressed={filters.status === 'active'}
-            onClick={() => setFilters({ status: filters.status === 'active' ? 'all' : 'active' })}>
-            <i style={{ background: '#22c55e' }} />Activas
-          </button>
-          <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'public'}
-            onClick={() => setFilters({ stationType: filters.stationType === 'public' ? 'all' : 'public' })}>Públicas</button>
-          <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'residential'}
-            onClick={() => setFilters({ stationType: filters.stationType === 'residential' ? 'all' : 'residential' })}>
-            <i style={{ background: '#3b82f6' }} />Residenciales
-          </button>
-          <button type="button" className="m-chip m-glass" aria-pressed={advancedCount > 0} onClick={() => setSheet('filters')}>
-            {Icon.sliders}Filtros{advancedCount > 0 && <span className="n">{advancedCount}</span>}
-          </button>
-        </div>
+        <div className="m-chips">{chipButtons}</div>
 
         <Peek
           station={mode === 'map' ? peekStation : null}
@@ -222,11 +257,33 @@ export default function MobileShell() {
       {/* ---------- Ficha completa ---------- */}
       <div className={`m-detail m-scroll${detailStation ? ' on' : ''}`} aria-hidden={!detailStation}>
         {detailStation && (
-          <StationScreen key={detailStation.id} station={detailStation} backLabel={detailFrom} onBack={() => setDetailId(null)} />
+          <StationScreen key={detailStation.id} station={detailStation} backLabel={backLabel} onBack={closeDetail} />
         )}
       </div>
 
-      {/* ---------- Barra inferior ---------- */}
+      {/* ---------- Barra superior (solo computadora) ---------- */}
+      <header className="m-dtop">
+        <div className="m-brand"><i>{Icon.bolt}</i>EV Guatemala</div>
+        <nav className="m-dnav" role="tablist" aria-label="Secciones">
+          <button type="button" role="tab" aria-selected={tab === 'map'} onClick={() => goTab('map')}>{Icon.map}Mapa</button>
+          <button type="button" role="tab" aria-selected={tab === 'activity'} onClick={() => goTab('activity')}>{Icon.activity}Actividad</button>
+          <button type="button" role="tab" aria-selected={tab === 'saved'} onClick={() => goTab('saved')}>{Icon.star}Guardadas</button>
+        </nav>
+        <div className="m-dright">
+          <button type="button" className="m-dbtn" onClick={() => setContactAdminModalOpen(true)}>Contáctanos</button>
+          <button type="button" className="m-dbtn go" onClick={() => setSheet('aportar')}>{Icon.plus}Aportar</button>
+          <button
+            type="button"
+            className={`m-davatar${tab === 'profile' ? ' on' : ''}`}
+            aria-label="Mi perfil"
+            onClick={() => goTab('profile')}
+          >
+            {currentUser ? currentUser.name.charAt(0).toUpperCase() : Icon.user}
+          </button>
+        </div>
+      </header>
+
+      {/* ---------- Barra inferior (solo celular) ---------- */}
       <nav className="m-tabbar m-glass" role="tablist" aria-label="Secciones">
         <TabButton label="Mapa" icon={Icon.map} selected={tab === 'map'} onClick={() => goTab('map')} />
         <TabButton label="Actividad" icon={Icon.activity} selected={tab === 'activity'} onClick={() => goTab('activity')} />

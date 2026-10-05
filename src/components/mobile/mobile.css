@@ -215,44 +215,80 @@
 .m-filters { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border-radius: 16px; padding: 14px; }
 .m-filters .lbl { font-size: 12px; color: var(--ink2); margin-bottom: 6px; }
 
-/* ---------- Pantalla ancha (computadora, tablet horizontal) ----------
-   Misma navegación que en celular, acomodada en una columna a la izquierda;
-   el mapa queda siempre visible a la derecha. */
-@media (min-width: 1024px) {
-  .m-shell { --col: 400px; --panel: calc(var(--col) + 32px); --top: 16px; --tabbar-bottom: 16px; }
-  .m-topbar, .m-mode { left: 16px; right: auto; width: var(--col); }
-  .m-chips { left: 0; right: auto; width: var(--panel); padding-inline: 16px; flex-wrap: wrap; overflow: visible; }
-  .m-tools { top: 16px; right: 16px; }
-  .m-peek { left: 16px; right: auto; width: var(--col); }
-  .m-tabbar { left: 16px; right: auto; width: var(--col); }
+/* Elementos que solo existen en una de las dos vistas */
+.m-dtop, .m-chips-inline, .m-lcount { display: none; }
+.m-lhead { display: flex; justify-content: space-between; gap: 8px; }
 
-  /* El mapa nunca se esconde ni se desplaza: la lista, las pestañas y la
-     ficha se abren como panel sobre la columna izquierda. */
+/* ---------- Computadora (>= 1024 px) — opción "A · Barra superior" ----------
+   Barra superior con las secciones, lista siempre visible a la izquierda (ahí
+   mismo se abren la ficha y las otras pestañas) y el mapa a la derecha. */
+@media (min-width: 1024px) {
+  .m-shell { --head: 60px; --side: 400px; }
+
+  /* Lo propio del celular se oculta */
+  .m-tabbar, .m-topbar, .m-mode, .m-chips, .m-peek, .m-topfade { display: none; }
+
+  /* Barra superior */
+  .m-dtop { display: flex; position: absolute; top: 0; left: 0; right: 0; height: var(--head); z-index: 45; align-items: center; gap: 16px; padding: 0 18px; background: var(--surface); border-bottom: 1px solid var(--hair); }
+  .m-dtop .m-brand { padding: 0; }
+  .m-dnav { margin: 0 auto; display: flex; gap: 2px; background: var(--ghost); border-radius: 11px; padding: 3px; }
+  .m-dnav button { border: 0; background: transparent; height: 32px; padding: 0 16px; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: var(--ink2) !important; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; transition: background-color .25s var(--ease), color .25s var(--ease); }
+  .m-dnav button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .m-dnav button[aria-selected="true"] { background: var(--surface); color: var(--ink) !important; font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+  .m-dnav button:hover { color: var(--ink) !important; }
+  .m-dright { display: flex; align-items: center; gap: 8px; }
+  .m-dbtn { height: 36px; border-radius: 18px; border: 0; padding: 0 14px; font-size: 13.5px; font-weight: 600; background: transparent; color: var(--ink2) !important; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .m-dbtn:hover { background: var(--ghost); color: var(--ink) !important; }
+  .m-dbtn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .m-dbtn.go { background: var(--green); color: #fff !important; padding: 0 16px; box-shadow: 0 8px 18px -8px rgba(22, 163, 74, .7); }
+  .m-dbtn.go:hover { filter: brightness(1.05); background: var(--green); }
+  .m-davatar { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--green-soft); color: var(--green) !important; font-size: 14px; font-weight: 600; display: grid; place-items: center; cursor: pointer; transition: box-shadow .2s; }
+  .m-davatar svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .m-davatar.on, .m-davatar:hover { box-shadow: 0 0 0 2px var(--green); }
+
+  /* Mapa: siempre visible, a la derecha de la lista y debajo de la barra */
   .m-view-map { opacity: 1; pointer-events: auto; }
   .m-view-map.pushed { transform: none; filter: none; }
-  .m-shell[data-mode="list"] .m-mapwrap { opacity: 1; pointer-events: auto; }
-  .m-list, .m-topfade { right: auto; width: var(--panel); }
-  .m-list { background: var(--page); box-shadow: 1px 0 0 var(--hair), 12px 0 30px -18px rgba(0, 0, 0, .25); }
-  .m-topfade { height: 150px; }
-  .m-chips { top: calc(var(--top) + 86px); }
-  .m-list { padding-top: 172px; }
+  .m-mapwrap, .m-shell[data-mode="list"] .m-mapwrap { top: var(--head); left: var(--side); opacity: 1; pointer-events: auto; }
+  .m-tools { top: 14px; right: 14px; }
+  .ev-map-mobile .leaflet-bottom.leaflet-right { bottom: 0; }
 
+  /* Lista fija a la izquierda */
+  .m-list, .m-shell[data-mode="list"] .m-list { top: var(--head); left: 0; right: auto; bottom: 0; width: var(--side); padding: 0; opacity: 1; pointer-events: auto; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border-right: 1px solid var(--hair); z-index: 15; }
+  .m-listtop { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 14px 14px 8px; }
+  .m-listtop .m-search { background: var(--ghost); box-shadow: none; margin: 0; }
+  .m-chips-inline { display: flex; gap: 6px; flex-wrap: wrap; }
+  .m-chips-inline .m-chip { background: var(--ghost); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .m-chips-inline .m-chip[aria-pressed="true"] { background: var(--ink); }
+  .m-listbody { flex: 1; overflow-y: auto; padding: 4px 8px 16px; scrollbar-width: thin; }
+  .m-listbody .m-lhead { margin: 2px 8px 6px; }
+  .m-lcount { display: inline-flex; align-items: center; gap: 5px; }
+  .m-lcount i { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
+  .m-lcount b { color: var(--ink); font-weight: 600; }
+  .m-list .m-card { background: transparent; box-shadow: none; margin-bottom: 2px; padding: 11px 10px; border-radius: 14px; }
+  .m-list .m-card:hover { background: var(--ghost); }
+  .m-list .m-card.sel { background: var(--green-soft); }
+  .m-list .m-card:active { transform: none; }
+
+  /* Actividad, Guardadas y Perfil: en el mismo lugar que la lista */
   .m-view:not(.m-view-map) { pointer-events: none; z-index: 21; }
-  .m-view:not(.m-view-map) .m-screen { right: auto; width: var(--panel); background: var(--page); box-shadow: 1px 0 0 var(--hair), 12px 0 30px -18px rgba(0, 0, 0, .25); }
+  .m-view:not(.m-view-map) .m-screen { top: var(--head); right: auto; width: var(--side); padding: 18px 16px 28px; background: var(--page); border-right: 1px solid var(--hair); }
   .m-view.on:not(.m-view-map) .m-screen { pointer-events: auto; }
   .m-view.pushed:not(.m-view-map) { transform: none; filter: none; }
+  .m-lt { font-size: 24px; margin-top: 0; }
 
-  .m-detail { right: auto; width: var(--panel); transform: translateX(-100%); box-shadow: 1px 0 0 var(--hair), 12px 0 30px -18px rgba(0, 0, 0, .25); }
-  .m-detail.on { transform: none; }
+  /* Ficha: reemplaza la lista con un deslizamiento corto */
+  .m-detail { top: var(--head); right: auto; width: var(--side); padding-bottom: 28px; transform: translateX(-24px); opacity: 0; transition: transform .4s var(--ease), opacity .25s var(--ease), visibility 0s linear .4s; border-right: 1px solid var(--hair); box-shadow: none; }
+  .m-detail.on { transform: none; opacity: 1; transition: transform .4s var(--ease), opacity .25s var(--ease); }
+  .m-hero { padding-top: 14px; }
 
   /* Hojas → ventanas centradas */
   .m-sheet { left: 50%; right: auto; top: 50%; bottom: auto; width: 440px; max-height: 80%; border-radius: 22px; padding: 18px 18px 20px;
     transform: translate(-50%, -46%) scale(.96); opacity: 0; pointer-events: none; transition: transform .35s var(--ease), opacity .25s; box-shadow: 0 30px 70px -20px rgba(0, 0, 0, .4); }
   .m-sheet.on { transform: translate(-50%, -50%); opacity: 1; pointer-events: auto; }
   .m-sheet .grab { display: none; }
-
-  .ev-map-mobile .leaflet-bottom.leaflet-right { bottom: 0; }
-  .m-card:hover, .m-glist button.r:hover, .m-cta:hover { filter: brightness(.98); }
+  .m-scrim { z-index: 50; }
+  .m-glist button.r:hover, .m-cta:hover { filter: brightness(.98); }
 }
 
 @media (prefers-reduced-motion: reduce) {

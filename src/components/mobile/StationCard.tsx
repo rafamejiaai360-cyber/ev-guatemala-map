@@ -6,17 +6,19 @@ export default function StationCard({
   km,
   rating,
   onOpen,
+  selected = false,
 }: {
   station: ChargerStation;
   km: number | null;
   rating?: RatingInfo;
   onOpen: (id: string) => void;
+  selected?: boolean;
 }) {
   const t = stationType(station);
   const dist = distanceLabel(km);
   const kw = maxKw(station);
   return (
-    <button type="button" className="m-card" onClick={() => onOpen(station.id)}>
+    <button type="button" className={`m-card${selected ? ' sel' : ''}`} onClick={() => onOpen(station.id)}>
       <span className={`av${t === 'residential' ? ' r' : ''}`}>{t === 'residential' ? Icon.house : Icon.pin}</span>
       <h4>{station.name}</h4>
       <span className={`m-pill ${station.status}`}>{STATUS_LABEL[station.status]}</span>

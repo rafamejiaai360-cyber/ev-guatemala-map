@@ -129,12 +129,10 @@ function MapController({ variant }: { variant: Variant }) {
         const zoom = Math.max(map.getZoom(), 15);
         let target = L.latLng(station.lat, station.lng);
         // En celular la tarjeta flotante tapa la mitad de abajo: subimos el pin
-        // para que quede visible por encima de ella. En pantalla ancha la
-        // columna de la izquierda (~430 px) tapa ese lado: corremos el pin al
-        // centro del área de mapa que queda libre a la derecha.
-        if (variant === 'mobile') {
-          const wide = window.matchMedia('(min-width: 1024px)').matches;
-          target = map.unproject(map.project(target, zoom).add(wide ? [-216, 0] : [0, 110]), zoom);
+        // para que quede visible por encima de ella. En computadora el mapa
+        // ya ocupa solo el área libre a la derecha de la lista: va centrado.
+        if (variant === 'mobile' && !window.matchMedia('(min-width: 1024px)').matches) {
+          target = map.unproject(map.project(target, zoom).add([0, 110]), zoom);
         }
         map.setView(target, zoom, { animate: true });
       }

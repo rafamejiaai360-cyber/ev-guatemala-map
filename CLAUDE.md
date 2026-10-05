@@ -315,9 +315,14 @@ diferida.
 Rafa)**: basado en la estructura de la app Electron Power, adaptada al
 estilo minimalista que pidió Rafa. `App.tsx` monta siempre
 `src/components/mobile/MobileShell.tsx` (Header.tsx y Sidebar.tsx quedaron sin
-uso); a pedido de Rafa la computadora usa la MISMA lógica que el celular — en
->= 1024 px `mobile.css` acomoda todo en una columna izquierda de 400 px y deja
-el mapa visible a la derecha (hojas como ventanas centradas). Incluye: barra
+uso); a pedido de Rafa la computadora usa la MISMA lógica y pantallas que el
+celular, con la distribución "A · Barra superior" que él eligió entre 3
+maquetas (https://claude.ai/artifact/SYEnAVA4cnLPwt2ZBVGPyW): en >= 1024 px
+hay una barra superior (`.m-dtop`: logo, Mapa/Actividad/Guardadas al centro,
+Contáctanos + Aportar + avatar→Perfil a la derecha), lista fija de 400 px a la
+izquierda donde también se abren la ficha y las otras pestañas, y el mapa a la
+derecha; tocar un pin abre la ficha directo (sin tarjeta flotante, ver
+`shownDetailId` en MobileShell). Hojas como ventanas centradas. En celular:
 inferior flotante (Mapa · Actividad · botón central "Aportar" · Guardadas ·
 Perfil), interruptor Mapa/Lista, filtros rápidos en chips (los avanzados en la
 hoja "Filtros", que reutiliza FilterBar y VehicleSelector), tarjeta flotante al
