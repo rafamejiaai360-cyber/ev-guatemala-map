@@ -322,7 +322,7 @@ hay una barra superior (`.m-dtop`: logo, Mapa/Actividad/Guardadas al centro,
 Contáctanos + Aportar + avatar→Perfil a la derecha), lista fija de 400 px a la
 izquierda donde también se abren la ficha y las otras pestañas, y el mapa a la
 derecha; tocar un pin abre la ficha directo (sin tarjeta flotante, ver
-`shownDetailId` en MobileShell). Hojas como ventanas centradas. En celular:
+`shownDetailId` en MobileShell). Hojas como ventanas centradas. En celular: barra
 inferior flotante (Mapa · Actividad · botón central "Aportar" · Guardadas ·
 Perfil), interruptor Mapa/Lista, filtros rápidos en chips (los avanzados en la
 hoja "Filtros", que reutiliza FilterBar y VehicleSelector), tarjeta flotante al
