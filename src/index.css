@@ -76,7 +76,7 @@ html, body, #root {
 /* Mapa base en grises suaves: mismas imágenes de OpenStreetMap, con un toque
    mínimo de color para que agua y parques se sigan distinguiendo. */
 .ev-tiles {
-  filter: saturate(.18) brightness(1.05) contrast(.9);
+  filter: saturate(.4) brightness(1.04) contrast(.92);
 }
 
 /* Pines de estación (ver makeStationIcon en Map.tsx).
