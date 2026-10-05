@@ -17,10 +17,10 @@ const EVMap = lazy(() => import('../Map'));
 type Tab = 'map' | 'activity' | 'saved' | 'profile';
 const BACK_LABEL: Record<Tab, string> = { map: 'Mapa', activity: 'Actividad', saved: 'Guardadas', profile: 'Perfil' };
 
-// Navegación para celular (oct 2026): barra inferior con 4 pestañas y botón
+// Navegación de la app (oct 2026), la misma en celular y computadora: barra inferior con 4 pestañas y botón
 // central "Aportar", Mapa/Lista arriba, tarjeta flotante al tocar un pin y
-// ficha completa que entra desde la derecha. La vista de computadora sigue
-// usando Header + Sidebar (ver App.tsx).
+// ficha completa. En pantallas anchas (>= 1024 px) mobile.css acomoda todo en
+// una columna a la izquierda y deja el mapa visible a la derecha.
 export default function MobileShell() {
   const {
     stations, filteredStations, filters, setFilters, selectedVehicle,
@@ -80,7 +80,7 @@ export default function MobileShell() {
   return (
     <div className="m-shell" data-mode={mode}>
       {/* ---------- Pestaña Mapa ---------- */}
-      <section className={`m-view${tab === 'map' ? ' on' : ''}${tab === 'map' && detailStation ? ' pushed' : ''}`} aria-hidden={tab !== 'map'}>
+      <section className={`m-view m-view-map${tab === 'map' ? ' on' : ''}${tab === 'map' && detailStation ? ' pushed' : ''}`} aria-hidden={tab !== 'map'}>
         <div className="m-mapwrap">
           <Suspense fallback={<div className="m-empty-line" style={{ paddingTop: '45vh' }}>Cargando mapa…</div>}>
             <EVMap variant="mobile" />

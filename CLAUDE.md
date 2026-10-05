@@ -311,17 +311,19 @@ la tarea en segundo plano necesita el cuerpo de la petición, hay que leerlo
 antes de devolver la respuesta al cliente — nunca dentro de la tarea
 diferida.
 
-**Rediseño de navegación en celular (oct 2026, en staging, pendiente de visto
-bueno de Rafa)**: basado en la estructura de la app Electron Power, adaptada al
-estilo minimalista que pidió Rafa. En pantallas < 1024 px, `App.tsx` monta
-`src/components/mobile/MobileShell.tsx` en vez de Header + Sidebar: barra
+**Rediseño de navegación (oct 2026, en staging, pendiente de visto bueno de
+Rafa)**: basado en la estructura de la app Electron Power, adaptada al
+estilo minimalista que pidió Rafa. `App.tsx` monta siempre
+`src/components/mobile/MobileShell.tsx` (Header.tsx y Sidebar.tsx quedaron sin
+uso); a pedido de Rafa la computadora usa la MISMA lógica que el celular — en
+>= 1024 px `mobile.css` acomoda todo en una columna izquierda de 400 px y deja
+el mapa visible a la derecha (hojas como ventanas centradas). Incluye: barra
 inferior flotante (Mapa · Actividad · botón central "Aportar" · Guardadas ·
 Perfil), interruptor Mapa/Lista, filtros rápidos en chips (los avanzados en la
 hoja "Filtros", que reutiliza FilterBar y VehicleSelector), tarjeta flotante al
 tocar un pin y ficha completa (`StationScreen.tsx`) con Waze/Google Maps. La
-ficha conserva las mismas reglas de privacidad que `StationDetail.tsx`. La vista
-de computadora no cambió de estructura. Cambios compartidos por ambas vistas
-(`Map.tsx`): mapa base de OpenStreetMap pasado a grises suaves con un filtro
+ficha conserva las mismas reglas de privacidad que `StationDetail.tsx`.
+Cambios del mapa (`Map.tsx`): mapa base de OpenStreetMap pasado a grises suaves con un filtro
 CSS (`.ev-tiles` en `index.css`) — se probó CARTO "Positron" pero ahora exige
 API key fuera de localhost (mostraba "API KEY REQUIRED" en cada cuadro),
 pin en forma de gota con enchufe (relleno = tipo, gris si fuera de servicio;

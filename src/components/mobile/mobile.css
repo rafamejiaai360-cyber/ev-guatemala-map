@@ -29,7 +29,7 @@
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
-.m-shell button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+.m-shell button { font-family: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
 .m-glass { background: var(--glass); backdrop-filter: blur(22px) saturate(1.8); -webkit-backdrop-filter: blur(22px) saturate(1.8); }
 .m-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; scrollbar-width: none; }
 .m-scroll::-webkit-scrollbar { display: none; }
@@ -214,6 +214,46 @@
 .m-cancel { width: 100%; margin-top: 12px; height: 46px; border-radius: 14px; border: 0; background: var(--surface); font-size: 15px; font-weight: 600; color: var(--green) !important; cursor: pointer; }
 .m-filters { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border-radius: 16px; padding: 14px; }
 .m-filters .lbl { font-size: 12px; color: var(--ink2); margin-bottom: 6px; }
+
+/* ---------- Pantalla ancha (computadora, tablet horizontal) ----------
+   Misma navegación que en celular, acomodada en una columna a la izquierda;
+   el mapa queda siempre visible a la derecha. */
+@media (min-width: 1024px) {
+  .m-shell { --col: 400px; --panel: calc(var(--col) + 32px); --top: 16px; --tabbar-bottom: 16px; }
+  .m-topbar, .m-mode { left: 16px; right: auto; width: var(--col); }
+  .m-chips { left: 0; right: auto; width: var(--panel); padding-inline: 16px; flex-wrap: wrap; overflow: visible; }
+  .m-tools { top: 16px; right: 16px; }
+  .m-peek { left: 16px; right: auto; width: var(--col); }
+  .m-tabbar { left: 16px; right: auto; width: var(--col); }
+
+  /* El mapa nunca se esconde ni se desplaza: la lista, las pestañas y la
+     ficha se abren como panel sobre la columna izquierda. */
+  .m-view-map { opacity: 1; pointer-events: auto; }
+  .m-view-map.pushed { transform: none; filter: none; }
+  .m-shell[data-mode="list"] .m-mapwrap { opacity: 1; pointer-events: auto; }
+  .m-list, .m-topfade { right: auto; width: var(--panel); }
+  .m-list { background: var(--page); box-shadow: 1px 0 0 var(--hair), 12px 0 30px -18px rgba(0, 0, 0, .25); }
+  .m-topfade { height: 150px; }
+  .m-chips { top: calc(var(--top) + 86px); }
+  .m-list { padding-top: 172px; }
+
+  .m-view:not(.m-view-map) { pointer-events: none; z-index: 21; }
+  .m-view:not(.m-view-map) .m-screen { right: auto; width: var(--panel); background: var(--page); box-shadow: 1px 0 0 var(--hair), 12px 0 30px -18px rgba(0, 0, 0, .25); }
+  .m-view.on:not(.m-view-map) .m-screen { pointer-events: auto; }
+  .m-view.pushed:not(.m-view-map) { transform: none; filter: none; }
+
+  .m-detail { right: auto; width: var(--panel); transform: translateX(-100%); box-shadow: 1px 0 0 var(--hair), 12px 0 30px -18px rgba(0, 0, 0, .25); }
+  .m-detail.on { transform: none; }
+
+  /* Hojas → ventanas centradas */
+  .m-sheet { left: 50%; right: auto; top: 50%; bottom: auto; width: 440px; max-height: 80%; border-radius: 22px; padding: 18px 18px 20px;
+    transform: translate(-50%, -46%) scale(.96); opacity: 0; pointer-events: none; transition: transform .35s var(--ease), opacity .25s; box-shadow: 0 30px 70px -20px rgba(0, 0, 0, .4); }
+  .m-sheet.on { transform: translate(-50%, -50%); opacity: 1; pointer-events: auto; }
+  .m-sheet .grab { display: none; }
+
+  .ev-map-mobile .leaflet-bottom.leaflet-right { bottom: 0; }
+  .m-card:hover, .m-glist button.r:hover, .m-cta:hover { filter: brightness(.98); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .m-shell *, .m-shell *::before { transition: none !important; animation: none !important; }

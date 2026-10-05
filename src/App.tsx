@@ -1,6 +1,4 @@
-import { lazy, Suspense, useEffect, useSyncExternalStore } from 'react';
-import Header from './components/Header';
-import Sidebar from './components/Sidebar';
+import { useEffect } from 'react';
 import AdminPanel from './components/AdminPanel';
 import ScanModal from './components/ScanModal';
 import AddStationModal from './components/AddStationModal';
@@ -10,19 +8,7 @@ import ContactAdminModal from './components/ContactAdminModal';
 import MobileShell from './components/mobile/MobileShell';
 import { useStore } from './store/useStore';
 
-const EVMap = lazy(() => import('./components/Map'));
-
 const isAdminPanel = window.location.pathname === '/admin';
-
-// Celular (< 1024 px) usa la navegación nueva (MobileShell); computadora sigue
-// con Header + Sidebar. Se escucha el cambio para que rotar la tablet funcione.
-const desktopQuery = window.matchMedia('(min-width: 1024px)');
-function useIsDesktop() {
-  return useSyncExternalStore(
-    (cb) => { desktopQuery.addEventListener('change', cb); return () => desktopQuery.removeEventListener('change', cb); },
-    () => desktopQuery.matches,
-  );
-}
 
 // Pide la ubicación del navegador de forma opcional: si el usuario acepta, se
 // usa para (a) centrar el mapa ahí y mostrarle las estaciones cercanas, y
@@ -74,8 +60,6 @@ export default function App() {
     }
   }, []);
 
-  const isDesktop = useIsDesktop();
-
   if (isAdminPanel) return <AdminPanel />;
 
   const modals = (
@@ -88,40 +72,13 @@ export default function App() {
     </>
   );
 
-  if (!isDesktop) {
-    return (
-      <>
-        <MobileShell />
-        {modals}
-      </>
-    );
-  }
-
+  // Misma navegación en celular y computadora (oct 2026): en pantallas
+  // anchas, mobile.css acomoda todo en una columna a la izquierda y deja el
+  // mapa siempre visible a la derecha. Header.tsx y Sidebar.tsx ya no se usan.
   return (
-    <div className="flex flex-col h-[var(--app-height)] bg-[#FAFAFA]">
-      <Header />
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-shrink-0">
-          <Sidebar />
-        </div>
-
-        {/* Map */}
-        <Suspense
-          fallback={
-            <div className="flex-1 flex items-center justify-center bg-gray-100">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm text-gray-500">Cargando mapa…</span>
-              </div>
-            </div>
-          }
-        >
-          <EVMap />
-        </Suspense>
-
-      </div>
-
+    <>
+      <MobileShell />
       {modals}
-    </div>
+    </>
   );
 }
