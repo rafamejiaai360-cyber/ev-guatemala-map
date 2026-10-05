@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useSyncExternalStore } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import AdminPanel from './components/AdminPanel';
@@ -7,11 +7,22 @@ import AddStationModal from './components/AddStationModal';
 import AuthModal from './components/AuthModal';
 import ProfileModal from './components/ProfileModal';
 import ContactAdminModal from './components/ContactAdminModal';
+import MobileShell from './components/mobile/MobileShell';
 import { useStore } from './store/useStore';
 
 const EVMap = lazy(() => import('./components/Map'));
 
 const isAdminPanel = window.location.pathname === '/admin';
+
+// Celular (< 1024 px) usa la navegación nueva (MobileShell); computadora sigue
+// con Header + Sidebar. Se escucha el cambio para que rotar la tablet funcione.
+const desktopQuery = window.matchMedia('(min-width: 1024px)');
+function useIsDesktop() {
+  return useSyncExternalStore(
+    (cb) => { desktopQuery.addEventListener('change', cb); return () => desktopQuery.removeEventListener('change', cb); },
+    () => desktopQuery.matches,
+  );
+}
 
 // Pide la ubicación del navegador de forma opcional: si el usuario acepta, se
 // usa para (a) centrar el mapa ahí y mostrarle las estaciones cercanas, y
@@ -63,14 +74,34 @@ export default function App() {
     }
   }, []);
 
+  const isDesktop = useIsDesktop();
+
   if (isAdminPanel) return <AdminPanel />;
+
+  const modals = (
+    <>
+      {scanModalOpen && <ScanModal />}
+      {addStationModalOpen && <AddStationModal />}
+      {authModalOpen && <AuthModal />}
+      {profileModalOpen && <ProfileModal />}
+      {contactAdminModalOpen && <ContactAdminModal />}
+    </>
+  );
+
+  if (!isDesktop) {
+    return (
+      <>
+        <MobileShell />
+        {modals}
+      </>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[var(--app-height)] bg-[#FAFAFA]">
       <Header />
       <div className="flex flex-1 overflow-hidden">
-        {/* Desktop sidebar */}
-        <div className="hidden lg:flex lg:flex-shrink-0">
+        <div className="flex flex-shrink-0">
           <Sidebar />
         </div>
 
@@ -88,26 +119,9 @@ export default function App() {
           <EVMap />
         </Suspense>
 
-        {/* Mobile sidebar — bottom sheet */}
-        <div className="lg:hidden">
-          <Sidebar />
-        </div>
       </div>
 
-      {/* Scan modal */}
-      {scanModalOpen && <ScanModal />}
-
-      {/* Add station modal */}
-      {addStationModalOpen && <AddStationModal />}
-
-      {/* Auth modal */}
-      {authModalOpen && <AuthModal />}
-
-      {/* Profile modal */}
-      {profileModalOpen && <ProfileModal />}
-
-      {/* Contact admin modal */}
-      {contactAdminModalOpen && <ContactAdminModal />}
+      {modals}
     </div>
   );
 }

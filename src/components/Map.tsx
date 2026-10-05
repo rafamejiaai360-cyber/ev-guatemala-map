@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useCallback, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
+import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useStore } from '../store/useStore';
@@ -17,31 +17,40 @@ L.Icon.Default.mergeOptions({
 
 const iconCache = new Map<string, L.DivIcon>();
 
-// Relleno = TIPO de estación (quién la ofrece): verde = pública, azul = residencial.
-// Borde = ESTADO operativo: blanco = activo, ámbar = mantenimiento, rojo = fuera de servicio.
-// Dos señales independientes en un mismo ícono, cada una con su propio significado.
-const TYPE_FILL: Record<string, string> = {
-  public: '#22c55e',
-  residential: '#3b82f6',
-};
-const STATUS_BORDER: Record<string, string> = {
-  active: '#ffffff',
-  maintenance: '#f59e0b',
-  offline: '#ef4444',
-};
+// Pin en forma de gota con un enchufe de línea fina.
+// Relleno = TIPO de estación (quién la ofrece): verde = pública, azul = residencial;
+// gris si está fuera de servicio.
+// Punto en la esquina = ESTADO cuando no está activa: ámbar = mantenimiento, rojo = fuera de servicio.
+// Siguen siendo dos señales independientes, como se acordó el 14 jul 2026,
+// pero el estado ya no usa un borde grueso: solo aparece cuando hay algo que avisar.
+const PLUG_SVG = '<svg class="ev-pin-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2.5v4.5M15 2.5v4.5M6.5 7h11v3.5a5.5 5.5 0 0 1-11 0zM12 16v5.5"/></svg>';
 
-function makeStationIcon(type: string, status: string, dimmed: boolean) {
-  const key = `${type}-${status}-${dimmed}`;
+function makeStationIcon(type: string, status: string, selected: boolean) {
+  const key = `${type}-${status}-${selected}`;
   if (iconCache.has(key)) return iconCache.get(key)!;
-  const fill = TYPE_FILL[type] ?? TYPE_FILL.public;
-  const border = STATUS_BORDER[status] ?? '#ffffff';
-  const borderWidth = status === 'active' ? 2.5 : 3.5;
+  const dot = status !== 'active' ? `<span class="ev-pin-dot ${status}"></span>` : '';
   const icon = L.divIcon({
-    className: '',
-    html: `<div class="ev-marker ${type} ${status}${dimmed ? ' dimmed' : ''}" style="background:${fill};width:30px;height:30px;border-radius:50%;border:${borderWidth}px solid ${border};box-shadow:0 2px 8px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;font-size:14px;">⚡</div>`,
+    className: 'ev-pin-wrap',
+    html: `<div class="ev-pin ${type} ${status}${selected ? ' sel' : ''}"><span class="ev-pin-shape"></span>${PLUG_SVG}${dot}</div>`,
     iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -18],
+    // La punta de la gota queda ~21 px debajo del centro (cuadrado de 30 px rotado 45°)
+    iconAnchor: [15, 36],
+    popupAnchor: [0, -38],
+    tooltipAnchor: [0, -34],
+  });
+  iconCache.set(key, icon);
+  return icon;
+}
+
+function makeClusterIcon(count: number, hasResidential: boolean) {
+  const key = `cluster-${count}-${hasResidential}`;
+  if (iconCache.has(key)) return iconCache.get(key)!;
+  const size = count >= 10 ? 40 : 34;
+  const icon = L.divIcon({
+    className: 'ev-pin-wrap',
+    html: `<div class="ev-cluster${hasResidential ? ' mix' : ''}" style="min-width:${size}px;height:${size}px">${count}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
   iconCache.set(key, icon);
   return icon;
@@ -49,7 +58,7 @@ function makeStationIcon(type: string, status: string, dimmed: boolean) {
 
 const userIcon = L.divIcon({
   className: '',
-  html: `<div style="background:#3b82f6;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 3px rgba(59,130,246,0.3),0 2px 8px rgba(0,0,0,0.25);"></div>`,
+  html: `<div style="background:#0a84ff;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 6px rgba(10,132,255,0.18),0 2px 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [16, 16],
   iconAnchor: [8, 8],
 });
@@ -87,7 +96,7 @@ function StationTooltipContent({ station }: { station: ChargerStation }) {
               {station.name}
             </div>
             <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-              {(station.type ?? 'public') === 'residential' ? '🏠' : '🔌'} {station.zone} · {station.network}
+              {(station.type ?? 'public') === 'residential' ? 'Residencial' : 'Pública'} · {station.zone} · {station.network}
             </div>
           </div>
         </div>
@@ -106,7 +115,9 @@ function StationTooltipContent({ station }: { station: ChargerStation }) {
   );
 }
 
-function MapController() {
+type Variant = 'desktop' | 'mobile';
+
+function MapController({ variant }: { variant: Variant }) {
   const { selectedStationId, stations, userLocation } = useStore();
   const map = useMap();
   const prevSelectedRef = useRef<string | null>(null);
@@ -115,11 +126,18 @@ function MapController() {
     if (selectedStationId && selectedStationId !== prevSelectedRef.current) {
       const station = stations.find((s) => s.id === selectedStationId);
       if (station) {
-        map.setView([station.lat, station.lng], Math.max(map.getZoom(), 15), { animate: true });
+        const zoom = Math.max(map.getZoom(), 15);
+        let target = L.latLng(station.lat, station.lng);
+        // En celular la tarjeta flotante tapa la mitad de abajo: subimos el pin
+        // para que quede visible por encima de ella.
+        if (variant === 'mobile') {
+          target = map.unproject(map.project(target, zoom).add([0, 110]), zoom);
+        }
+        map.setView(target, zoom, { animate: true });
       }
     }
     prevSelectedRef.current = selectedStationId;
-  }, [selectedStationId, stations, map]);
+  }, [selectedStationId, stations, map, variant]);
 
   useEffect(() => {
     if (userLocation) {
@@ -140,10 +158,9 @@ function DisableTap() {
   return null;
 }
 
-function GeolocationButton() {
+function useLocate() {
   const { setUserLocation } = useStore();
-
-  const locate = useCallback(() => {
+  return useCallback(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -151,7 +168,10 @@ function GeolocationButton() {
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }, [setUserLocation]);
+}
 
+function GeolocationButton() {
+  const locate = useLocate();
   return (
     <button
       onClick={locate}
@@ -167,75 +187,129 @@ function GeolocationButton() {
   );
 }
 
-export default function EVMap() {
-  const { stations, filteredStations, selectedVehicle, filters } = useStore();
+// Agrupa estaciones que en pantalla quedarían a menos de CLUSTER_PX entre sí.
+// Se calcula con la proyección del nivel de zoom actual, así que solo cambia al
+// acercar o alejar (no al arrastrar el mapa).
+const CLUSTER_PX = 44;
+const NO_CLUSTER_ZOOM = 17;
 
-  const hasActiveFilters =
-    selectedVehicle !== null ||
-    filters.status !== 'all' ||
-    filters.stationType !== 'all' ||
-    filters.connectorTypes.length > 0 ||
-    filters.level !== 'all';
+type Item =
+  | { kind: 'station'; station: ChargerStation }
+  | { kind: 'cluster'; key: string; members: ChargerStation[]; lat: number; lng: number };
 
-  const filteredIds = useMemo(
-    () => (hasActiveFilters ? new Set(filteredStations.map((s) => s.id)) : null),
-    [hasActiveFilters, filteredStations],
-  );
+function StationMarkers({ stations }: { stations: ChargerStation[] }) {
+  const map = useMap();
+  const selectedStationId = useStore((s) => s.selectedStationId);
+  const [zoom, setZoom] = useState(() => map.getZoom());
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+
+  const items = useMemo<Item[]>(() => {
+    if (zoom >= NO_CLUSTER_ZOOM) return stations.map((station) => ({ kind: 'station', station }));
+    const pts = stations.map((s) => ({ s, p: map.project([s.lat, s.lng], zoom) }));
+    const used = new Set<string>();
+    const out: Item[] = [];
+    for (const a of pts) {
+      if (used.has(a.s.id)) continue;
+      used.add(a.s.id);
+      const members = [a.s];
+      for (const b of pts) {
+        if (used.has(b.s.id)) continue;
+        if (a.p.distanceTo(b.p) < CLUSTER_PX) { used.add(b.s.id); members.push(b.s); }
+      }
+      if (members.length === 1) { out.push({ kind: 'station', station: a.s }); continue; }
+      out.push({
+        kind: 'cluster',
+        key: members.map((m) => m.id).sort().join('|'),
+        members,
+        lat: members.reduce((t, m) => t + m.lat, 0) / members.length,
+        lng: members.reduce((t, m) => t + m.lng, 0) / members.length,
+      });
+    }
+    return out;
+  }, [stations, zoom, map]);
 
   return (
-    <div className="relative flex-1 h-full">
+    <>
+      {items.map((it) => {
+        if (it.kind === 'cluster') {
+          const hasResidential = it.members.some((m) => (m.type ?? 'public') === 'residential');
+          return (
+            <Marker
+              key={`c-${it.key}`}
+              position={[it.lat, it.lng]}
+              icon={makeClusterIcon(it.members.length, hasResidential)}
+              eventHandlers={{
+                click: () => {
+                  const bounds = L.latLngBounds(it.members.map((m) => [m.lat, m.lng] as [number, number]));
+                  map.fitBounds(bounds, { padding: [70, 70], maxZoom: NO_CLUSTER_ZOOM, animate: true });
+                },
+              }}
+            />
+          );
+        }
+        const station = it.station;
+        return (
+          <Marker
+            key={station.id}
+            position={[station.lat, station.lng]}
+            icon={makeStationIcon(station.type ?? 'public', station.status, station.id === selectedStationId)}
+            zIndexOffset={station.id === selectedStationId ? 1000 : 0}
+            eventHandlers={{
+              click: () => {
+                const { selectedStationId: cur, setSelectedStationId, setSidebarOpen } = useStore.getState();
+                const isAlreadySelected = cur === station.id;
+                setSelectedStationId(isAlreadySelected ? null : station.id);
+                if (!isAlreadySelected) setSidebarOpen(true);
+              },
+            }}
+          >
+            {!isTouch && (
+              <Tooltip className="station-tooltip" direction="top" offset={[0, -4]} opacity={1}>
+                <StationTooltipContent station={station} />
+              </Tooltip>
+            )}
+          </Marker>
+        );
+      })}
+    </>
+  );
+}
+
+export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
+  const { filteredStations } = useStore();
+
+  return (
+    <div className={variant === 'mobile' ? 'absolute inset-0 ev-map-mobile' : 'relative flex-1 h-full'}>
       <MapContainer
         center={[14.6349, -90.5069]}
         zoom={11}
         style={{ width: '100%', height: '100%' }}
         zoomControl={false}
       >
+        {/* Mapa base minimalista (CARTO "Positron"): grises suaves para que los
+            pines sean lo único que resalte. Mismos datos de OpenStreetMap. */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          subdomains="abcd"
+          maxZoom={20}
           keepBuffer={2}
           updateWhenZooming={false}
           updateWhenIdle={true}
         />
 
-        <MapController />
+        <MapController variant={variant} />
         {isTouch && <DisableTap />}
 
-        {stations.map((station) => {
-          const dimmed = filteredIds !== null && !filteredIds.has(station.id);
-
-          return (
-            <Marker
-              key={station.id}
-              position={[station.lat, station.lng]}
-              icon={makeStationIcon(station.type ?? 'public', station.status, dimmed)}
-              eventHandlers={{
-                click: () => {
-                  const { selectedStationId, setSelectedStationId, setSidebarOpen } = useStore.getState();
-                  const isAlreadySelected = selectedStationId === station.id;
-                  setSelectedStationId(isAlreadySelected ? null : station.id);
-                  if (!isAlreadySelected) setSidebarOpen(true);
-                },
-              }}
-              opacity={dimmed ? 0.25 : 1}
-            >
-              {!isTouch && (
-                <Tooltip className="station-tooltip" direction="top" offset={[0, -18]} opacity={1}>
-                  <StationTooltipContent station={station} />
-                </Tooltip>
-              )}
-            </Marker>
-          );
-        })}
+        <StationMarkers stations={filteredStations} />
 
         {/* User location marker */}
         <UserMarker />
 
-        {/* Zoom controls */}
-        <ZoomControls />
+        {variant === 'mobile' ? <MobileMapTools /> : <ZoomControls />}
       </MapContainer>
 
-      <GeolocationButton />
+      {variant === 'desktop' && <GeolocationButton />}
     </div>
   );
 }
@@ -268,6 +342,38 @@ function ZoomControls() {
       >
         −
       </button>
+    </div>
+  );
+}
+
+// Botones del mapa en celular: acercar/alejar y "mi ubicación", agrupados a la
+// derecha debajo de los filtros (los estilos viven en mobile.css).
+function MobileMapTools() {
+  const map = useMap();
+  const locate = useLocate();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Que tocar los botones no arrastre ni haga zoom en el mapa de fondo
+    if (ref.current) {
+      L.DomEvent.disableClickPropagation(ref.current);
+      L.DomEvent.disableScrollPropagation(ref.current);
+    }
+  }, []);
+  return (
+    <div ref={ref} className="m-tools">
+      <div className="m-tgroup m-glass">
+        <button type="button" className="m-tbtn" aria-label="Acercar" onClick={() => map.zoomIn()}>
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
+        <button type="button" className="m-tbtn" aria-label="Alejar" onClick={() => map.zoomOut()}>
+          <svg viewBox="0 0 24 24"><path d="M5 12h14" /></svg>
+        </button>
+      </div>
+      <div className="m-tgroup m-glass">
+        <button type="button" className="m-tbtn" aria-label="Mi ubicación" onClick={locate}>
+          <svg viewBox="0 0 24 24"><path d="M20.5 3.5 3.5 10.8l7 2.7 2.7 7z" /></svg>
+        </button>
+      </div>
     </div>
   );
 }

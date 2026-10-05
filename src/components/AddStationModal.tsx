@@ -23,10 +23,10 @@ function generateId(name: string, zone: string): string {
 }
 
 export default function AddStationModal() {
-  const { setAddStationModalOpen, loadDynamicStations, authToken, currentUser, setAuthModalOpen } = useStore();
+  const { setAddStationModalOpen, loadDynamicStations, authToken, currentUser, setAuthModalOpen, addStationInitialType } = useStore();
   const isAdmin = currentUser?.role === 'admin';
 
-  const [type, setType] = useState<StationType>('public');
+  const [type, setType] = useState<StationType>(addStationInitialType);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [zone, setZone] = useState('');

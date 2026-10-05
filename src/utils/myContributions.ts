@@ -37,3 +37,9 @@ export function removeMyPhoto(photoId: string) {
 export function isMyPhoto(photoId: string): boolean {
   return photoId in load(MY_PHOTOS_KEY);
 }
+
+/** Estaciones (ids, sin repetir) donde este navegador dejó reseñas o fotos. */
+export function getMyContributionStationIds(): { reviews: string[]; photos: string[] } {
+  const uniq = (m: IdMap) => Array.from(new Set(Object.values(m)));
+  return { reviews: uniq(load(MY_REVIEWS_KEY)), photos: uniq(load(MY_PHOTOS_KEY)) };
+}

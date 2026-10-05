@@ -311,6 +311,24 @@ la tarea en segundo plano necesita el cuerpo de la petición, hay que leerlo
 antes de devolver la respuesta al cliente — nunca dentro de la tarea
 diferida.
 
+**Rediseño de navegación en celular (oct 2026, en staging, pendiente de visto
+bueno de Rafa)**: basado en la estructura de la app Electron Power, adaptada al
+estilo minimalista que pidió Rafa. En pantallas < 1024 px, `App.tsx` monta
+`src/components/mobile/MobileShell.tsx` en vez de Header + Sidebar: barra
+inferior flotante (Mapa · Actividad · botón central "Aportar" · Guardadas ·
+Perfil), interruptor Mapa/Lista, filtros rápidos en chips (los avanzados en la
+hoja "Filtros", que reutiliza FilterBar y VehicleSelector), tarjeta flotante al
+tocar un pin y ficha completa (`StationScreen.tsx`) con Waze/Google Maps. La
+ficha conserva las mismas reglas de privacidad que `StationDetail.tsx`. La vista
+de computadora no cambió de estructura. Cambios compartidos por ambas vistas
+(`Map.tsx`): mapa base CARTO "Positron" (grises suaves, mismos datos de OSM),
+pin en forma de gota con enchufe (relleno = tipo, gris si fuera de servicio;
+puntito ámbar/rojo = estado, en lugar del borde grueso), agrupación propia de
+estaciones cercanas (sin librería nueva) y las estaciones filtradas ahora se
+ocultan en vez de atenuarse. "Guardadas" (`savedIds` en el store) vive solo en
+`localStorage` del navegador, sin cuenta ni servidor por ahora. Prototipo
+navegable de referencia: https://claude.ai/artifact/MecCx1MFcjX339tVkjGPZN
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

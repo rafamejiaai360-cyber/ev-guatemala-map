@@ -24,6 +24,17 @@ async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
 }
 
 const STORAGE_KEY = 'ev_gt_status_overrides';
+const SAVED_KEY = 'ev_gt_saved_stations';
+
+function loadSaved(): string[] {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 const CUSTOM_KEY = 'ev_gt_custom_stations';
 
 function loadOverrides(): Record<string, ChargerStatus> {
@@ -120,6 +131,14 @@ interface AppState {
   // Add station modal
   addStationModalOpen: boolean;
   setAddStationModalOpen: (open: boolean) => void;
+  /** Tipo con el que abre el formulario (el botón "Aportar" puede pedir
+   *  directamente "Mi cargador en casa" = residencial). */
+  addStationInitialType: StationType;
+  openAddStation: (type?: StationType) => void;
+
+  // Estaciones guardadas (favoritas) — solo en este navegador por ahora
+  savedIds: string[];
+  toggleSaved: (id: string) => void;
 
   // Admin flag — mirrors JWT role==='admin', set by login/register/loadCurrentUser
   isAdminAuthenticated: boolean;
@@ -306,6 +325,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   addStationModalOpen: false,
   setAddStationModalOpen: (open) => set({ addStationModalOpen: open }),
+  addStationInitialType: 'public',
+  openAddStation: (type = 'public') => set({ addStationInitialType: type, addStationModalOpen: true }),
+
+  savedIds: loadSaved(),
+  toggleSaved: (id) => {
+    const cur = get().savedIds;
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)); } catch { /* almacenamiento bloqueado */ }
+    set({ savedIds: next });
+  },
 
   isAdminAuthenticated: localStorage.getItem('ev_admin_auth') === '1',
 
