@@ -12,7 +12,7 @@ const LEVELS: { value: ChargerLevel | 'all'; label: string }[] = [
 ];
 
 // Contenido de la hoja "Filtros": vehículo, tipo de conector y velocidad de
-// carga, todo visible sin menús anidados. Pública/Residencial y "Activas" no
+// carga, todo visible sin menús anidados. Pública/Residencial no
 // se repiten aquí porque ya están en los botones rápidos de afuera.
 export default function FiltersPanel({ onDone }: { onDone: () => void }) {
   const { filters, setFilters, selectedVehicle, setSelectedVehicle, filteredStations } = useStore();

@@ -324,8 +324,10 @@ izquierda donde también se abren la ficha y las otras pestañas, y el mapa a la
 derecha; tocar un pin abre la ficha directo (sin tarjeta flotante, ver
 `shownDetailId` en MobileShell). Hojas como ventanas centradas. En celular: barra
 inferior flotante (Mapa · Actividad · botón central "Aportar" · Guardadas ·
-Perfil), interruptor Mapa/Lista, filtros rápidos en chips (Todas · Activas ·
-Públicas · Residenciales + botón de ícono "Filtros"); la hoja "Filtros"
+Perfil), interruptor Mapa/Lista, filtros rápidos en chips (Todas · Públicas
+(punto verde) · Residenciales (punto azul) + botón de ícono "Filtros") — a
+pedido de Rafa NO hay chip "Activas" ni contador de "activas" (el de arriba
+dice "N estaciones"), porque la app no conoce el estado real en tiempo real; la hoja "Filtros"
 (`FiltersPanel.tsx`, ya no usa FilterBar/VehicleSelector) muestra todo a la
 vista: lista de vehículos con buscador y miniatura (`Vehicle.image_url`
 opcional, ícono genérico si falta — Rafa juntará fichas técnicas oficiales en

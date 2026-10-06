@@ -90,19 +90,19 @@ export default function MobileShell() {
     (filters.level !== 'all' ? 1 : 0) +
     (filters.status !== 'all' && filters.status !== 'active' ? 1 : 0) +
     (selectedVehicle ? 1 : 0);
-  const allPressed = filters.status === 'all' && filters.stationType === 'all';
-  const activeCount = stations.filter((s) => s.status === 'active').length;
+  // Sin filtro rápido por estado (oct 2026, a pedido de Rafa): no se conoce el
+  // estado real de cada cargador en tiempo real, así que la app no ofrece
+  // "Activas" ni cuenta "activas"; el verde/azul de los chips es el tipo.
+  const allPressed = filters.stationType === 'all';
 
   const chipButtons = (
     <>
       <button type="button" className="m-chip m-glass" aria-pressed={allPressed}
         onClick={() => setFilters({ status: 'all', stationType: 'all' })}>Todas</button>
-      <button type="button" className="m-chip m-glass" aria-pressed={filters.status === 'active'}
-        onClick={() => setFilters({ status: filters.status === 'active' ? 'all' : 'active' })}>
-        <i style={{ background: '#22c55e' }} />Activas
-      </button>
       <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'public'}
-        onClick={() => setFilters({ stationType: filters.stationType === 'public' ? 'all' : 'public' })}>Públicas</button>
+        onClick={() => setFilters({ stationType: filters.stationType === 'public' ? 'all' : 'public' })}>
+        <i style={{ background: '#22c55e' }} />Públicas
+      </button>
       <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'residential'}
         onClick={() => setFilters({ stationType: filters.stationType === 'residential' ? 'all' : 'residential' })}>
         <i style={{ background: '#3b82f6' }} />Residenciales
@@ -148,7 +148,6 @@ export default function MobileShell() {
           <div className="m-listbody">
             <div className="m-lhead">
               <span>{listed.length} {listed.length === 1 ? 'estación' : 'estaciones'} · {userLocation ? 'por cercanía' : 'por nombre'}</span>
-              <span className="m-lcount"><i /><b>{activeCount}</b> activas</span>
             </div>
             {listed.map(({ s, km }) => (
               <StationCard key={s.id} station={s} km={km} rating={ratings[s.id]} onOpen={openDetail} selected={s.id === selectedStationId} />
@@ -163,9 +162,9 @@ export default function MobileShell() {
           <button
             type="button"
             className="m-count m-glass"
-            onClick={() => { setFilters({ status: 'active' }); changeMode('list'); }}
+            onClick={() => changeMode('list')}
           >
-            <i /><span><b>{activeCount}</b> activas</span>{Icon.chevR}
+            <span><b>{stations.length}</b> estaciones</span>{Icon.chevR}
           </button>
         </div>
         <div className="m-mode m-glass" data-v={mode} role="group" aria-label="Vista">
