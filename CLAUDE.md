@@ -355,7 +355,11 @@ usuarios con cuenta proponen autos nuevos o correcciones desde la hoja
 `vehicle_proposals`, máx. 10 pendientes por usuario) y ven el estado en
 Actividad (`?mine=1`). El admin revisa en la pestaña "Vehículos" del panel
 (`src/components/admin/VehiclesTab.tsx`): aprobar / aprobar como verificada /
-rechazar, y editar el catálogo (`PUT /api/vehicles/:id|new`). `verified=1`
+rechazar, y editar el catálogo (`PUT /api/vehicles/:id|new`). Cada auto del catálogo
+tiene botón **Eliminar** (= `status='hidden'`, no borra la fila; regla de
+integridad "nada se borra físicamente") y la sección **Eliminados** permite
+restaurarlo (6 oct 2026, a pedido de Rafa: antes solo existía "Ocultar"
+escondido dentro de Editar). `verified=1`
 ("Ficha verificada") **solo** con fuente oficial (agencia/ficha técnica).
 **Fotos: solo las sube el admin** (a KV, servidas por `/api/photo/:key`) y
 solo propias o con permiso de la marca/agencia — decisión explícita de Rafa:
