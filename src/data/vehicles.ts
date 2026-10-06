@@ -1,7 +1,16 @@
 import type { Vehicle } from '../types';
 
+// Investigación web 6 oct 2026 (solo resúmenes de búsqueda: el entorno no
+// pudo abrir los sitios .gt de los distribuidores). Regla: solo se cargan
+// datos con fuente de Guatemala (distribuidor oficial o nota de lanzamiento
+// local); lo que no se pudo confirmar queda marcado "PENDIENTE" para que
+// Rafa lo verifique con las fichas técnicas de las agencias. Los conectores
+// (`compatible_connectors`) NO se llenaron: ninguna fuente local los indica, y
+// sin ese dato la app no filtra por compatibilidad (mejor no adivinar).
 export const vehicles: Vehicle[] = [
-  // ── Deepal (CAISA) ────────────────────────────────────────────────────
+  // ── Deepal (Changan Guatemala) ────────────────────────────────────────
+  // PENDIENTE: changan.com.gt indica autonomía eléctrica de 475 km (WLTP) para
+  // la versión 100 % eléctrica (Q365,000); aquí dice 520 km. Confirmar ficha.
   {
     id: 'deepal-s07-2025',
     brand: 'Deepal',
@@ -12,7 +21,9 @@ export const vehicles: Vehicle[] = [
     compatible_connectors: ['GBT'],
     adapter_note: 'Puerto GB/T — hoy sin estaciones compatibles en esta red.',
   },
-  // ── BYD (CABI) ───────────────────────────────────────────────────────
+  // ── BYD (Grupo Cofiño) ───────────────────────────────────────────────
+  // BYD entró a Guatemala en nov 2024 con Grupo Cofiño (Han, Tang, Seal,
+  // Dolphin, Seagull, Yuan Plus…). Fuente: cnevpost.com, byd.com (nota GT).
   {
     id: 'byd-dolphin',
     brand: 'BYD',
@@ -23,7 +34,8 @@ export const vehicles: Vehicle[] = [
   {
     id: 'byd-atto3',
     brand: 'BYD',
-    model: 'Atto 3',
+    // En Guatemala se vende con su nombre chino, Yuan Plus.
+    model: 'Atto 3 (Yuan Plus)',
     year: '2025',
     range_km: 420,
   },
@@ -34,6 +46,9 @@ export const vehicles: Vehicle[] = [
     year: '2025',
     range_km: 570,
   },
+  // PENDIENTE: el Seal U no aparece en la línea de BYD Guatemala (allá su
+  // equivalente es el Song Plus, que se vende como híbrido enchufable DM-i).
+  // Confirmar si se elimina.
   {
     id: 'byd-seal-u',
     brand: 'BYD',
@@ -55,22 +70,57 @@ export const vehicles: Vehicle[] = [
     year: '2025',
     range_km: 400,
   },
-  // ── MG ───────────────────────────────────────────────────────────────
   {
+    // Lanzado en Guatemala por Grupo Cofiño (feb 2025): "hasta 380 km".
+    // Fuente: emisorasunidas.com, lahora.gt, crnnoticias.com.
+    id: 'byd-seagull',
+    brand: 'BYD',
+    model: 'Seagull',
+    year: '2025',
+    range_km: 380,
+  },
+  {
+    // Lanzado en Guatemala (Yuan Pro GS 2025): batería 45,12 kWh, hasta 380 km.
+    // Fuente: guatemala.com (lanzamiento local).
+    id: 'byd-yuan-pro',
+    brand: 'BYD',
+    model: 'Yuan Pro',
+    year: '2025',
+    range_km: 380,
+    battery_kwh: 45.12,
+  },
+  {
+    // Lanzado en Guatemala (may 2025). 82,5 kWh y 456 km (WLTC) según la nota
+    // de Grupo Cofiño (mismo distribuidor, lanzamiento en Panamá); hay
+    // versiones con otra batería. Fuente: emisorasunidas.com, nexo.la.
+    id: 'byd-sealion-7',
+    brand: 'BYD',
+    model: 'Sealion 7',
+    year: '2025',
+    range_km: 456,
+    battery_kwh: 82.5,
+  },
+  // ── MG (distribuidor oficial: mgautos.gt / mgmotorguatemala.com) ─────
+  {
+    // Distribuidor GT: "autonomía de hasta 440 km". PENDIENTE confirmar la
+    // batería (la página menciona 72 kWh; en otros mercados es 70 kWh).
     id: 'mg-zs-ev',
     brand: 'MG',
     model: 'ZS EV',
     year: '2025',
-    range_km: 320,
+    range_km: 440,
   },
   {
+    // Distribuidor GT: batería 70 kWh, 402 km WLTP (desde Q324,990).
     id: 'mg-marvel-r',
     brand: 'MG',
     model: 'Marvel R Electric',
     year: '2024',
-    range_km: 400,
+    range_km: 402,
+    battery_kwh: 70,
   },
   // ── Great Wall / ORA ─────────────────────────────────────────────────
+  // PENDIENTE: no se encontró distribuidor ni venta en Guatemala.
   {
     id: 'ora-funky-cat',
     brand: 'ORA',
@@ -79,6 +129,7 @@ export const vehicles: Vehicle[] = [
     range_km: 420,
   },
   // ── Chery ─────────────────────────────────────────────────────────────
+  // PENDIENTE: no se encontró venta del Omoda E5 (EQ5) en Guatemala.
   {
     id: 'chery-omoda-eq5',
     brand: 'Chery',
@@ -86,7 +137,9 @@ export const vehicles: Vehicle[] = [
     year: '2024',
     range_km: 430,
   },
-  // ── JETOUR ────────────────────────────────────────────────────────────
+  // ── JETOUR (Grupo Los Tres) ───────────────────────────────────────────
+  // PENDIENTE: en Guatemala el Dashing se anunció a gasolina; la versión
+  // eléctrica estaba "planeada para 2025". Confirmar si ya se vende.
   {
     id: 'jetour-dashing-ev',
     brand: 'JETOUR',
@@ -94,7 +147,24 @@ export const vehicles: Vehicle[] = [
     year: '2025',
     range_km: 450,
   },
-  // ── JAC ──────────────────────────────────────────────────────────────
+  // ── JAC (Motores JAC / Grupo Codaca) ─────────────────────────────────
+  // Eléctricos lanzados en Guatemala en mayo 2023: E-JS1 (hasta 300 km) y
+  // E-JS4 (hasta 400 km). Fuente: guatemala.com, emisorasunidas.com,
+  // motoresjac.com.gt. PENDIENTE: el iEV7s no aparece en esa línea.
+  {
+    id: 'jac-e-js1',
+    brand: 'JAC',
+    model: 'E-JS1',
+    year: '2023',
+    range_km: 300,
+  },
+  {
+    id: 'jac-e-js4',
+    brand: 'JAC',
+    model: 'E-JS4',
+    year: '2023',
+    range_km: 400,
+  },
   {
     id: 'jac-iev7s',
     brand: 'JAC',
