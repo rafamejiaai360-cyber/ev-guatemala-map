@@ -149,6 +149,19 @@ function MapController({ variant }: { variant: Variant }) {
   return null;
 }
 
+// Tocar una zona vacía del mapa cierra la tarjeta / ficha de la estación
+// elegida. Leaflet no dispara "click" del mapa al tocar un pin ni al
+// arrastrar, así que solo responde a un toque sobre el mapa en sí.
+function ClearSelectionOnMapClick() {
+  useMapEvents({
+    click: () => {
+      const { selectedStationId, setSelectedStationId } = useStore.getState();
+      if (selectedStationId) setSelectedStationId(null);
+    },
+  });
+  return null;
+}
+
 function DisableTap() {
   const map = useMap();
   useEffect(() => {
@@ -302,6 +315,7 @@ export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
         />
 
         <MapController variant={variant} />
+        <ClearSelectionOnMapClick />
         {isTouch && <DisableTap />}
 
         <StationMarkers stations={filteredStations} />
