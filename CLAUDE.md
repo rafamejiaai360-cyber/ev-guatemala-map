@@ -511,6 +511,9 @@ días en mantenimiento/fuera de servicio (una vez por visita,
 (6 oct 2026); falta `ev-guatemala-db` (prod) ANTES de publicar (sin las
 columnas, `/api/stations` falla y el mapa cae a la semilla). En staging, la
 estación `guat-prueba` quedó asignada a la cuenta de Rafa para que pruebe.
+Ojo: staging **no tenía** la tabla `station_requests` (prod sí) — se creó a
+mano el 6 oct 2026; antes eso escondía toda la sección (ahora, si falla el
+conteo, la lista se muestra igual con 0 solicitudes).
 
 **Ubicación aproximada de residenciales (oct 2026)**: para quitarle al dueño
 el miedo a "publicar dónde vivo". `handleGetStationsFromD1`, para quien no es

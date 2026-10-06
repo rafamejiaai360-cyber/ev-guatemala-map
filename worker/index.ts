@@ -2363,29 +2363,38 @@ async function handleGetMyStations(request: Request, env: Env): Promise<Response
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('No autenticado', 401);
   if (!env.DB) return apiError('Base de datos no configurada', 503);
+  type Row = {
+    id: string; name: string; type: string; zone: string | null; status: string; approval_status: string;
+    status_note: string | null; status_updated_at: string | null; status_source: string | null; created_at: string;
+    requests_30d: number; requests_total: number;
+  };
+  const cols = `s.id, s.name, s.type, s.zone, s.status, s.approval_status, s.status_note, s.status_updated_at,
+                s.status_source, s.created_at`;
+  const counts = `(SELECT COUNT(*) FROM station_requests r
+                    WHERE r.station_id = s.id AND r.created_at >= datetime('now', '-30 days')) AS requests_30d,
+                  (SELECT COUNT(*) FROM station_requests r WHERE r.station_id = s.id) AS requests_total`;
+  const run = (select: string) => env.DB!.prepare(
+    `SELECT ${select} FROM stations s WHERE ${OWNER_SQL} ORDER BY s.created_at DESC LIMIT 50`
+  ).bind(user.email).all<Row>();
+  let results: Row[];
   try {
-    const { results } = await env.DB.prepare(
-      `SELECT s.id, s.name, s.type, s.zone, s.status, s.approval_status, s.status_note, s.status_updated_at,
-              s.status_source, s.created_at,
-              (SELECT COUNT(*) FROM station_requests r
-                WHERE r.station_id = s.id AND r.created_at >= datetime('now', '-30 days')) AS requests_30d,
-              (SELECT COUNT(*) FROM station_requests r WHERE r.station_id = s.id) AS requests_total
-         FROM stations s WHERE ${OWNER_SQL} ORDER BY s.created_at DESC LIMIT 50`
-    ).bind(user.email).all<{
-      id: string; name: string; type: string; zone: string | null; status: string; approval_status: string;
-      status_note: string | null; status_updated_at: string | null; status_source: string | null; created_at: string;
-      requests_30d: number; requests_total: number;
-    }>();
-    // Solo números: quién pidió usar el cargador lo sigue manejando el admin.
-    return json(results.map((r) => ({
-      id: r.id, name: r.name, type: r.type, zone: r.zone || '', status: r.status,
-      approval: r.approval_status, statusNote: r.status_note || null,
-      statusUpdatedAt: r.status_updated_at || r.created_at, statusByOwner: r.status_source === 'owner',
-      requests30d: r.requests_30d, requestsTotal: r.requests_total,
-    })));
+    ({ results } = await run(`${cols}, ${counts}`));
   } catch {
-    return apiError('Mis estaciones no disponible todavía', 503);
+    // Sin la tabla de solicitudes (pasó en staging) la lista igual se muestra,
+    // con 0 solicitudes, en vez de esconder toda la sección.
+    try {
+      ({ results } = await run(`${cols}, 0 AS requests_30d, 0 AS requests_total`));
+    } catch {
+      return apiError('Mis estaciones no disponible todavía', 503);
+    }
   }
+  // Solo números: quién pidió usar el cargador lo sigue manejando el admin.
+  return json(results.map((r) => ({
+    id: r.id, name: r.name, type: r.type, zone: r.zone || '', status: r.status,
+    approval: r.approval_status, statusNote: r.status_note || null,
+    statusUpdatedAt: r.status_updated_at || r.created_at, statusByOwner: r.status_source === 'owner',
+    requests30d: r.requests_30d, requestsTotal: r.requests_total,
+  })));
 }
 
 // El dueño publica el estado de su cargador al instante (sin moderación, como
