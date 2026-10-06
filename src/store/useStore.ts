@@ -119,6 +119,12 @@ interface AppState {
   // User geolocation
   userLocation: { lat: number; lng: number } | null;
   setUserLocation: (loc: { lat: number; lng: number } | null) => void;
+  /** Modo ruta (oct 2026): sigue la ubicación en vivo y avisa al pasar cerca
+   *  de una estación. Solo en este dispositivo; la ubicación no se envía. */
+  routeMode: boolean;
+  setRouteMode: (on: boolean) => void;
+  routeRadiusKm: number;
+  setRouteRadiusKm: (km: number) => void;
 
   // Sidebar visibility (mobile)
   sidebarOpen: boolean;
@@ -224,6 +230,16 @@ const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all
 // Marca este navegador como "del admin" para el contador de visitas. A
 // diferencia de ev_admin_auth, NO se borra al cerrar sesión: así las visitas
 // de Rafa en sus dispositivos no se cuentan aunque luego entre sin sesión.
+// Distancia de aviso del modo ruta elegida por el usuario (1, 2 o 5 km).
+export const ROUTE_RADII = [1, 2, 5];
+function loadRouteRadius(): number {
+  try {
+    const v = Number(localStorage.getItem('ev_route_radius'));
+    if (ROUTE_RADII.includes(v)) return v;
+  } catch { /* sin almacenamiento */ }
+  return 2;
+}
+
 function markNoCountDevice() {
   try { localStorage.setItem('ev_no_count', '1'); } catch { /* sin almacenamiento: no pasa nada */ }
 }
@@ -307,6 +323,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   userLocation: null,
   setUserLocation: (loc) => set({ userLocation: loc }),
+  routeMode: false,
+  setRouteMode: (on) => set({ routeMode: on }),
+  routeRadiusKm: loadRouteRadius(),
+  setRouteRadiusKm: (km) => {
+    try { localStorage.setItem('ev_route_radius', String(km)); } catch { /* sin almacenamiento */ }
+    set({ routeRadiusKm: km });
+  },
 
   sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),

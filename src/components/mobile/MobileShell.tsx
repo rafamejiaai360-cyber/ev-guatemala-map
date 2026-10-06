@@ -5,6 +5,8 @@ import { getMyContributionStationIds } from '../../utils/myContributions';
 import FiltersPanel from './FiltersPanel';
 import StationScreen from './StationScreen';
 import StationCard from './StationCard';
+import { RouteAlertCard, RouteModeBar } from './RouteMode';
+import { useRouteMode } from './routeEngine';
 import {
   Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
   connectorTypes, distanceKm, distanceLabel, formatKw, googleMapsUrl, maxKw, stationType,
@@ -49,6 +51,7 @@ export default function MobileShell() {
   const [query, setQuery] = useState('');
 
   const isWide = useIsWide();
+  const [routeAlert, dismissRouteAlert] = useRouteMode();
   const byId = useMemo(() => new Map(stations.map((s) => [s.id, s])), [stations]);
   // En computadora, la estación elegida en el mapa se muestra directo en la
   // ficha del panel izquierdo (sin tarjeta flotante intermedia).
@@ -123,6 +126,12 @@ export default function MobileShell() {
 
   return (
     <div className="m-shell" data-mode={mode}>
+      {/* Aviso del modo ruta: "Ver" vuelve al mapa con la estación marcada */}
+      <RouteAlertCard
+        alert={routeAlert}
+        onDismiss={dismissRouteAlert}
+        onOpen={(id) => { goTab('map'); changeMode('map'); setSelectedStationId(id); }}
+      />
       {/* ---------- Pestaña Mapa ---------- */}
       <section className={`m-view m-view-map${tab === 'map' ? ' on' : ''}${tab === 'map' && detailStation ? ' pushed' : ''}`} aria-hidden={tab !== 'map'}>
         <div className="m-mapwrap">
@@ -179,6 +188,7 @@ export default function MobileShell() {
           station={mode === 'map' ? peekStation : null}
           onOpen={openDetail}
         />
+        <RouteModeBar />
       </section>
 
       {/* ---------- Pestaña Actividad ---------- */}
