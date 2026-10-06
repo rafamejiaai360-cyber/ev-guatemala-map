@@ -1434,8 +1434,11 @@ async function handleRegister(request: Request, env: Env, ctx: ExecutionContext)
   if (!email || !email.includes('@')) return apiError('Email inválido');
   if (password.length < 6) return apiError('La contraseña debe tener al menos 6 caracteres');
   if (!name) return apiError('El nombre es requerido');
-  const phone = normalizePhone(body.phone ?? '');
-  if (!phone) return apiError('Teléfono inválido — usa 8 dígitos (ej. 5512-3456)');
+  // Teléfono opcional al registrarse (oct 2026): se pide solo a quien
+  // comparte un cargador en casa (AddStationModal), para bajar la fricción.
+  const rawPhone = (body.phone ?? '').trim();
+  const phone = rawPhone ? normalizePhone(rawPhone) : null;
+  if (rawPhone && !phone) return apiError('Teléfono inválido — usa 8 dígitos (ej. 5512-3456)');
 
   if (!env.DB) return apiError('Base de datos no configurada', 503);
   const existing = await env.DB.prepare('SELECT email FROM users WHERE email = ?').bind(email).first();
@@ -1453,10 +1456,10 @@ async function handleRegister(request: Request, env: Env, ctx: ExecutionContext)
   ctx.waitUntil(notifyAdmin(
     env,
     'Nuevo usuario registrado',
-    `Nombre: ${name}\nCorreo: ${email}\nTeléfono: ${phone}\nRol: ${role}`,
+    `Nombre: ${name}\nCorreo: ${email}\nTeléfono: ${phone ?? 'sin registrar'}\nRol: ${role}`,
   ));
 
-  return json({ token, user: { email, name, phone, role, subscriptionEnd: undefined } }, 201);
+  return json({ token, user: { email, name, phone: phone ?? undefined, role, subscriptionEnd: undefined } }, 201);
 }
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {

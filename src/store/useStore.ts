@@ -160,6 +160,16 @@ interface AppState {
   authToken: string | null;
   authModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
+  /** Pestaña con la que abre la ventana de cuenta (registro o ingreso). */
+  authStartTab: 'login' | 'register';
+  openAuth: (tab: 'login' | 'register') => void;
+  /** Invitación a crear cuenta según el momento (oct 2026, ver JoinSheet). */
+  joinPrompt: JoinContext | null;
+  setJoinPrompt: (ctx: JoinContext | null) => void;
+  /** Lo que el visitante quería aportar antes de registrarse; se retoma solo
+   *  apenas inicia sesión (MobileShell). */
+  pendingAddType: StationType | null;
+  setPendingAddType: (t: StationType | null) => void;
   loginUser: (email: string, password: string) => Promise<void>;
   registerUser: (email: string, password: string, name: string, phone: string) => Promise<void>;
   logoutUser: () => void;
@@ -230,6 +240,8 @@ const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all
 // Marca este navegador como "del admin" para el contador de visitas. A
 // diferencia de ev_admin_auth, NO se borra al cerrar sesión: así las visitas
 // de Rafa en sus dispositivos no se cuentan aunque luego entre sin sesión.
+export type JoinContext = 'save' | 'aportar' | 'browse';
+
 // Distancia de aviso del modo ruta elegida por el usuario (1, 2 o 5 km).
 export const ROUTE_RADII = [1, 2, 5];
 function loadRouteRadius(): number {
@@ -399,7 +411,13 @@ export const useStore = create<AppState>((set, get) => ({
   currentUser: null,
   authToken: localStorage.getItem('ev_auth_token'),
   authModalOpen: false,
-  setAuthModalOpen: (open) => set({ authModalOpen: open }),
+  setAuthModalOpen: (open) => set(open ? { authModalOpen: true } : { authModalOpen: false, authStartTab: 'login' }),
+  authStartTab: 'login',
+  openAuth: (tab) => set({ authModalOpen: true, authStartTab: tab, joinPrompt: null }),
+  joinPrompt: null,
+  setJoinPrompt: (ctx) => set({ joinPrompt: ctx }),
+  pendingAddType: null,
+  setPendingAddType: (t) => set({ pendingAddType: t }),
 
   loginUser: async (email, password) => {
     const res = await fetch('/api/auth/login', {

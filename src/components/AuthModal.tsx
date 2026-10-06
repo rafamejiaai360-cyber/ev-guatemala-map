@@ -4,8 +4,8 @@ import { useStore } from '../store/useStore';
 type Tab = 'login' | 'register' | 'forgot';
 
 export default function AuthModal() {
-  const { setAuthModalOpen, loginUser, registerUser } = useStore();
-  const [tab, setTab] = useState<Tab>('login');
+  const { setAuthModalOpen, loginUser, registerUser, authStartTab } = useStore();
+  const [tab, setTab] = useState<Tab>(authStartTab);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -39,8 +39,9 @@ export default function AuthModal() {
     reset();
     if (!name.trim()) { setError('El nombre es requerido'); return; }
     if (!email) { setError('El email es requerido'); return; }
+    // Teléfono opcional (oct 2026): solo se exige al compartir un cargador en casa.
     const phoneDigits = phone.replace(/[^\d]/g, '').replace(/^502/, '');
-    if (!/^\d{8}$/.test(phoneDigits)) { setError('El teléfono debe tener 8 dígitos (ej. 5512-3456)'); return; }
+    if (phoneDigits && !/^\d{8}$/.test(phoneDigits)) { setError('El teléfono debe tener 8 dígitos (ej. 5512-3456)'); return; }
     if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return; }
     if (password !== confirmPassword) { setError('Las contraseñas no coinciden'); return; }
     setLoading(true);
@@ -165,7 +166,7 @@ export default function AuthModal() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Teléfono</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Teléfono <span className="text-gray-400 font-normal">(opcional)</span></label>
                 <input
                   type="tel"
                   value={phone}
@@ -173,7 +174,7 @@ export default function AuthModal() {
                   placeholder="5512-3456"
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-green-400"
                 />
-                <p className="text-[10px] text-gray-400 mt-1">Nunca se muestra públicamente en el mapa.</p>
+                <p className="text-[10px] text-gray-400 mt-1">Solo lo pedimos si compartes un cargador en casa. Nunca se muestra en el mapa.</p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Contraseña</label>

@@ -23,7 +23,7 @@ function generateId(name: string, zone: string): string {
 }
 
 export default function AddStationModal() {
-  const { setAddStationModalOpen, loadDynamicStations, authToken, currentUser, setAuthModalOpen, addStationInitialType } = useStore();
+  const { setAddStationModalOpen, loadDynamicStations, authToken, currentUser, setAuthModalOpen, addStationInitialType, updateProfile } = useStore();
   const isAdmin = currentUser?.role === 'admin';
 
   const [type, setType] = useState<StationType>(addStationInitialType);
@@ -41,6 +41,10 @@ export default function AddStationModal() {
   const [success, setSuccess] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
   const [locationResetKey, setLocationResetKey] = useState(0);
+  // El teléfono es opcional al crear la cuenta; solo se pide aquí, a quien
+  // comparte un cargador en casa y aún no lo registró (para poder contactarlo).
+  const [ownerPhone, setOwnerPhone] = useState('');
+  const needsPhone = type === 'residential' && !!currentUser && !currentUser.phone;
 
   function addConnector() {
     setConnectors(prev => [...prev, { type: 'Type2', power_kw: null }]);
@@ -71,9 +75,15 @@ export default function AddStationModal() {
       return;
     }
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
+    const phoneDigits = ownerPhone.replace(/[^\d]/g, '').replace(/^502/, '');
+    if (needsPhone && !/^\d{8}$/.test(phoneDigits)) {
+      setError('Escribe tu teléfono de 8 dígitos para que podamos contactarte por tu cargador');
+      return;
+    }
 
     setSubmitting(true);
     try {
+      if (needsPhone && currentUser) await updateProfile(currentUser.name, phoneDigits);
       const res = await fetch('/api/stations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
@@ -268,6 +278,20 @@ export default function AddStationModal() {
                   <p className="text-[11px] text-gray-400 mt-1">No necesitás usar tu nombre real.</p>
                 )}
               </div>
+
+              {needsPhone && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Tu teléfono *</label>
+                  <input
+                    type="tel"
+                    value={ownerPhone}
+                    onChange={e => setOwnerPhone(e.target.value)}
+                    placeholder="5512-3456"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">Solo para contactarte sobre tu cargador. Nunca se muestra en el mapa.</p>
+                </div>
+              )}
 
               {/* Address + Zone */}
               <div className="grid grid-cols-2 gap-3">

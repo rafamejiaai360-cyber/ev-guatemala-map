@@ -23,7 +23,7 @@ interface Props {
 // - `notes` de una residencial solo llega de la API si quien pregunta es admin.
 // - quién dio de alta la estación solo se muestra a admins.
 export default function StationScreen({ station, backLabel, onBack }: Props) {
-  const { currentUser, userLocation, setAuthModalOpen, savedIds, toggleSaved, ratings } = useStore();
+  const { currentUser, userLocation, setAuthModalOpen, savedIds, toggleSaved, ratings, setJoinPrompt } = useStore();
   const [showEdit, setShowEdit] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
   const [showRequestUse, setShowRequestUse] = useState(false);
@@ -45,7 +45,15 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
             className="m-save"
             aria-label={saved ? 'Quitar de guardadas' : 'Guardar estación'}
             aria-pressed={saved}
-            onClick={() => toggleSaved(station.id)}
+            onClick={() => {
+              toggleSaved(station.id);
+              // Sin cuenta: al guardar la primera estación de la visita, invitar
+              // a crear cuenta (una vez por visita).
+              if (!currentUser && !saved && !sessionStorage.getItem('ev_join_save')) {
+                try { sessionStorage.setItem('ev_join_save', '1'); } catch { /* */ }
+                setJoinPrompt('save');
+              }
+            }}
           >
             {Icon.star}
           </button>
