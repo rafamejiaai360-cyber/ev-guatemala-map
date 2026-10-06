@@ -24,6 +24,9 @@
   position: relative;
   height: var(--app-height);
   overflow: hidden;
+  /* clip (no solo hidden): impide que el navegador desplace la pantalla al
+     enfocar un botón o un campo, lo que dejaba asomar hojas ocultas. */
+  overflow: clip;
   background: var(--page);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
@@ -306,3 +309,32 @@
 @media (prefers-reduced-motion: reduce) {
   .m-shell *, .m-shell *::before { transition: none !important; animation: none !important; }
 }
+
+/* Hoja "Filtros" (FiltersPanel.tsx) */
+.m-fp { display: flex; flex-direction: column; gap: 18px; }
+.m-fp section { background: var(--surface); border-radius: 16px; padding: 14px; }
+.m-fp-h { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.m-fp-note { margin: 0 0 10px; font-size: 12px; color: var(--ink2); line-height: 1.4; }
+.m-fp-search { background: var(--ghost); box-shadow: none; margin-bottom: 8px; height: 36px; }
+.m-fp-vlist { max-height: 232px; margin: 0 -6px; padding: 0 6px; }
+.m-fp-vrow { width: 100%; border: 0; background: transparent; text-align: left; display: grid; grid-template-columns: 52px minmax(0, 1fr) 20px; gap: 10px; align-items: center; padding: 7px 6px; border-radius: 12px; cursor: pointer; }
+.m-fp-vrow:hover { background: var(--ghost); }
+.m-fp-vrow.sel { background: var(--green-soft); }
+.m-fp-vrow .thumb { width: 52px; height: 36px; border-radius: 9px; background: var(--ghost); display: grid; place-items: center; overflow: hidden; color: var(--ink2); }
+.m-fp-vrow .thumb img { width: 100%; height: 100%; object-fit: cover; }
+.m-fp-vrow .thumb svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.m-fp-vrow .txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.m-fp-vrow .txt b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-fp-vrow .txt b small { font-weight: 400; color: var(--ink2); font-size: 12px; }
+.m-fp-vrow .txt > small { font-size: 11.5px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-fp-vrow .chk { color: var(--green); }
+.m-fp-vrow .chk svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.m-fp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.m-fp-chip { border: 0; height: 32px; padding: 0 13px; border-radius: 999px; background: var(--ghost); font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color .2s var(--ease), color .2s var(--ease); }
+.m-fp-chip[aria-pressed="true"] { background: var(--ink); color: #fff !important; }
+.m-fp-seg { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--ghost); border-radius: 11px; padding: 3px; margin-top: 8px; }
+.m-fp-seg button { border: 0; background: transparent; height: 32px; border-radius: 8px; font-size: 12.5px; font-weight: 500; color: var(--ink2) !important; cursor: pointer; }
+.m-fp-seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink) !important; font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.m-fp-foot { display: flex; gap: 8px; position: sticky; bottom: 0; padding-top: 4px; background: var(--page); }
+.m-fp-foot .m-btn { height: 44px; border-radius: 22px; }
+.m-fp-foot .m-btn:disabled { opacity: .45; cursor: default; }

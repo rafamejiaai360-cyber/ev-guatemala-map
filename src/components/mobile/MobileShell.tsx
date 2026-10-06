@@ -2,8 +2,7 @@ import { lazy, Suspense, useMemo, useState, useSyncExternalStore, type ReactNode
 import { useStore } from '../../store/useStore';
 import type { ChargerStation, StationType } from '../../types';
 import { getMyContributionStationIds } from '../../utils/myContributions';
-import FilterBar from '../FilterBar';
-import VehicleSelector from '../VehicleSelector';
+import FiltersPanel from './FiltersPanel';
 import StationScreen from './StationScreen';
 import StationCard from './StationCard';
 import {
@@ -325,12 +324,8 @@ export default function MobileShell() {
       <div className={`m-sheet m-scroll${sheet === 'filters' ? ' on' : ''}`} role="dialog" aria-label="Filtros" aria-hidden={sheet !== 'filters'}>
         <div className="grab" />
         <h3>Filtros</h3>
-        <p className="s">Muestra solo las estaciones que te sirven.</p>
-        <div className="m-filters">
-          <div><div className="lbl">Mi vehículo</div><VehicleSelector /></div>
-          <div><div className="lbl">Tipo, estado, nivel y conector</div><FilterBar /></div>
-        </div>
-        <button type="button" className="m-cancel" onClick={() => setSheet('none')}>Listo</button>
+        <p className="s">Muestra solo las estaciones que le sirven a tu auto.</p>
+        {sheet === 'filters' && <FiltersPanel onDone={() => setSheet('none')} />}
       </div>
     </div>
   );

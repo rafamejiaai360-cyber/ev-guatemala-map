@@ -324,8 +324,13 @@ izquierda donde también se abren la ficha y las otras pestañas, y el mapa a la
 derecha; tocar un pin abre la ficha directo (sin tarjeta flotante, ver
 `shownDetailId` en MobileShell). Hojas como ventanas centradas. En celular: barra
 inferior flotante (Mapa · Actividad · botón central "Aportar" · Guardadas ·
-Perfil), interruptor Mapa/Lista, filtros rápidos en chips (los avanzados en la
-hoja "Filtros", que reutiliza FilterBar y VehicleSelector), tarjeta flotante al
+Perfil), interruptor Mapa/Lista, filtros rápidos en chips (Todas · Activas ·
+Públicas · Residenciales + botón de ícono "Filtros"); la hoja "Filtros"
+(`FiltersPanel.tsx`, ya no usa FilterBar/VehicleSelector) muestra todo a la
+vista: lista de vehículos con buscador y miniatura (`Vehicle.image_url`
+opcional, ícono genérico si falta — Rafa juntará fichas técnicas oficiales en
+las agencias para completar `src/data/vehicles.ts`), tipo de conector y
+velocidad de carga (AC/DC); no repite Pública/Residencial, tarjeta flotante al
 tocar un pin y ficha completa (`StationScreen.tsx`) con Waze/Google Maps. La
 ficha conserva las mismas reglas de privacidad que `StationDetail.tsx`.
 Cambios del mapa (`Map.tsx`): mapa base de OpenStreetMap pasado a grises suaves con un filtro
