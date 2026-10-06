@@ -367,7 +367,9 @@ sin conectores (el filtro solo usa conectores confirmados).
 luego en prod: `npx wrangler d1 execute ev-guatemala-db-staging --remote
 --file=db/schema.sql` (y `ev-guatemala-db` al publicar) — seguro de re-correr
 por `IF NOT EXISTS`. Sin las tablas, `GET /api/vehicles` falla y la app usa
-la lista base sin romperse.
+la lista base sin romperse. **Estado**: aplicada a `ev-guatemala-db-staging`
+(6 oct 2026, vía conector MCP de Cloudflare); falta `ev-guatemala-db` (prod)
+al publicar. SQL listo para pegar: `docs/migracion-vehiculos.sql`.
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
