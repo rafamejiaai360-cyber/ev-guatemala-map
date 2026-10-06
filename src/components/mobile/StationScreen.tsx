@@ -60,13 +60,15 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
         </div>
         <div className="m-eyebrow">
           <i style={{ background: TYPE_COLOR[t] }} />
-          {TYPE_LABEL[t]}{dist && ` · ${dist}`}
+          {TYPE_LABEL[t]}{dist && ` · ${station.approximate ? '≈ ' : ''}${dist}`}
         </div>
         <h2>{station.name}</h2>
         <p className="m-addr">
-          {station.zone && !station.address.toLowerCase().includes(station.zone.toLowerCase())
-            ? `${station.address} · ${station.zone}`
-            : station.address}
+          {!station.address
+            ? station.zone
+            : station.zone && !station.address.toLowerCase().includes(station.zone.toLowerCase())
+              ? `${station.address} · ${station.zone}`
+              : station.address}
         </p>
         <div className="m-pills">
           <span className={`m-pill ${station.status}`}>{STATUS_LABEL[station.status]}</span>
@@ -76,10 +78,14 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
             <span className="m-pill soft">★ {rating.avg.toFixed(1).replace('.', ',')} · {rating.count} reseñas</span>
           )}
         </div>
-        <div className="m-navs">
-          <a className="m-nav" href={wazeUrl(station)} target="_blank" rel="noopener noreferrer">{Icon.nav}Waze</a>
-          <a className="m-nav" href={googleMapsUrl(station, userLocation)} target="_blank" rel="noopener noreferrer">{Icon.pin}Google Maps</a>
-        </div>
+        {station.approximate ? (
+          <p className="m-approx">{Icon.pin}Ubicación aproximada (a menos de 1 km) para proteger la privacidad del dueño.</p>
+        ) : (
+          <div className="m-navs">
+            <a className="m-nav" href={wazeUrl(station)} target="_blank" rel="noopener noreferrer">{Icon.nav}Waze</a>
+            <a className="m-nav" href={googleMapsUrl(station, userLocation)} target="_blank" rel="noopener noreferrer">{Icon.pin}Google Maps</a>
+          </div>
+        )}
       </div>
 
       <div className="m-dbody">
@@ -87,7 +93,9 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
           <div className="m-box">
             <div className="k">Estación en una casa</div>
             <p className="m-note" style={{ margin: '0 0 10px' }}>
-              Para usarla necesitas el permiso del dueño. Envía una solicitud y el administrador te pondrá en contacto.
+              {station.approximate
+                ? 'Para usarla y conocer la ubicación exacta necesitas el permiso del dueño. Envía una solicitud y el administrador te pondrá en contacto.'
+                : 'Para usarla necesitas el permiso del dueño. Envía una solicitud y el administrador te pondrá en contacto.'}
             </p>
             {requestSent ? (
               <p className="m-note" style={{ color: 'var(--blue)', margin: 0 }}>Solicitud enviada. Un administrador te contactará pronto.</p>

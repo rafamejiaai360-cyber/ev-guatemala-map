@@ -471,6 +471,26 @@ más visitantes se registren y, sobre todo, publiquen su cargador en casa
   solo para residenciales si la cuenta no lo tiene, y se guarda con
   `updateProfile` antes de enviar.
 
+**Ubicación aproximada de residenciales (oct 2026)**: para quitarle al dueño
+el miedo a "publicar dónde vivo". `handleGetStationsFromD1`, para quien no es
+admin, entrega las residenciales con `lat/lng` desplazados entre 250 y 600 m
+(`approximateLocation()`: HMAC-SHA256 con `JWT_SECRET` sobre el id → distancia
+y dirección fijas por estación; estable entre visitas, no se puede promediar
+ni revertir sin el secreto), sin `address` ni `googleMapsUrl`, y con
+`approximate: true`. La caché pública guarda esa versión; el **dueño** (quien
+la registró: `owner_email` o `submitted_by`) recibe su ubicación exacta vía
+`withOwnExactLocations()` (consulta chica sobre la respuesta en caché). El
+admin siempre ve la exacta. **Se cerró una fuga**: `/api/stations/dynamic`
+(respaldo heredado de Notion) no sabía qué era residencial y devolvía la
+ubicación exacta; ahora quita las residenciales según D1. UI: círculo azul de
+700 m alrededor del pin (`Circle` en `Map.tsx`, desde zoom 12); en la ficha
+un aviso "Ubicación aproximada…" en lugar de Waze/Google Maps; la tarjeta
+flotante dice "Ver y solicitar uso" en lugar de "Cómo llegar"; distancias con
+"≈"; el aviso del modo ruta no muestra "Ir". La ubicación exacta se comparte
+por el flujo existente "Solicitar uso" (el admin media el contacto).
+`EditStationModal` solo envía campos cambiados, así que sugerir una corrección
+sin tocar el mapa no "mueve" la casa a la ubicación aproximada.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

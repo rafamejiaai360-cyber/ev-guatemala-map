@@ -24,7 +24,7 @@ export default function StationCard({
       <span className={`m-pill ${station.status}`}>{STATUS_LABEL[station.status]}</span>
       <p className="m-addr">
         {station.zone || station.address}
-        {dist && <> · {dist}</>}
+        {dist && <> · {station.approximate ? "≈ " : ""}{dist}</>}
       </p>
       <span className="row">
         <span className="m-tags">
