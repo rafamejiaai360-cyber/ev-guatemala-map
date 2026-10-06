@@ -36,6 +36,17 @@ function loadSaved(): string[] {
     return [];
   }
 }
+// "Mi auto" (oct 2026): el id del vehículo elegido se recuerda en el teléfono
+// y, si hay cuenta, también en el servidor (users.vehicle_id).
+const VEHICLE_KEY = 'ev_gt_vehicle';
+function loadVehicleId(): string | null {
+  try { return localStorage.getItem(VEHICLE_KEY); } catch { return null; }
+}
+function storeVehicleId(id: string | null) {
+  try { if (id) localStorage.setItem(VEHICLE_KEY, id); else localStorage.removeItem(VEHICLE_KEY); } catch { /* sin almacenamiento */ }
+}
+type AccountUser = { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string; vehicleId?: string | null; savedIds?: string[] };
+
 const CUSTOM_KEY = 'ev_gt_custom_stations';
 
 function loadOverrides(): Record<string, ChargerStatus> {
@@ -156,7 +167,9 @@ interface AppState {
   isAdminAuthenticated: boolean;
 
   // User auth (JWT system)
-  currentUser: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string } | null;
+  currentUser: AccountUser | null;
+  /** Une "Mi auto" y "Guardadas" del teléfono con los de la cuenta al iniciar sesión. */
+  syncAccountPrefs: (user: AccountUser) => void;
   authToken: string | null;
   authModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
@@ -240,6 +253,17 @@ const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all
 // Marca este navegador como "del admin" para el contador de visitas. A
 // diferencia de ev_admin_auth, NO se borra al cerrar sesión: así las visitas
 // de Rafa en sus dispositivos no se cuentan aunque luego entre sin sesión.
+// Guarda "Mi auto" / "Guardadas" en la cuenta, sin bloquear la pantalla. Si
+// falla (sin conexión o sin la migración), quedan igual en el teléfono.
+function pushPrefs(token: string | null, body: { vehicleId?: string | null; savedIds?: string[] }) {
+  if (!token) return;
+  fetch('/api/auth/me', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}
+
 export type JoinContext = 'save' | 'aportar' | 'browse';
 
 // Distancia de aviso del modo ruta elegida por el usuario (1, 2 o 5 km).
@@ -319,15 +343,23 @@ export const useStore = create<AppState>((set, get) => ({
       const catalog = Array.from(byId.values())
         .sort((a, b) => a.brand.localeCompare(b.brand) || a.model.localeCompare(b.model));
       set({ vehicleCatalog: catalog });
+      // El auto guardado puede ser uno agregado desde el panel (solo en D1).
+      const wanted = get().currentUser?.vehicleId ?? loadVehicleId();
+      if (wanted && get().selectedVehicle?.id !== wanted) {
+        const v = catalog.find((x) => x.id === wanted);
+        if (v) set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v) });
+      }
     } catch {
       // sin API (desarrollo local con vite) se queda la lista base
     }
   },
 
-  selectedVehicle: null,
+  selectedVehicle: baseVehicles.find((v) => v.id === loadVehicleId()) ?? null,
   setSelectedVehicle: (vehicle) => {
     const filteredStations = computeFiltered(get().stations, get().filters, vehicle);
     set({ selectedVehicle: vehicle, filteredStations });
+    storeVehicleId(vehicle?.id ?? null);
+    if (get().currentUser) pushPrefs(get().authToken, { vehicleId: vehicle?.id ?? null });
   },
 
   selectedStationId: null,
@@ -404,6 +436,27 @@ export const useStore = create<AppState>((set, get) => ({
     const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)); } catch { /* almacenamiento bloqueado */ }
     set({ savedIds: next });
+    if (get().currentUser) pushPrefs(get().authToken, { savedIds: next });
+  },
+
+  syncAccountPrefs: (user) => {
+    const token = get().authToken;
+    // Guardadas: se suman las del teléfono y las de la cuenta (no se pierde nada).
+    const server = user.savedIds ?? [];
+    const merged = Array.from(new Set([...server, ...get().savedIds]));
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(merged)); } catch { /* */ }
+    set({ savedIds: merged });
+    if (merged.length !== server.length) pushPrefs(token, { savedIds: merged });
+    // Mi auto: manda el de la cuenta; si la cuenta no tiene, se sube el del teléfono.
+    if (user.vehicleId) {
+      const v = get().vehicleCatalog.find((x) => x.id === user.vehicleId);
+      storeVehicleId(user.vehicleId);
+      if (v && v.id !== get().selectedVehicle?.id) {
+        set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v) });
+      }
+    } else if (get().selectedVehicle) {
+      pushPrefs(token, { vehicleId: get().selectedVehicle!.id });
+    }
   },
 
   isAdminAuthenticated: localStorage.getItem('ev_admin_auth') === '1',
@@ -425,7 +478,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json() as { token?: string; user?: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
+    const data = await res.json() as { token?: string; user?: AccountUser; error?: string };
     if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al iniciar sesión');
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
@@ -434,6 +487,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ isAdminAuthenticated: true });
     }
     set({ authToken: data.token, currentUser: data.user });
+    get().syncAccountPrefs(data.user);
     // Vuelve a pedir las estaciones con el token ya guardado: si es admin,
     // la respuesta ahora trae quién dio de alta cada una.
     if (data.user.role === 'admin') await get().loadDynamicStations();
@@ -445,7 +499,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name, phone }),
     });
-    const data = await res.json() as { token?: string; user?: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
+    const data = await res.json() as { token?: string; user?: AccountUser; error?: string };
     if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al registrarse');
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
@@ -454,6 +508,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ isAdminAuthenticated: true });
     }
     set({ authToken: data.token, currentUser: data.user });
+    get().syncAccountPrefs(data.user);
   },
 
   logoutUser: () => {
@@ -468,13 +523,14 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) { localStorage.removeItem('ev_auth_token'); set({ authToken: null, currentUser: null }); return; }
-      const user = await res.json() as { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string };
+      const user = await res.json() as AccountUser;
       if (user.role === 'admin') {
         localStorage.setItem('ev_admin_auth', '1');
         markNoCountDevice();
         set({ isAdminAuthenticated: true });
       }
       set({ currentUser: user, authToken: token });
+      get().syncAccountPrefs(user);
     } catch { /* silently fail */ }
   },
 
@@ -489,7 +545,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ name, phone }),
     });
-    const data = await res.json() as { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string; error?: string };
+    const data = await res.json() as AccountUser & { error?: string };
     if (!res.ok) throw new Error(data.error ?? 'Error al actualizar el perfil');
     set({ currentUser: data });
   },

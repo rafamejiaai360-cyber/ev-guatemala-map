@@ -471,6 +471,18 @@ más visitantes se registren y, sobre todo, publiquen su cargador en casa
   solo para residenciales si la cuenta no lo tiene, y se guarda con
   `updateProfile` antes de enviar.
 
+**Mi auto + Guardadas en la cuenta (6 oct 2026, publicado en prod)**: con sesión, el auto elegido y las estaciones guardadas viajan con la
+cuenta (columnas `users.vehicle_id` y `users.saved_station_ids`, JSON, máx.
+300). `GET /api/auth/me` y el login devuelven `vehicleId`/`savedIds`
+(`meResponse()`); `PATCH /api/auth/me` los acepta (503 si faltan las columnas,
+sin romper nada). En el store, `syncAccountPrefs()` al iniciar sesión:
+Guardadas = unión de lo local y lo de la cuenta (nunca se pierde nada); auto =
+el de la cuenta si tiene, si no se sube el local. Sin cuenta todo sigue en
+`localStorage` (`ev_gt_saved_stations`, `ev_gt_vehicle`). Perfil muestra la
+sección "Mi auto" (abre la hoja Filtros). **Migración manual**:
+`docs/migracion-mi-auto.sql` — aplicada a `ev-guatemala-db-staging` y
+`ev-guatemala-db` (6 oct 2026) — no repetir.
+
 **Ubicación aproximada de residenciales (oct 2026)**: para quitarle al dueño
 el miedo a "publicar dónde vivo". `handleGetStationsFromD1`, para quien no es
 admin, entrega las residenciales con `lat/lng` desplazados entre 250 y 600 m
