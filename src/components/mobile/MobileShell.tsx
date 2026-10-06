@@ -108,8 +108,8 @@ export default function MobileShell() {
         onClick={() => setFilters({ stationType: filters.stationType === 'residential' ? 'all' : 'residential' })}>
         <i style={{ background: '#3b82f6' }} />Residenciales
       </button>
-      <button type="button" className="m-chip m-glass" aria-pressed={advancedCount > 0} onClick={() => setSheet('filters')}>
-        {Icon.sliders}Filtros{advancedCount > 0 && <span className="n">{advancedCount}</span>}
+      <button type="button" className="m-chip m-glass m-chip-filters" aria-pressed={advancedCount > 0} aria-label="Filtros" onClick={() => setSheet('filters')}>
+        {Icon.sliders}<span className="m-chip-label">Filtros</span>{advancedCount > 0 && <span className="n">{advancedCount}</span>}
       </button>
     </>
   );
