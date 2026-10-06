@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useStore } from '../store/useStore';
@@ -282,8 +282,17 @@ function StationMarkers({ stations }: { stations: ChargerStation[] }) {
         }
         const station = it.station;
         return (
+          <React.Fragment key={station.id}>
+          {/* Residencial con ubicación aproximada: círculo de la zona (radio
+              mayor al desplazamiento máximo de 600 m que aplica el Worker). */}
+          {station.approximate && zoom >= 12 && (
+            <Circle
+              center={[station.lat, station.lng]}
+              radius={700}
+              pathOptions={{ color: '#2563eb', weight: 1, opacity: 0.35, fillColor: '#3b82f6', fillOpacity: 0.08, interactive: false }}
+            />
+          )}
           <Marker
-            key={station.id}
             position={[station.lat, station.lng]}
             icon={makeStationIcon(station.type ?? 'public', station.status, station.id === selectedStationId)}
             zIndexOffset={station.id === selectedStationId ? 1000 : 0}
@@ -302,6 +311,7 @@ function StationMarkers({ stations }: { stations: ChargerStation[] }) {
               </Tooltip>
             )}
           </Marker>
+          </React.Fragment>
         );
       })}
     </>

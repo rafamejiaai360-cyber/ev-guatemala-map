@@ -411,13 +411,19 @@ function Peek({ station, onOpen }: { station: ChargerStation | null; onOpen: (id
           <span className={`m-pill ${s.status}`}>{STATUS_LABEL[s.status]}</span>
         </div>
         <div className="m-meta">
-          {dist && <span><b>{dist}</b></span>}
+          {dist && <span><b>{s.approximate ? `≈ ${dist}` : dist}</b></span>}
           {kw > 0 && <span><b>{formatKw(kw)}</b> · {connectorTypes(s).join(', ')}</span>}
           {rating && rating.count > 0 && <span><b>★ {rating.avg.toFixed(1).replace('.', ',')}</b> ({rating.count})</span>}
         </div>
         <div className="m-actions">
-          <a className="m-btn primary" href={googleMapsUrl(s, userLocation)} target="_blank" rel="noopener noreferrer">{Icon.nav}Cómo llegar</a>
-          <button type="button" className="m-btn ghost" onClick={() => onOpen(s.id)}>Ver estación</button>
+          {s.approximate ? (
+            <button type="button" className="m-btn primary" onClick={() => onOpen(s.id)}>Ver y solicitar uso</button>
+          ) : (
+            <>
+              <a className="m-btn primary" href={googleMapsUrl(s, userLocation)} target="_blank" rel="noopener noreferrer">{Icon.nav}Cómo llegar</a>
+              <button type="button" className="m-btn ghost" onClick={() => onOpen(s.id)}>Ver estación</button>
+            </>
+          )}
         </div>
       </div>
     </div>

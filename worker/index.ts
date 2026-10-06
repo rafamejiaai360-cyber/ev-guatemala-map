@@ -977,6 +977,14 @@ async function handleGetDynamicStations(env: Env): Promise<Response> {
     cursor = data.has_more ? data.next_cursor : undefined;
   } while (cursor);
 
+  // Ruta de respaldo heredada (Notion): no sabe qué estación es residencial y
+  // devolvía su ubicación exacta. Se quitan las residenciales según D1 — esas
+  // solo se publican por /api/stations, con ubicación aproximada.
+  if (env.DB) {
+    const { results: res } = await env.DB.prepare("SELECT id FROM stations WHERE type = 'residential'").all<{ id: string }>();
+    const residential = new Set(res.map((r) => r.id));
+    return json(results.filter((r) => !residential.has((r as { id: string }).id)));
+  }
   return json(results);
 }
 
@@ -1015,6 +1023,25 @@ export function invalidateStationsCache(): void {
   stationsCacheAdmin = null;
 }
 
+// Ubicación aproximada de las estaciones residenciales (oct 2026): el público
+// no recibe la casa exacta, solo un punto desplazado entre 250 y 600 m en una
+// dirección fija por estación. El desplazamiento sale de un HMAC con
+// JWT_SECRET, así que no cambia entre visitas (no se puede "promediar") ni se
+// puede revertir sin el secreto. El dueño y el admin ven la ubicación exacta.
+const APPROX_MIN_M = 250;
+const APPROX_MAX_M = 600;
+async function approximateLocation(id: string, lat: number, lng: number, secret: string): Promise<{ lat: number; lng: number }> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret || 'ev-gt-approx'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`approx:${id}`)));
+  const u1 = (mac[0] * 256 + mac[1]) / 65535;
+  const u2 = (mac[2] * 256 + mac[3]) / 65535;
+  const dist = APPROX_MIN_M + u1 * (APPROX_MAX_M - APPROX_MIN_M);
+  const angle = u2 * 2 * Math.PI;
+  const dLat = (dist * Math.cos(angle)) / 111320;
+  const dLng = (dist * Math.sin(angle)) / (111320 * Math.cos((lat * Math.PI) / 180));
+  return { lat: Math.round((lat + dLat) * 1e4) / 1e4, lng: Math.round((lng + dLng) * 1e4) / 1e4 };
+}
+
 async function handleGetStationsFromD1(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return apiError('Base de datos no configurada', 503);
 
@@ -1023,7 +1050,8 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
 
   const cache = isAdmin ? stationsCacheAdmin : stationsCache;
   if (cache && Date.now() < cache.expires) {
-    return new Response(cache.body, {
+    const body = requester && !isAdmin ? await withOwnExactLocations(cache.body, requester.email, env.DB) : cache.body;
+    return new Response(body, {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'hit' },
     });
   }
@@ -1038,7 +1066,11 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       ORDER BY s.id`
   ).all<StationRow & { last_confirmed_at: string | null; confirm_count: number; open_reports: number }>();
 
-  const stations = results.map((r) => {
+  const stations = await Promise.all(results.map(async (r) => {
+    // Residencial vista por alguien que no es admin: ubicación aproximada, sin
+    // dirección ni link de Google Maps (que llevan la ubicación exacta).
+    const hideExact = !isAdmin && r.type === 'residential';
+    const approx = hideExact ? await approximateLocation(r.id, r.lat, r.lng, env.JWT_SECRET ?? '') : null;
     let connectors: unknown[] = [];
     try {
       const parsed = JSON.parse(r.connectors || '[]');
@@ -1054,10 +1086,11 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       id: r.id,
       type: r.type === 'residential' ? 'residential' : 'public',
       name: r.name,
-      address: r.address ?? '',
+      address: hideExact ? '' : (r.address ?? ''),
       zone: r.zone || 'Guatemala',
-      lat: r.lat,
-      lng: r.lng,
+      lat: approx ? approx.lat : r.lat,
+      lng: approx ? approx.lng : r.lng,
+      ...(hideExact ? { approximate: true } : {}),
       status: r.status,
       connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
       network: r.network || 'Desconocido',
@@ -1072,7 +1105,7 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       lastConfirmedAt: r.last_confirmed_at || undefined,
       confirmCount: r.confirm_count,
       openReports: r.open_reports,
-      googleMapsUrl: r.google_maps_url || undefined,
+      googleMapsUrl: hideExact ? undefined : (r.google_maps_url || undefined),
       // Quién dio de alta la estación: solo para el admin (protege al usuario
       // que registró una residencial de exponerse a otros usuarios/público).
       ...(isAdmin ? {
@@ -1080,7 +1113,7 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
         createdByName: r.submitted_by_name || null,
       } : {}),
     };
-  });
+  }));
 
   const body = JSON.stringify(stations);
   if (isAdmin) {
@@ -1088,9 +1121,31 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
   } else {
     stationsCache = { body, expires: Date.now() + STATIONS_CACHE_TTL_MS };
   }
-  return new Response(body, {
+  const out = requester && !isAdmin ? await withOwnExactLocations(body, requester.email, env.DB) : body;
+  return new Response(out, {
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'miss' },
   });
+}
+
+// El dueño de una residencial (quien la registró) sí ve su ubicación exacta.
+// La lista en caché es la pública (aproximada); aquí solo se corrigen las
+// estaciones propias de quien pregunta, con una consulta pequeña.
+async function withOwnExactLocations(body: string, email: string, db: D1Database): Promise<string> {
+  const { results } = await db.prepare(
+    `SELECT id, lat, lng, address, google_maps_url FROM stations
+      WHERE type = 'residential' AND approval_status = 'active' AND (owner_email = ? OR submitted_by = ?)`
+  ).bind(email, email).all<{ id: string; lat: number; lng: number; address: string | null; google_maps_url: string | null }>();
+  if (results.length === 0) return body;
+  const own = new Map(results.map((r) => [r.id, r]));
+  const list = JSON.parse(body) as Array<Record<string, unknown>>;
+  for (const st of list) {
+    const r = own.get(st.id as string);
+    if (!r) continue;
+    st.lat = r.lat; st.lng = r.lng; st.address = r.address ?? '';
+    st.googleMapsUrl = r.google_maps_url || undefined;
+    delete st.approximate;
+  }
+  return JSON.stringify(list);
 }
 
 // ─── Review handlers (D1) ─────────────────────────────────────────────────────

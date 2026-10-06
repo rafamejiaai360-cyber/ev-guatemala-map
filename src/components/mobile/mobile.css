@@ -197,6 +197,8 @@
 .m-cta .chev { width: 14px; height: 14px; fill: none; stroke: var(--ink3); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; justify-self: end; }
 
 /* Comunidad (Growth.tsx): invitación a crear cuenta y "Comparte tu cargador" */
+.m-approx { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding: 10px 12px; border-radius: 14px; background: var(--blue-soft); color: var(--blue); font-size: 12.5px; font-weight: 500; line-height: 1.35; }
+.m-approx svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .m-host-promo { margin-top: 10px; }
 .m-join-mark { width: 52px; height: 52px; border-radius: 16px; background: var(--green); display: grid; place-items: center; margin: 6px auto 12px; }
 .m-join-mark.b { background: var(--blue); }

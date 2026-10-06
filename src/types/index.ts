@@ -40,6 +40,9 @@ export interface ChargerStation {
   confirmCount?: number;
   openReports?: number;
   googleMapsUrl?: string;
+  /** Residencial vista por el público: lat/lng desplazados 250–600 m por
+   *  privacidad del dueño; sin dirección ni link exacto (Worker, oct 2026). */
+  approximate?: boolean;
   /** Quién dio de alta la estación. Solo viene poblado cuando la API lo
    *  entrega a un admin (ver worker/index.ts handleGetStationsFromD1) —
    *  protege a quien registró una estación residencial. */
