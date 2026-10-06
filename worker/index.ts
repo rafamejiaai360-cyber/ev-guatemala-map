@@ -44,9 +44,21 @@ function apiError(msg: string, status = 400): Response {
 // no hace nada — nunca bloquea ni afecta la operación que la dispara.
 // Llamar siempre vía ctx.waitUntil() para no retrasar la respuesta.
 async function notifyAdmin(env: Env, title: string, message: string): Promise<void> {
-  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+  // Cada intento deja rastro en ops_log (op='notify_telegram') para poder
+  // comprobar si los avisos llegan — fetch no lanza error ante 401/400, así
+  // que sin esto un token mal puesto fallaba en silencio. Solo se guarda el
+  // título y el resultado, nunca el texto (lleva nombres de usuarios).
+  const log = async (ok: boolean, detail: Record<string, unknown>) => {
+    if (!env.DB) return;
+    await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('notify_telegram', ?, ?)")
+      .bind(ok ? 1 : 0, JSON.stringify({ title, ...detail })).run().catch(() => undefined);
+  };
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
+    await log(false, { error: 'sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID' });
+    return;
+  }
   try {
-    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -54,8 +66,14 @@ async function notifyAdmin(env: Env, title: string, message: string): Promise<vo
         text: `⚡ ${title}\n${message}`,
       }),
     });
-  } catch {
-    // No hay nada razonable que hacer si Telegram falla; no es crítico.
+    if (res.ok) await log(true, {});
+    else {
+      const body = await res.json().catch(() => ({})) as { description?: string };
+      await log(false, { status: res.status, error: body.description ?? null });
+    }
+  } catch (e) {
+    // No es crítico: nunca bloquea la operación que lo dispara.
+    await log(false, { error: e instanceof Error ? e.message : String(e) });
   }
 }
 

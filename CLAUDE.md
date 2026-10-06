@@ -371,6 +371,14 @@ la lista base sin romperse. **Estado**: aplicada a `ev-guatemala-db-staging`
 (6 oct 2026, vía conector MCP de Cloudflare); falta `ev-guatemala-db` (prod)
 al publicar. SQL listo para pegar: `docs/migracion-vehiculos.sql`.
 
+**Rastro de avisos a Telegram (6 oct 2026)**: `notifyAdmin()` antes fallaba
+en silencio (fetch no lanza error ante 401/400 de Telegram). Ahora cada
+intento deja fila en `ops_log` con `op='notify_telegram'`, `ok=1/0` y en
+`detail` el título + motivo del fallo (`sin TELEGRAM_BOT_TOKEN/...`,
+`status`/`error` de Telegram). Nunca se guarda el texto del aviso (lleva
+nombres de usuarios). Para comprobar: `SELECT * FROM ops_log WHERE
+op='notify_telegram' ORDER BY id DESC LIMIT 5`.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
