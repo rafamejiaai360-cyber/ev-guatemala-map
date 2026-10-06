@@ -399,6 +399,11 @@ defecto de Vite) y en `index.html` las meta `apple-mobile-web-app-capable` +
 sólida, el contenido empieza debajo). **iOS lee esta configuración solo al
 agregar el acceso directo**: quien ya lo tenía debe borrarlo y volver a
 agregarlo (Safari → Compartir → Agregar a pantalla de inicio).
+Eso **no bastó**: tras publicarlo y volver a agregar el acceso directo,
+Rafa siguió viendo el difuminado. Se agregó `.m-statusbar` en MobileShell —
+franja sólida color `--page` del alto exacto de `env(safe-area-inset-top)`
+(0 en computadora), z-index 45 (debajo del oscurecido de hojas) — para que
+el mapa nunca quede detrás de la hora.
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"

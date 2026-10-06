@@ -85,6 +85,12 @@
 .m-chips .m-chip-filters .n { position: absolute; top: -4px; right: -4px; }
 .m-topfade { position: absolute; top: 0; left: 0; right: 0; height: calc(var(--top) + 126px); z-index: 18; background: var(--page); opacity: 0; transition: opacity .35s var(--ease); pointer-events: none; }
 .m-shell[data-mode="list"] .m-topfade { opacity: 1; }
+/* Franja sólida del alto exacto de la zona de la hora/batería (0 en
+   computadora y en navegadores sin "notch"). Sin ella el mapa se dibuja
+   debajo de la hora y el iPhone le aplica su propio difuminado (visto en el
+   acceso directo de la pantalla de inicio, 6 oct 2026). Queda por debajo del
+   oscurecido de las hojas (.m-scrim, z 50). */
+.m-statusbar { position: absolute; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); z-index: 45; background: var(--page); pointer-events: none; }
 
 /* Botones del mapa (MobileMapTools en Map.tsx) */
 .m-tools { position: absolute; right: 14px; top: calc(var(--top) + 130px); display: flex; flex-direction: column; gap: 8px; z-index: 1000; }

@@ -157,6 +157,8 @@ export default function MobileShell() {
         </div>
 
         <div className="m-topfade" />
+        {/* Franja sólida detrás de la hora/batería del celular (ver .m-statusbar) */}
+        <div className="m-statusbar" aria-hidden="true" />
         <div className="m-topbar">
           <div className="m-brand m-glass"><i>{Icon.bolt}</i>EV Guatemala</div>
           <button
