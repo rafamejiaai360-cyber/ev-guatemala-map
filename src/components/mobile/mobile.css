@@ -195,6 +195,26 @@
 .m-cta .go { width: 30px; height: 30px; border-radius: 50%; background: var(--green); display: grid; place-items: center; }
 .m-cta .go svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .m-cta .chev { width: 14px; height: 14px; fill: none; stroke: var(--ink3); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; justify-self: end; }
+
+/* Comunidad (Growth.tsx): invitación a crear cuenta y "Comparte tu cargador" */
+.m-host-promo { margin-top: 10px; }
+.m-join-mark { width: 52px; height: 52px; border-radius: 16px; background: var(--green); display: grid; place-items: center; margin: 6px auto 12px; }
+.m-join-mark.b { background: var(--blue); }
+.m-join-mark svg { width: 26px; height: 26px; fill: #fff; }
+.m-join-mark.b svg { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.m-sheet .m-join-h { text-align: center; }
+.m-sheet .m-join-s { text-align: center; max-width: 320px; margin-left: auto; margin-right: auto; }
+.m-benefits { list-style: none; margin: 16px 0 18px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.m-benefits li { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; align-items: center; }
+.m-benefits .ic { width: 36px; height: 36px; border-radius: 11px; background: var(--green-soft); color: var(--green); display: grid; place-items: center; font-size: 14px; font-weight: 700; }
+.m-benefits .ic.b { background: var(--blue-soft); color: var(--blue); }
+.m-benefits .ic.n { background: var(--ghost); color: var(--ink); }
+.m-benefits .ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.m-benefits b { display: block; font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; }
+.m-benefits small { display: block; font-size: 12.5px; color: var(--ink2); margin-top: 1px; line-height: 1.35; }
+.m-join-go, .m-join-alt { width: 100%; height: 46px; border-radius: 23px; font-size: 15px; }
+.m-btn.m-join-go { background: var(--green); color: #fff; }
+.m-join-alt { margin-top: 8px; }
 .m-sect { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink2); margin: 26px 4px 10px; }
 .m-empty { text-align: center; padding: 30px 20px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .m-empty .art { width: 80px; height: 80px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }

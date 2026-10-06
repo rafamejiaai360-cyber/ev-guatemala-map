@@ -450,6 +450,27 @@ Además el panel de admin tiene barra superior propia (`.adm-top`: logo,
 el logo de la marca y un selector segmentado (`.ev-seg`). Pantallas nuevas:
 seguir usando las mismas clases de Tailwind y el tema se aplica solo.
 
+**Crecimiento: registro y anfitriones (oct 2026)**: objetivo de Rafa — que
+más visitantes se registren y, sobre todo, publiquen su cargador en casa
+(la fuerza del proyecto). `mobile/Growth.tsx`:
+- **Invitación a crear cuenta en el momento útil** (`JoinSheetContent`, store
+  `joinPrompt`: `'save' | 'aportar' | 'browse'`): al guardar la 1.ª estación
+  sin cuenta (una vez por visita, `sessionStorage.ev_join_save`), al intentar
+  aportar sin cuenta, y al abrir la 3.ª ficha de la visita (máx. 1 vez cada
+  7 días, `localStorage.ev_join_browse_at`). Nunca a quien tiene sesión.
+  "Crear cuenta gratis" abre `AuthModal` directo en registro (`openAuth`).
+- **Se retoma lo que quería hacer**: `pendingAddType` guarda el tipo de
+  estación que intentó aportar; al iniciar sesión, MobileShell abre el alta
+  automáticamente.
+- **"Comparte tu cargador en casa"** (`HostSheetContent`): explica beneficios,
+  control de acceso ("Solicitar uso"), privacidad y revisión por admin (todo
+  ya cierto hoy; no promete cobros). Se abre desde Aportar → "Mi cargador en
+  casa", y desde la tarjeta `HostPromo` en Perfil y Actividad.
+- **Teléfono opcional al registrarse** (Worker `handleRegister` acepta vacío
+  → `NULL`; `AuthModal` lo marca "(opcional)"). Se pide en `AddStationModal`
+  solo para residenciales si la cuenta no lo tiene, y se guarda con
+  `updateProfile` antes de enviar.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

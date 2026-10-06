@@ -7,6 +7,7 @@ import StationScreen from './StationScreen';
 import StationCard from './StationCard';
 import { RouteAlertCard, RouteModeBar } from './RouteMode';
 import { useRouteMode } from './routeEngine';
+import { HostPromo, HostSheetContent, JoinSheetContent } from './Growth';
 import {
   Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
   connectorTypes, distanceKm, distanceLabel, formatKw, googleMapsUrl, maxKw, stationType,
@@ -41,13 +42,17 @@ export default function MobileShell() {
     selectedStationId, setSelectedStationId, userLocation, ratings, savedIds,
     currentUser, isAdminAuthenticated, setAuthModalOpen, openAddStation,
     setProfileModalOpen, setContactAdminModalOpen, setScanModalOpen, logoutUser,
+    joinPrompt, setJoinPrompt, openAuth, pendingAddType, setPendingAddType,
   } = useStore();
 
   const [tab, setTab] = useState<Tab>('map');
   const [mode, setMode] = useState<'map' | 'list'>('map');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailFrom, setDetailFrom] = useState<string>('Mapa');
-  const [sheet, setSheet] = useState<'none' | 'aportar' | 'filters'>('none');
+  const [sheet, setSheet] = useState<'none' | 'aportar' | 'filters' | 'host'>('none');
+  // La invitación a crear cuenta (JoinSheet) se muestra cuando algo la pide
+  // (guardar, aportar sin cuenta, 3.ª ficha) y tiene prioridad sobre las demás.
+  const activeSheet = joinPrompt && !currentUser ? 'join' : sheet;
   const [query, setQuery] = useState('');
 
   const isWide = useIsWide();
@@ -62,6 +67,7 @@ export default function MobileShell() {
   const isAdmin = isAdminAuthenticated || currentUser?.role === 'admin';
 
   function openDetail(id: string) {
+    maybeInviteAfterBrowsing(!!currentUser, setJoinPrompt);
     setDetailFrom(tab === 'map' ? (mode === 'list' ? 'Lista' : 'Mapa') : BACK_LABEL[tab]);
     setDetailId(id);
     // En computadora el mapa queda visible: marcar y centrar la estación.
@@ -82,8 +88,25 @@ export default function MobileShell() {
   }
   function startAdd(type: StationType) {
     setSheet('none');
-    if (!currentUser) { setAuthModalOpen(true); return; }
+    if (!currentUser) {
+      // Se recuerda lo que quería aportar y se retoma apenas cree su cuenta.
+      setPendingAddType(type);
+      setJoinPrompt('aportar');
+      return;
+    }
     openAddStation(type);
+  }
+
+  // Apenas inicia sesión, retoma lo que quería aportar.
+  useEffect(() => {
+    if (currentUser && pendingAddType) {
+      openAddStation(pendingAddType);
+      setPendingAddType(null);
+    }
+  }, [currentUser, pendingAddType, openAddStation, setPendingAddType]);
+  function closeSheet() {
+    setSheet('none');
+    if (joinPrompt) setJoinPrompt(null);
   }
 
   // Filtros rápidos (chips). Los avanzados (conector, nivel, vehículo) viven
@@ -193,7 +216,7 @@ export default function MobileShell() {
 
       {/* ---------- Pestaña Actividad ---------- */}
       <section className={`m-view${tab === 'activity' ? ' on' : ''}${tab === 'activity' && detailStation ? ' pushed' : ''}`} aria-hidden={tab !== 'activity'}>
-        {tab === 'activity' && <ActivityTab onAportar={() => setSheet('aportar')} onOpen={openDetail} />}
+        {tab === 'activity' && <ActivityTab onAportar={() => setSheet('aportar')} onHost={() => setSheet('host')} onOpen={openDetail} />}
       </section>
 
       {/* ---------- Pestaña Guardadas ---------- */}
@@ -240,6 +263,8 @@ export default function MobileShell() {
               <span className="go">{Icon.chevR}</span>
             </button>
           )}
+          <div className="m-sect">Comunidad</div>
+          <HostPromo onOpen={() => setSheet('host')} />
           {isAdmin && (
             <>
               <div className="m-sect">Administración</div>
@@ -306,8 +331,8 @@ export default function MobileShell() {
       </nav>
 
       {/* ---------- Hojas ---------- */}
-      <div className={`m-scrim${sheet !== 'none' ? ' on' : ''}`} onClick={() => setSheet('none')} />
-      <div className={`m-sheet m-scroll${sheet === 'aportar' ? ' on' : ''}`} role="dialog" aria-label="Aportar al mapa" aria-hidden={sheet !== 'aportar'}>
+      <div className={`m-scrim${activeSheet !== 'none' ? ' on' : ''}`} onClick={closeSheet} />
+      <div className={`m-sheet m-scroll${activeSheet === 'aportar' ? ' on' : ''}`} role="dialog" aria-label="Aportar al mapa" aria-hidden={activeSheet !== 'aportar'}>
         <div className="grab" />
         <h3>Aportar al mapa</h3>
         <p className="s">
@@ -319,7 +344,7 @@ export default function MobileShell() {
             <span><b>Estación pública</b><small>En un comercio, parqueo o gasolinera</small></span>
             <svg className="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
           </button>
-          <button type="button" className="m-cta" onClick={() => startAdd('residential')}>
+          <button type="button" className="m-cta" onClick={() => setSheet('host')}>
             <span className="ic b">{Icon.house}</span>
             <span><b>Mi cargador en casa</b><small>Compártelo con otros conductores</small></span>
             <svg className="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
@@ -332,11 +357,26 @@ export default function MobileShell() {
         </div>
         <button type="button" className="m-cancel" onClick={() => setSheet('none')}>Cancelar</button>
       </div>
-      <div className={`m-sheet m-scroll${sheet === 'filters' ? ' on' : ''}`} role="dialog" aria-label="Filtros" aria-hidden={sheet !== 'filters'}>
+      <div className={`m-sheet m-scroll${activeSheet === 'filters' ? ' on' : ''}`} role="dialog" aria-label="Filtros" aria-hidden={activeSheet !== 'filters'}>
         <div className="grab" />
         <h3>Filtros</h3>
         <p className="s">Muestra solo las estaciones que le sirven a tu auto.</p>
-        {sheet === 'filters' && <FiltersPanel onDone={() => setSheet('none')} />}
+        {activeSheet === 'filters' && <FiltersPanel onDone={() => setSheet('none')} />}
+      </div>
+      <div className={`m-sheet m-scroll${activeSheet === 'join' ? ' on' : ''}`} role="dialog" aria-label="Crear cuenta" aria-hidden={activeSheet !== 'join'}>
+        <div className="grab" />
+        {joinPrompt && (
+          <JoinSheetContent
+            ctx={joinPrompt}
+            onRegister={() => { setSheet('none'); openAuth('register'); }}
+            onLogin={() => { setSheet('none'); openAuth('login'); }}
+            onClose={() => { closeSheet(); setPendingAddType(null); }}
+          />
+        )}
+      </div>
+      <div className={`m-sheet m-scroll${activeSheet === 'host' ? ' on' : ''}`} role="dialog" aria-label="Comparte tu cargador" aria-hidden={activeSheet !== 'host'}>
+        <div className="grab" />
+        <HostSheetContent onStart={() => startAdd('residential')} onClose={closeSheet} />
       </div>
     </div>
   );
@@ -393,7 +433,7 @@ interface MyVehicleProposal {
 }
 const PROPOSAL_STATUS: Record<string, string> = { pending: 'En revisión', approved: 'Aprobada', rejected: 'No aprobada' };
 
-function ActivityTab({ onAportar, onOpen }: { onAportar: () => void; onOpen: (id: string) => void }) {
+function ActivityTab({ onAportar, onHost, onOpen }: { onAportar: () => void; onHost: () => void; onOpen: (id: string) => void }) {
   const { stations, userLocation, ratings, authToken, currentUser } = useStore();
   const byId = useMemo(() => new Map(stations.map((s) => [s.id, s])), [stations]);
 
@@ -435,6 +475,7 @@ function ActivityTab({ onAportar, onOpen }: { onAportar: () => void; onOpen: (id
         <span><b>Agregar una estación</b><small>¿Conoces un cargador que no está en el mapa?</small></span>
         <span className="go">{Icon.chevR}</span>
       </button>
+      <HostPromo onOpen={onHost} />
 
       <div className="m-sect">Ayuda a verificar{userLocation ? ' cerca de ti' : ''}</div>
       {toVerify.length > 0
@@ -471,4 +512,19 @@ function ActivityTab({ onAportar, onOpen }: { onAportar: () => void; onOpen: (id
       )}
     </div>
   );
+}
+
+// Invitación suave a crear cuenta: al abrir la 3.ª ficha de la visita, como
+// máximo una vez cada 7 días por navegador. Nunca a quien ya tiene sesión.
+let fichasThisVisit = 0;
+function maybeInviteAfterBrowsing(loggedIn: boolean, invite: (ctx: 'browse') => void) {
+  if (loggedIn) return;
+  fichasThisVisit += 1;
+  if (fichasThisVisit !== 3) return;
+  try {
+    const last = Number(localStorage.getItem('ev_join_browse_at') || 0);
+    if (Date.now() - last < 7 * 24 * 3600 * 1000) return;
+    localStorage.setItem('ev_join_browse_at', String(Date.now()));
+  } catch { /* sin almacenamiento: se invita igual una vez */ }
+  invite('browse');
 }
