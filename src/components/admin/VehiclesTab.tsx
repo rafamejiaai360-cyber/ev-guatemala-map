@@ -33,6 +33,17 @@ export default function VehiclesTab() {
   const [busy, setBusy] = useState<number | null>(null);
   const [editing, setEditing] = useState<Vehicle | 'new' | null>(null);
   const [query, setQuery] = useState('');
+  // Autos eliminados (status='hidden' en D1): no se borran de verdad, para
+  // poder restaurarlos si se eliminaron por error.
+  const [removed, setRemoved] = useState<Vehicle[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function loadRemoved() { setRemoved(await fetchRemoved()); }
+  useEffect(() => {
+    let alive = true;
+    fetchRemoved().then((rows) => { if (alive) setRemoved(rows); });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -64,6 +75,36 @@ export default function VehiclesTab() {
       flash(e instanceof Error ? e.message : 'Error procesando la propuesta');
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Eliminar = ocultar de la app (status='hidden'); restaurar = volver a mostrar.
+  async function setVisibility(v: Vehicle, hide: boolean) {
+    if (hide && !window.confirm(`¿Eliminar ${v.brand} ${v.model} ${v.year}?\n\nDejará de verse en la app. Si fue un error, puedes restaurarlo en "Eliminados", al final de esta página.`)) return;
+    setBusyId(v.id);
+    try {
+      const res = await fetch(`/api/vehicles/${v.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({
+          brand: v.brand, model: v.model, year: v.year,
+          range_km: v.range_km,
+          battery_kwh: v.battery_kwh ?? null,
+          connectors: v.compatible_connectors ?? [],
+          adapter_note: v.adapter_note ?? '',
+          verified: !!v.verified,
+          source: v.source ?? '',
+          status: hide ? 'hidden' : 'visible',
+        }),
+      });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Error');
+      await Promise.all([loadVehicles(), loadRemoved()]);
+      flash(`${v.brand} ${v.model} ${hide ? 'eliminado' : 'restaurado'}`);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo completar');
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -137,20 +178,46 @@ export default function VehiclesTab() {
                 </p>
               </div>
               <button onClick={() => setEditing(v)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 flex-shrink-0">Editar</button>
+              <button disabled={busyId === v.id} onClick={() => setVisibility(v, true)} className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 flex-shrink-0 disabled:opacity-50">Eliminar</button>
             </div>
           ))}
         </div>
       </section>
 
+      {removed.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Eliminados</h3>
+          <p className="text-xs text-gray-400 mb-3">No se ven en la app. Restaura uno si lo eliminaste por error.</p>
+          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+            {removed.map((v) => (
+              <div key={v.id} className="flex items-center gap-3 px-3 py-2.5">
+                <p className="min-w-0 flex-1 text-sm text-gray-500 truncate">{v.brand} {v.model} <span className="text-gray-400">{v.year}</span></p>
+                <button disabled={busyId === v.id} onClick={() => setVisibility(v, false)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 flex-shrink-0 disabled:opacity-50">Restaurar</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {editing && (
         <VehicleEditor
           vehicle={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={async (name) => { setEditing(null); await loadVehicles(); flash(`${name} guardado`); }}
+          onSaved={async (name) => { setEditing(null); await Promise.all([loadVehicles(), loadRemoved()]); flash(`${name} guardado`); }}
         />
       )}
     </div>
   );
+}
+
+async function fetchRemoved(): Promise<Vehicle[]> {
+  try {
+    const res = await fetch('/api/vehicles');
+    const rows = res.ok ? await res.json() as (Vehicle & { status?: string })[] : [];
+    return Array.isArray(rows) ? rows.filter((r) => r.status === 'hidden') : [];
+  } catch {
+    return []; // sin lista de eliminados; no es crítico
+  }
 }
 
 // Reduce la foto en el navegador (máx. 900 px de ancho, JPEG) para que pese
@@ -219,7 +286,7 @@ function VehicleEditor({ vehicle, onClose, onSaved }: { vehicle: Vehicle | null;
       });
       const data = await res.json().catch(() => ({})) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? 'No se pudo guardar');
-      onSaved(`${brand} ${model}${hide ? ' (oculto)' : ''}`);
+      onSaved(`${brand} ${model}${hide ? ' (eliminado)' : ''}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar');
     } finally {
@@ -289,8 +356,8 @@ function VehicleEditor({ vehicle, onClose, onSaved }: { vehicle: Vehicle | null;
         <div className="flex gap-2 pt-1">
           <button disabled={saving} onClick={() => save()} className="flex-1 py-2.5 rounded-full bg-green-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
           {vehicle && (
-            <button disabled={saving} onClick={() => { if (window.confirm(`¿Ocultar ${vehicle.brand} ${vehicle.model} de la app?`)) save(true); }}
-              className="px-4 py-2.5 rounded-full bg-red-50 text-red-600 text-sm font-semibold disabled:opacity-50">Ocultar</button>
+            <button disabled={saving} onClick={() => { if (window.confirm(`¿Eliminar ${vehicle.brand} ${vehicle.model} de la app? Podrás restaurarlo en "Eliminados".`)) save(true); }}
+              className="px-4 py-2.5 rounded-full bg-red-50 text-red-600 text-sm font-semibold disabled:opacity-50">Eliminar</button>
           )}
         </div>
       </div>
