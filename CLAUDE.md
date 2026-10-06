@@ -436,6 +436,20 @@ pantalla encendida (con la app cerrada haría falta app nativa de tienda).
 Sin el modo ruta, la ubicación sigue siendo una foto (al abrir el mapa o al
 tocar "mi ubicación"), no se actualiza sola.
 
+**Tema único en paneles y ventanas (oct 2026)**: el mapa ya tenía el estilo
+nuevo (clases `m-*`); el panel de admin, el login, el perfil y las ventanas de
+alta/edición seguían con el estilo viejo de Tailwind. `src/theme.css`
+(importado en `index.css`) "traduce" esas clases de Tailwind al estilo nuevo:
+fondo `#f2f2f7`, tarjetas sin borde con radio 16/22 px y sombra suave, campos
+con relleno gris y borde verde al escribir, botones principales en píldora
+verde/negra, secundarios en píldora gris, y el verde unificado `#16a34a`.
+Tailwind 4 pone sus utilidades en `@layer`, por eso estas reglas sin capa
+ganan; van en `:where()` (especificidad 0) para no tocar las `m-*` del mapa.
+Además el panel de admin tiene barra superior propia (`.adm-top`: logo,
+"Admin", avatar, Salir) y pestañas en píldoras (`.adm-tab`), y el login usa
+el logo de la marca y un selector segmentado (`.ev-seg`). Pantallas nuevas:
+seguir usando las mismas clases de Tailwind y el tema se aplica solo.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
