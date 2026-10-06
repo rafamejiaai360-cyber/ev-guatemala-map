@@ -50,8 +50,11 @@ export default function App() {
         // No contar visitas de sesiones con acceso de administrador (ej. Rafa
         // revisando el mapa público ya logueado) — el contador es para medir
         // impacto real de usuarios, no las propias revisiones del admin.
+        // ev_no_count: este navegador ya inició sesión como admin alguna vez
+        // (se queda marcado aunque después cierre sesión).
         const { isAdminAuthenticated, currentUser } = useStore.getState();
         if (isAdminAuthenticated || currentUser?.role === 'admin') return;
+        try { if (localStorage.getItem('ev_no_count') === '1') return; } catch { /* sin almacenamiento */ }
         fetch('/api/visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

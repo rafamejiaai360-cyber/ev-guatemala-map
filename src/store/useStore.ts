@@ -221,6 +221,13 @@ function buildAllStations(
 }
 const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all', stationType: 'all' };
 
+// Marca este navegador como "del admin" para el contador de visitas. A
+// diferencia de ev_admin_auth, NO se borra al cerrar sesión: así las visitas
+// de Rafa en sus dispositivos no se cuentan aunque luego entre sin sesión.
+function markNoCountDevice() {
+  try { localStorage.setItem('ev_no_count', '1'); } catch { /* sin almacenamiento: no pasa nada */ }
+}
+
 export const useStore = create<AppState>((set, get) => ({
   stations: allInitial,
   statusOverrides: initialOverrides,
@@ -382,6 +389,7 @@ export const useStore = create<AppState>((set, get) => ({
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
       localStorage.setItem('ev_admin_auth', '1');
+      markNoCountDevice();
       set({ isAdminAuthenticated: true });
     }
     set({ authToken: data.token, currentUser: data.user });
@@ -401,6 +409,7 @@ export const useStore = create<AppState>((set, get) => ({
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
       localStorage.setItem('ev_admin_auth', '1');
+      markNoCountDevice();
       set({ isAdminAuthenticated: true });
     }
     set({ authToken: data.token, currentUser: data.user });
@@ -421,6 +430,7 @@ export const useStore = create<AppState>((set, get) => ({
       const user = await res.json() as { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string };
       if (user.role === 'admin') {
         localStorage.setItem('ev_admin_auth', '1');
+        markNoCountDevice();
         set({ isAdminAuthenticated: true });
       }
       set({ currentUser: user, authToken: token });

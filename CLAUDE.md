@@ -273,6 +273,19 @@ timestamp + ubicación aproximada, sin ningún identificador de quién la
 generó (ni siquiera de si era admin), así que no hay manera de filtrarlas
 después del hecho. El impacto en los números totales debería ser mínimo
 frente al tráfico real, y de aquí en adelante quedan limpios.
+**Más huecos del filtro de admin cerrados (6 oct 2026)**: (1) el chequeo de
+arriba depende de tener sesión de admin EN ESE navegador — el acceso directo
+del iPhone (pantalla de inicio) no comparte almacenamiento con Safari, así
+que ahí las visitas de Rafa sí contaban. Ahora, al iniciar sesión como admin,
+el store marca el navegador con `localStorage.ev_no_count='1'`
+(`markNoCountDevice()`), que **no se borra al cerrar sesión**; `App.tsx` no
+manda la visita si existe. Basta con iniciar sesión como admin una vez en
+cada dispositivo/app. (2) Las vistas previas automáticas de Cloudflare
+(`<rama|hash>-ev-guatemala-map.<subdominio>.workers.dev`, que usan la base
+real) ya no cuentan: el Worker ignora `POST /api/visits` si el hostname
+coincide con `/^[^.]+-ev-guatemala-map\./` (no afecta prod ni staging).
+Nota: en `npm run dev` se ven varias visitas por carga por `StrictMode`; en
+la build real es una sola (verificado con `vite preview`).
 
 **Hallazgo sobre el despliegue automático de Cloudflare (19 ago 2026)**: al
 revisar por qué la pestaña "Visitas" fallaba justo después de este cambio,

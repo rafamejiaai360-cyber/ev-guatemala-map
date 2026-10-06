@@ -2555,6 +2555,10 @@ export default {
         // más tarde (dentro de ctx.waitUntil) nunca funciona. Ver nota en
         // handleTrackVisit.
         const rawBody = await request.text().catch(() => '');
+        // Las vistas previas automáticas de Cloudflare por rama/commit
+        // (<rama>-ev-guatemala-map.<subdominio>.workers.dev) usan la base REAL;
+        // las visitas desde ahí son pruebas y no deben contarse.
+        if (/^[^.]+-ev-guatemala-map\./.test(url.hostname)) return json({ ok: true });
         ctx.waitUntil(handleTrackVisit(request, env, rawBody));
         return json({ ok: true });
       }
