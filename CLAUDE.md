@@ -418,6 +418,24 @@ franja sólida color `--page` del alto exacto de `env(safe-area-inset-top)`
 (0 en computadora), z-index 45 (debajo del oscurecido de hojas) — para que
 el mapa nunca quede detrás de la hora.
 
+**Modo ruta (oct 2026)**: botón con ícono de auto en los controles del mapa
+(`MobileMapTools` en `Map.tsx`), que el usuario enciende y apaga cuando quiere.
+Encendido: `navigator.geolocation.watchPosition` actualiza `userLocation` en
+vivo y el mapa lo sigue con `panTo` sin cambiar el zoom (`MapController`;
+pausa 15 s si el usuario arrastró el mapa o mientras hay una estación
+seleccionada). Al quedar a ≤ `routeRadiusKm` (1/2/5 km, por defecto 2, en
+`localStorage.ev_route_radius`) de una estación de `filteredStations`
+(respeta filtros; excluye `offline`) muestra `RouteAlertCard` (Ver / Ir en
+Waze) + sonido WebAudio (desbloqueado con el toque que enciende el modo,
+requisito de iOS) + vibración donde exista; cada estación avisa una sola vez
+por encendido. Pide Screen Wake Lock para que no se apague la pantalla.
+Lógica en `mobile/routeEngine.ts`, interfaz en `mobile/RouteMode.tsx`.
+**Privacidad**: todo en el teléfono, la ubicación no se envía a ningún lado.
+**Limitación de cualquier página web**: solo avisa con la app abierta y la
+pantalla encendida (con la app cerrada haría falta app nativa de tienda).
+Sin el modo ruta, la ubicación sigue siendo una foto (al abrir el mapa o al
+tocar "mi ubicación"), no se actualiza sola.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

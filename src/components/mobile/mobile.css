@@ -99,6 +99,29 @@
 .m-tbtn + .m-tbtn { border-top: 1px solid rgba(0, 0, 0, .08); }
 .m-tbtn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .m-tbtn:active { background: rgba(0, 0, 0, .06); }
+.m-tbtn.on { background: var(--green); color: #fff; }
+
+/* Modo ruta (RouteMode.tsx): barra de estado debajo de los filtros y aviso */
+.m-route { position: absolute; top: calc(var(--top) + 130px); left: 14px; right: 64px; z-index: 21; border-radius: 16px; box-shadow: var(--float-sh); padding: 7px 8px 7px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; animation: m-fade-up .35s var(--ease); }
+.m-route-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(22, 163, 74, .5); animation: m-route-pulse 1.8s infinite; }
+@keyframes m-route-pulse { 0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, .5); } 70% { box-shadow: 0 0 0 7px rgba(22, 163, 74, 0); } 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); } }
+.m-route-txt b { font-weight: 650; }
+.m-route-radii { display: flex; gap: 3px; }
+.m-route-radii button { border: 0; border-radius: 10px; padding: 3px 7px; font-size: 11.5px; font-weight: 500; background: var(--ghost); cursor: pointer; }
+.m-route-radii button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.m-route-off { margin-left: auto; border: 0; background: transparent; color: var(--danger); font-size: 12px; font-weight: 600; cursor: pointer; padding: 3px 4px; }
+.m-route-hint { flex-basis: 100%; order: 9; margin: 4px 0 2px; font-size: 11.5px; line-height: 1.35; color: var(--ink2, #3c3c43); }
+.m-route-hint button { border: 0; background: transparent; color: var(--green); font-weight: 600; font-size: 11.5px; padding: 0 0 0 6px; cursor: pointer; }
+.m-route-alert { position: absolute; top: calc(var(--top) + 44px); left: 10px; right: 10px; z-index: 48; border-radius: 20px; box-shadow: var(--float-sh); padding: 12px 34px 12px 12px; display: flex; align-items: center; gap: 10px; animation: m-fade-up .35s var(--ease); }
+.m-route-alert-ic { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: none; }
+.m-route-alert-ic svg { width: 18px; height: 18px; fill: #fff; }
+.m-route-alert-txt { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.m-route-alert-txt small { font-size: 11.5px; color: var(--ink3, #8e8e93); }
+.m-route-alert-txt b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-route-alert-act { display: flex; gap: 6px; flex: none; }
+.m-route-alert-act button, .m-route-alert-act a { border: 0; border-radius: 12px; padding: 7px 11px; font-size: 12.5px; font-weight: 600; background: var(--ghost); color: inherit; text-decoration: none; cursor: pointer; }
+.m-route-alert-act .go { background: var(--green); color: #fff; }
+.m-route-alert-x { position: absolute; top: 4px; right: 6px; border: 0; background: transparent; font-size: 18px; line-height: 1; color: var(--ink3, #8e8e93); cursor: pointer; padding: 4px; }
 
 /* Tarjeta flotante al tocar un pin */
 .m-peek { position: absolute; left: 10px; right: 10px; bottom: calc(var(--tabbar-bottom) + 86px); z-index: 25; border-radius: 22px; padding: 14px 16px; box-shadow: var(--float-sh); transform: translateY(calc(100% + 140px)); transition: transform .5s var(--ease); }
@@ -272,6 +295,8 @@
   .m-view-map.pushed { transform: none; filter: none; }
   .m-mapwrap, .m-shell[data-mode="list"] .m-mapwrap { top: var(--head); left: var(--side); opacity: 1; pointer-events: auto; }
   .m-tools { top: 14px; right: 14px; }
+  .m-route { top: calc(var(--head) + 14px); left: calc(var(--side) + 14px); right: auto; max-width: 440px; }
+  .m-route-alert { top: calc(var(--head) + 14px); left: auto; right: 64px; width: 380px; }
   .ev-map-mobile .leaflet-bottom.leaflet-right { bottom: 0; }
 
   /* Lista fija a la izquierda */

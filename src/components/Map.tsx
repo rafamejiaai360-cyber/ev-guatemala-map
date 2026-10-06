@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap, useMapEvents }
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useStore } from '../store/useStore';
+import { primeRouteSound } from './mobile/routeEngine';
 import type { ChargerStation } from '../types';
 
 const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
@@ -140,11 +141,29 @@ function MapController({ variant }: { variant: Variant }) {
     prevSelectedRef.current = selectedStationId;
   }, [selectedStationId, stations, map, variant]);
 
+  // Modo ruta: el mapa sigue al usuario sin cambiarle el zoom, salvo que esté
+  // mirando una estación o haya movido el mapa con el dedo hace menos de 15 s.
+  const routeMode = useStore((s) => s.routeMode);
+  const lastDragRef = useRef(0);
+  const followingRef = useRef(false);
+  useMapEvents({ dragstart: () => { lastDragRef.current = Date.now(); } });
+
   useEffect(() => {
-    if (userLocation) {
-      map.setView([userLocation.lat, userLocation.lng], 14, { animate: true });
+    if (!userLocation) return;
+    const at: [number, number] = [userLocation.lat, userLocation.lng];
+    if (!routeMode) {
+      followingRef.current = false;
+      map.setView(at, 14, { animate: true });
+      return;
     }
-  }, [userLocation, map]);
+    if (!followingRef.current) {
+      followingRef.current = true;
+      map.setView(at, Math.max(map.getZoom(), 15), { animate: true });
+      return;
+    }
+    if (useStore.getState().selectedStationId || Date.now() - lastDragRef.current < 15000) return;
+    map.panTo(at, { animate: true });
+  }, [userLocation, routeMode, map]);
 
   return null;
 }
@@ -368,6 +387,7 @@ function ZoomControls() {
 function MobileMapTools() {
   const map = useMap();
   const locate = useLocate();
+  const { routeMode, setRouteMode } = useStore();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Que tocar los botones no arrastre ni haga zoom en el mapa de fondo
@@ -389,6 +409,16 @@ function MobileMapTools() {
       <div className="m-tgroup m-glass">
         <button type="button" className="m-tbtn" aria-label="Mi ubicación" onClick={locate}>
           <svg viewBox="0 0 24 24"><path d="M20.5 3.5 3.5 10.8l7 2.7 2.7 7z" /></svg>
+        </button>
+        <button
+          type="button"
+          className={`m-tbtn${routeMode ? ' on' : ''}`}
+          aria-label={routeMode ? 'Apagar modo ruta' : 'Encender modo ruta'}
+          aria-pressed={routeMode}
+          title="Modo ruta: avisa al pasar cerca de una estación"
+          onClick={() => { if (!routeMode) primeRouteSound(); setRouteMode(!routeMode); }}
+        >
+          <svg viewBox="0 0 24 24"><path d="M5 17h14M6.5 17V11l1.8-4.2A2 2 0 0 1 10.1 5.5h3.8a2 2 0 0 1 1.8 1.3L17.5 11v6" /><path d="M6.5 11h11" /><circle cx="8.5" cy="17.5" r="1.5" /><circle cx="15.5" cy="17.5" r="1.5" /></svg>
         </button>
       </div>
     </div>
