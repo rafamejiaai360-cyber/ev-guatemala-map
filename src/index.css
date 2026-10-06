@@ -73,29 +73,91 @@ html, body, #root {
   z-index: 10;
 }
 
-/* Custom marker styles */
-.ev-marker {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 2.5px solid white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-  transition: transform 0.15s ease, opacity 0.2s ease;
+/* Mapa base en grises suaves: mismas imágenes de OpenStreetMap, con un toque
+   mínimo de color para que agua y parques se sigan distinguiendo. */
+.ev-tiles {
+  filter: saturate(.3) brightness(1.04) contrast(.92);
+}
+
+/* Pines de estación (ver makeStationIcon en Map.tsx).
+   Relleno = tipo (verde pública / azul residencial / gris fuera de servicio);
+   punto en la esquina = estado cuando no está activa. */
+.ev-pin-wrap { background: transparent; border: 0; }
+.ev-pin {
+  --c: #22c55e;
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  font-size: 14px;
+  transform-origin: 50% 120%;
+  transition: transform .3s cubic-bezier(.34, 1.4, .64, 1), filter .3s ease;
+  animation: ev-pop .35s cubic-bezier(.32, .72, 0, 1);
 }
-
-.ev-marker.dimmed {
-  opacity: 0.25;
-  pointer-events: none;
+.ev-pin.residential { --c: #3b82f6; }
+.ev-pin.offline { --c: #a1a1aa; }
+.ev-pin-shape {
+  position: absolute;
+  inset: 0;
+  background: var(--c);
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 5px 12px -3px rgba(0,0,0,.28);
 }
+.ev-pin-ico {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ev-pin-dot {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+.ev-pin-dot.maintenance { background: #ff9f0a; }
+.ev-pin-dot.offline { background: #ff453a; }
+.ev-pin.sel { transform: scale(1.2); filter: drop-shadow(0 6px 8px rgba(0,0,0,.22)); animation-name: ev-pop-sel; }
 
-/* Relleno = tipo de estación; borde (inline, ver Map.tsx) = estado operativo. */
-.ev-marker.public      { background: #22c55e; }
-.ev-marker.residential { background: #3b82f6; }
+.ev-cluster {
+  display: grid;
+  place-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #1c1c1e;
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 5px 14px -4px rgba(0,0,0,.3);
+  cursor: pointer;
+  animation: ev-pop .35s cubic-bezier(.32, .72, 0, 1);
+}
+.ev-cluster.mix { box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 0 0 3.5px rgba(59,130,246,.22), 0 5px 14px -4px rgba(0,0,0,.3); }
+
+@keyframes ev-pop {
+  from { opacity: 0; transform: scale(.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes ev-pop-sel {
+  from { transform: scale(1); }
+  to { transform: scale(1.2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ev-pin, .ev-cluster { animation: none; transition: none; }
+}
 
 /* Station hover tooltip */
 .leaflet-tooltip.station-tooltip {

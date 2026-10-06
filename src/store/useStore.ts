@@ -3,6 +3,7 @@ import { chargerStations } from '../data/chargers';
 import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } from '../utils/ocm';
 import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType } from '../types';
 import { getAllRatings } from '../utils/reviewsApi';
+import { vehicles as baseVehicles } from '../data/vehicles';
 
 async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
   // Fuente principal: D1 (/api/stations). Si falla, degrada al endpoint
@@ -24,6 +25,17 @@ async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
 }
 
 const STORAGE_KEY = 'ev_gt_status_overrides';
+const SAVED_KEY = 'ev_gt_saved_stations';
+
+function loadSaved(): string[] {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 const CUSTOM_KEY = 'ev_gt_custom_stations';
 
 function loadOverrides(): Record<string, ChargerStatus> {
@@ -91,6 +103,11 @@ interface AppState {
   // Computed filtered stations
   filteredStations: ChargerStation[];
 
+  // Catálogo de vehículos: lista base (src/data/vehicles.ts) + lo que el
+  // admin agregó, corrigió u ocultó en D1 (GET /api/vehicles).
+  vehicleCatalog: Vehicle[];
+  loadVehicles: () => Promise<void>;
+
   // Vehicle selector
   selectedVehicle: Vehicle | null;
   setSelectedVehicle: (vehicle: Vehicle | null) => void;
@@ -120,6 +137,14 @@ interface AppState {
   // Add station modal
   addStationModalOpen: boolean;
   setAddStationModalOpen: (open: boolean) => void;
+  /** Tipo con el que abre el formulario (el botón "Aportar" puede pedir
+   *  directamente "Mi cargador en casa" = residencial). */
+  addStationInitialType: StationType;
+  openAddStation: (type?: StationType) => void;
+
+  // Estaciones guardadas (favoritas) — solo en este navegador por ahora
+  savedIds: string[];
+  toggleSaved: (id: string) => void;
 
   // Admin flag — mirrors JWT role==='admin', set by login/register/loadCurrentUser
   isAdminAuthenticated: boolean;
@@ -242,6 +267,28 @@ export const useStore = create<AppState>((set, get) => ({
 
   filteredStations: computeFiltered(allInitial, initialFilters, null),
 
+  vehicleCatalog: baseVehicles,
+  loadVehicles: async () => {
+    try {
+      const res = await fetch('/api/vehicles');
+      if (!res.ok) return;
+      const rows = await res.json() as (Vehicle & { status?: string })[];
+      if (!Array.isArray(rows)) return;
+      const byId = new Map(baseVehicles.map((v) => [v.id, v]));
+      for (const r of rows) {
+        if (r.status === 'hidden') { byId.delete(r.id); continue; }
+        const { status: _status, ...v } = r;
+        void _status;
+        byId.set(v.id, v);
+      }
+      const catalog = Array.from(byId.values())
+        .sort((a, b) => a.brand.localeCompare(b.brand) || a.model.localeCompare(b.model));
+      set({ vehicleCatalog: catalog });
+    } catch {
+      // sin API (desarrollo local con vite) se queda la lista base
+    }
+  },
+
   selectedVehicle: null,
   setSelectedVehicle: (vehicle) => {
     const filteredStations = computeFiltered(get().stations, get().filters, vehicle);
@@ -306,6 +353,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   addStationModalOpen: false,
   setAddStationModalOpen: (open) => set({ addStationModalOpen: open }),
+  addStationInitialType: 'public',
+  openAddStation: (type = 'public') => set({ addStationInitialType: type, addStationModalOpen: true }),
+
+  savedIds: loadSaved(),
+  toggleSaved: (id) => {
+    const cur = get().savedIds;
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)); } catch { /* almacenamiento bloqueado */ }
+    set({ savedIds: next });
+  },
 
   isAdminAuthenticated: localStorage.getItem('ev_admin_auth') === '1',
 

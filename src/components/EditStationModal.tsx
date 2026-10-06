@@ -124,10 +124,13 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-start justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto overscroll-contain"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-4">
+      {/* my-auto (y no items-center en el contenedor): centra cuando cabe y,
+          cuando el formulario es más alto que la pantalla del celular, deja
+          desplazar hasta arriba y hasta los botones de abajo sin cortarlos. */}
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-auto">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold text-gray-900">{isAdmin ? 'Editar estación' : 'Sugerir corrección'}</h2>

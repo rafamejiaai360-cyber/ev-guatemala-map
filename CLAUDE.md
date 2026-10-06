@@ -311,6 +311,78 @@ la tarea en segundo plano necesita el cuerpo de la petición, hay que leerlo
 antes de devolver la respuesta al cliente — nunca dentro de la tarea
 diferida.
 
+**Rediseño de navegación (oct 2026, en staging, pendiente de visto bueno de
+Rafa)**: basado en la estructura de la app Electron Power, adaptada al
+estilo minimalista que pidió Rafa. `App.tsx` monta siempre
+`src/components/mobile/MobileShell.tsx` (Header.tsx y Sidebar.tsx quedaron sin
+uso); a pedido de Rafa la computadora usa la MISMA lógica y pantallas que el
+celular, con la distribución "A · Barra superior" que él eligió entre 3
+maquetas (https://claude.ai/artifact/SYEnAVA4cnLPwt2ZBVGPyW): en >= 1024 px
+hay una barra superior (`.m-dtop`: logo, Mapa/Actividad/Guardadas al centro,
+Contáctanos + Aportar + avatar→Perfil a la derecha), lista fija de 400 px a la
+izquierda donde también se abren la ficha y las otras pestañas, y el mapa a la
+derecha; tocar un pin abre la ficha directo (sin tarjeta flotante, ver
+`shownDetailId` en MobileShell). Hojas como ventanas centradas. En celular: barra
+inferior flotante (Mapa · Actividad · botón central "Aportar" · Guardadas ·
+Perfil), interruptor Mapa/Lista, filtros rápidos en chips (Todas · Públicas
+(punto verde) · Residenciales (punto azul) + botón de ícono "Filtros") — a
+pedido de Rafa NO hay chip "Activas" ni contador de "activas" (el de arriba
+dice "N estaciones"), porque la app no conoce el estado real en tiempo real; la hoja "Filtros"
+(`FiltersPanel.tsx`, ya no usa FilterBar/VehicleSelector) muestra todo a la
+vista: lista de vehículos con buscador y miniatura (`Vehicle.image_url`
+opcional, ícono genérico si falta — Rafa juntará fichas técnicas oficiales en
+las agencias para completar `src/data/vehicles.ts`), tipo de conector y
+velocidad de carga (AC/DC); no repite Pública/Residencial, tarjeta flotante al
+tocar un pin y ficha completa (`StationScreen.tsx`) con Waze/Google Maps. La
+ficha conserva las mismas reglas de privacidad que `StationDetail.tsx`.
+Cambios del mapa (`Map.tsx`): mapa base de OpenStreetMap pasado a grises suaves con un filtro
+CSS (`.ev-tiles` en `index.css`) — se probó CARTO "Positron" pero ahora exige
+API key fuera de localhost (mostraba "API KEY REQUIRED" en cada cuadro),
+pin en forma de gota con enchufe (relleno = tipo, gris si fuera de servicio;
+puntito ámbar/rojo = estado, en lugar del borde grueso), agrupación propia de
+estaciones cercanas (sin librería nueva) y las estaciones filtradas ahora se
+ocultan en vez de atenuarse. "Guardadas" (`savedIds` en el store) vive solo en
+`localStorage` del navegador, sin cuenta ni servidor por ahora. Prototipo
+navegable de referencia: https://claude.ai/artifact/MecCx1MFcjX339tVkjGPZN
+
+**Catálogo de vehículos y propuestas de usuarios (oct 2026, rama
+`vehiculos-propuestas`, en prueba)**: la lista base sigue en
+`src/data/vehicles.ts`; la tabla D1 `vehicles` la sobreescribe o amplía por
+`id` (`status='hidden'` la oculta) y el frontend las combina en
+`vehicleCatalog` (`loadVehicles()` en el store, `GET /api/vehicles`). Los
+usuarios con cuenta proponen autos nuevos o correcciones desde la hoja
+"Filtros" (`VehicleProposalModal.tsx` → `POST /api/vehicle-proposals`, cola
+`vehicle_proposals`, máx. 10 pendientes por usuario) y ven el estado en
+Actividad (`?mine=1`). El admin revisa en la pestaña "Vehículos" del panel
+(`src/components/admin/VehiclesTab.tsx`): aprobar / aprobar como verificada /
+rechazar, y editar el catálogo (`PUT /api/vehicles/:id|new`). `verified=1`
+("Ficha verificada") **solo** con fuente oficial (agencia/ficha técnica).
+**Fotos: solo las sube el admin** (a KV, servidas por `/api/photo/:key`) y
+solo propias o con permiso de la marca/agencia — decisión explícita de Rafa:
+nada de fotos con derechos de autor bajadas de internet. Los usuarios no
+suben fotos de vehículos. Los datos agregados a `vehicles.ts` desde la web
+tienen comentario de fuente; lo no confirmado queda marcado `PENDIENTE` y
+sin conectores (el filtro solo usa conectores confirmados).
+**Requiere migración manual** (las tablas no se crean solas) en staging y
+luego en prod: `npx wrangler d1 execute ev-guatemala-db-staging --remote
+--file=db/schema.sql` (y `ev-guatemala-db` al publicar) — seguro de re-correr
+por `IF NOT EXISTS`. Sin las tablas, `GET /api/vehicles` falla y la app usa
+la lista base sin romperse. **Estado**: aplicada a `ev-guatemala-db-staging`
+(6 oct 2026, vía conector MCP de Cloudflare); falta `ev-guatemala-db` (prod)
+al publicar. SQL listo para pegar: `docs/migracion-vehiculos.sql`.
+
+**Rastro de avisos a Telegram (6 oct 2026)**: `notifyAdmin()` antes fallaba
+en silencio (fetch no lanza error ante 401/400 de Telegram). Ahora cada
+intento deja fila en `ops_log` con `op='notify_telegram'`, `ok=1/0` y en
+`detail` el título + motivo del fallo (`sin TELEGRAM_BOT_TOKEN/...`,
+`status`/`error` de Telegram). Nunca se guarda el texto del aviso (lleva
+nombres de usuarios). Para comprobar: `SELECT * FROM ops_log WHERE
+op='notify_telegram' ORDER BY id DESC LIMIT 5`.
+Staging **no tiene** `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (confirmado 6 oct
+2026 con ese registro: "sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID"); a pedido de
+Rafa no se agregan — el aviso de propuestas de vehículos se comprueba en prod
+al publicar (proponer uno de prueba y revisar `ops_log` en `ev-guatemala-db`).
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

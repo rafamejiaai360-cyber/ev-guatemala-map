@@ -77,4 +77,12 @@ export interface Vehicle {
    *  físico varía según el origen de importación — no usar para datos
    *  simplemente no confirmados, esos deben quedar sin battery_kwh/connectors. */
   adapter_note?: string;
+  /** Foto o ícono pequeño del modelo (ruta en /public/vehicles/... o URL),
+   *  para la lista de "Mi vehículo". Opcional: sin ella se muestra un ícono
+   *  genérico de auto. Se llenará con las fichas técnicas oficiales. */
+  image_url?: string;
+  /** true solo si el admin confirmó la ficha con una fuente oficial. */
+  verified?: boolean;
+  /** Fuente o nota de verificación (enlace a ficha técnica, agencia…). */
+  source?: string;
 }

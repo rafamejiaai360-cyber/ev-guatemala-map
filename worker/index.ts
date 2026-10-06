@@ -44,9 +44,21 @@ function apiError(msg: string, status = 400): Response {
 // no hace nada — nunca bloquea ni afecta la operación que la dispara.
 // Llamar siempre vía ctx.waitUntil() para no retrasar la respuesta.
 async function notifyAdmin(env: Env, title: string, message: string): Promise<void> {
-  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+  // Cada intento deja rastro en ops_log (op='notify_telegram') para poder
+  // comprobar si los avisos llegan — fetch no lanza error ante 401/400, así
+  // que sin esto un token mal puesto fallaba en silencio. Solo se guarda el
+  // título y el resultado, nunca el texto (lleva nombres de usuarios).
+  const log = async (ok: boolean, detail: Record<string, unknown>) => {
+    if (!env.DB) return;
+    await env.DB.prepare("INSERT INTO ops_log (op, ok, detail) VALUES ('notify_telegram', ?, ?)")
+      .bind(ok ? 1 : 0, JSON.stringify({ title, ...detail })).run().catch(() => undefined);
+  };
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
+    await log(false, { error: 'sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID' });
+    return;
+  }
   try {
-    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -54,8 +66,14 @@ async function notifyAdmin(env: Env, title: string, message: string): Promise<vo
         text: `⚡ ${title}\n${message}`,
       }),
     });
-  } catch {
-    // No hay nada razonable que hacer si Telegram falla; no es crítico.
+    if (res.ok) await log(true, {});
+    else {
+      const body = await res.json().catch(() => ({})) as { description?: string };
+      await log(false, { status: res.status, error: body.description ?? null });
+    }
+  } catch (e) {
+    // No es crítico: nunca bloquea la operación que lo dispara.
+    await log(false, { error: e instanceof Error ? e.message : String(e) });
   }
 }
 
@@ -1804,6 +1822,204 @@ async function handleGetVisitStats(request: Request, env: Env): Promise<Response
 // Normalize an incoming edit payload to the subset of fields users are
 // allowed to change. Shared by the direct admin edit and by user proposals,
 // so both paths accept exactly the same shape.
+// ─── Vehículos: catálogo editable + propuestas de usuarios (oct 2026) ──────────
+// La lista base vive en src/data/vehicles.ts (frontend). La tabla `vehicles`
+// guarda lo que el admin agrega o corrige (misma id = reemplaza; status
+// 'hidden' = oculta) y la tabla `vehicle_proposals`, lo que proponen los
+// usuarios para revisión. Fotos: solo el admin, binario en KV (PHOTOS).
+
+const VEHICLE_CONNECTORS = ['CCS2', 'CHAdeMO', 'Type2', 'J1772', 'GBT', 'CCS1'];
+
+interface VehicleRow {
+  id: string; brand: string; model: string; year: string; range_km: number;
+  battery_kwh: number | null; connectors: string | null; adapter_note: string | null;
+  photo_key: string | null; verified: number; source: string | null; status: string;
+  updated_at: string;
+}
+
+function vehicleRowToApi(r: VehicleRow) {
+  let connectors: string[] | undefined;
+  try { connectors = r.connectors ? JSON.parse(r.connectors) : undefined; } catch { connectors = undefined; }
+  return {
+    id: r.id,
+    brand: r.brand,
+    model: r.model,
+    year: r.year,
+    range_km: r.range_km,
+    battery_kwh: r.battery_kwh ?? undefined,
+    compatible_connectors: connectors && connectors.length ? connectors : undefined,
+    adapter_note: r.adapter_note ?? undefined,
+    image_url: r.photo_key ? `/api/photo/${r.photo_key}` : undefined,
+    verified: r.verified === 1,
+    source: r.source ?? undefined,
+    status: r.status,
+  };
+}
+
+// Valida y normaliza los datos de un vehículo (propuesta o edición de admin).
+function normalizeVehicleInput(body: Record<string, unknown>): { data?: {
+  brand: string; model: string; year: string; range_km: number;
+  battery_kwh: number | null; connectors: string[];
+}; error?: string } {
+  const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const brand = str(body.brand, 40);
+  const model = str(body.model, 60);
+  const year = str(body.year, 4);
+  const range = Number(body.range_km);
+  const batteryRaw = body.battery_kwh;
+  const battery = batteryRaw === null || batteryRaw === undefined || batteryRaw === '' ? null : Number(batteryRaw);
+  const connectors = Array.isArray(body.connectors)
+    ? Array.from(new Set(body.connectors.filter((c): c is string => typeof c === 'string' && VEHICLE_CONNECTORS.includes(c))))
+    : [];
+  if (!brand || !model) return { error: 'Marca y modelo son obligatorios.' };
+  if (!/^(19|20)\d{2}$/.test(year)) return { error: 'Año inválido (usa 4 dígitos, ej. 2025).' };
+  if (!Number.isFinite(range) || range < 50 || range > 1500) return { error: 'Autonomía inválida (entre 50 y 1500 km).' };
+  if (battery !== null && (!Number.isFinite(battery) || battery < 5 || battery > 250)) return { error: 'Batería inválida (entre 5 y 250 kWh).' };
+  return { data: { brand, model, year, range_km: Math.round(range), battery_kwh: battery, connectors } };
+}
+
+function vehicleSlug(brand: string, model: string, year: string): string {
+  const clean = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `${clean(brand)}-${clean(model)}-${year}`.slice(0, 80);
+}
+
+// GET /api/vehicles — público. Devuelve también las ocultas (status) para
+// que el frontend pueda quitar de la lista base las que el admin ocultó.
+async function handleGetVehicles(env: Env): Promise<Response> {
+  if (!env.DB) return json([]);
+  const { results } = await env.DB.prepare('SELECT * FROM vehicles ORDER BY brand, model').all<VehicleRow>();
+  return json(results.map(vehicleRowToApi));
+}
+
+// POST /api/vehicle-proposals — requiere cuenta.
+async function handlePostVehicleProposal(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('Necesitas una cuenta para proponer un vehículo.', 401);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const body = await request.json() as Record<string, unknown>;
+  const { data, error } = normalizeVehicleInput(body);
+  if (!data) return apiError(error ?? 'Datos inválidos');
+  const vehicleId = typeof body.vehicleId === 'string' && body.vehicleId ? body.vehicleId.slice(0, 80) : null;
+  const source = typeof body.source === 'string' ? body.source.trim().slice(0, 500) : null;
+  // Límite simple contra abuso: máx. 10 propuestas pendientes por usuario.
+  const pending = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM vehicle_proposals WHERE submitted_by = ? AND status = 'pending'"
+  ).bind(user.email).first<{ n: number }>();
+  if ((pending?.n ?? 0) >= 10) return apiError('Ya tienes 10 propuestas en revisión. Espera a que se revisen.', 429);
+  const res = await env.DB.prepare(
+    'INSERT INTO vehicle_proposals (vehicle_id, data, source, submitted_by) VALUES (?, ?, ?, ?)'
+  ).bind(vehicleId, JSON.stringify(data), source || null, user.email).run();
+  ctx.waitUntil(notifyAdmin(env, 'Vehículo propuesto',
+    `${data.brand} ${data.model} ${data.year}${vehicleId ? ' (corrección)' : ''} — por ${user.name}`));
+  return json({ ok: true, id: res.meta.last_row_id }, 201);
+}
+
+// GET /api/vehicle-proposals — admin: pendientes; usuario: las suyas (?mine=1).
+async function handleGetVehicleProposals(request: Request, env: Env, url: URL): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('No autenticado', 401);
+  if (!env.DB) return json([]);
+  const mine = url.searchParams.get('mine') === '1';
+  if (!mine && user.role !== 'admin') return apiError('Solo administradores', 403);
+  const stmt = mine
+    ? env.DB.prepare('SELECT * FROM vehicle_proposals WHERE submitted_by = ? ORDER BY created_at DESC LIMIT 50').bind(user.email)
+    : env.DB.prepare("SELECT p.*, u.name AS submitter_name FROM vehicle_proposals p LEFT JOIN users u ON u.email = p.submitted_by WHERE p.status = 'pending' ORDER BY p.created_at");
+  const { results } = await stmt.all<{
+    id: number; vehicle_id: string | null; data: string; source: string | null; submitted_by: string;
+    submitter_name?: string | null; status: string; review_note: string | null; created_at: string;
+  }>();
+  return json(results.map(r => {
+    let data: Record<string, unknown> = {};
+    try { data = JSON.parse(r.data); } catch { /* fila corrupta: se muestra vacía */ }
+    return {
+      id: r.id, vehicleId: r.vehicle_id, data, source: r.source ?? undefined, status: r.status,
+      reviewNote: r.review_note ?? undefined, createdAt: r.created_at,
+      // El correo de quien propone solo lo ve el admin.
+      ...(mine ? {} : { submittedBy: r.submitted_by, submitterName: r.submitter_name ?? undefined }),
+    };
+  }));
+}
+
+async function upsertVehicle(db: D1Database, id: string, d: {
+  brand: string; model: string; year: string; range_km: number; battery_kwh: number | null; connectors: string[];
+}, extra: { verified: boolean; source: string | null; adapterNote?: string | null; status?: string; by: string; photoKey?: string | null }) {
+  const existing = await db.prepare('SELECT photo_key FROM vehicles WHERE id = ?').bind(id).first<{ photo_key: string | null }>();
+  const photoKey = extra.photoKey !== undefined ? extra.photoKey : existing?.photo_key ?? null;
+  await db.prepare(
+    `INSERT INTO vehicles (id, brand, model, year, range_km, battery_kwh, connectors, adapter_note, photo_key, verified, source, status, updated_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET brand=excluded.brand, model=excluded.model, year=excluded.year,
+       range_km=excluded.range_km, battery_kwh=excluded.battery_kwh, connectors=excluded.connectors,
+       adapter_note=excluded.adapter_note, photo_key=excluded.photo_key, verified=excluded.verified,
+       source=excluded.source, status=excluded.status, updated_by=excluded.updated_by, updated_at=datetime('now')`
+  ).bind(
+    id, d.brand, d.model, d.year, d.range_km, d.battery_kwh,
+    d.connectors.length ? JSON.stringify(d.connectors) : null,
+    extra.adapterNote ?? null, photoKey, extra.verified ? 1 : 0, extra.source, extra.status ?? 'visible', extra.by,
+  ).run();
+}
+
+// POST /api/vehicle-proposals/:id/approve|reject — solo admin. Al aprobar, el
+// admin puede mandar los datos corregidos y marcar la ficha como verificada.
+async function handleResolveVehicleProposal(id: number, action: 'approve' | 'reject', request: Request, env: Env): Promise<Response> {
+  const admin = await getUserFromToken(request, env);
+  if (!admin || admin.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const p = await env.DB.prepare("SELECT * FROM vehicle_proposals WHERE id = ? AND status = 'pending'").bind(id)
+    .first<{ id: number; vehicle_id: string | null; data: string; source: string | null }>();
+  if (!p) return apiError('Propuesta no encontrada o ya revisada', 404);
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 300) : null;
+  if (action === 'reject') {
+    await env.DB.prepare("UPDATE vehicle_proposals SET status='rejected', reviewed_by=?, reviewed_at=datetime('now'), review_note=? WHERE id=?")
+      .bind(admin.email, note, id).run();
+    return json({ ok: true });
+  }
+  let input: Record<string, unknown> = {};
+  try { input = JSON.parse(p.data); } catch { /* usa body */ }
+  const { data, error } = normalizeVehicleInput({ ...input, ...(body.data as Record<string, unknown> | undefined) });
+  if (!data) return apiError(error ?? 'Datos inválidos');
+  const vehicleId = p.vehicle_id ?? vehicleSlug(data.brand, data.model, data.year);
+  const source = typeof body.source === 'string' ? body.source.trim().slice(0, 500) : p.source;
+  await upsertVehicle(env.DB, vehicleId, data, { verified: body.verified === true, source: source || null, by: admin.email });
+  await env.DB.prepare("UPDATE vehicle_proposals SET status='approved', reviewed_by=?, reviewed_at=datetime('now'), review_note=? WHERE id=?")
+    .bind(admin.email, note, id).run();
+  return json({ ok: true, vehicleId });
+}
+
+// PUT /api/vehicles/:id — solo admin: crea/edita un vehículo del catálogo,
+// lo oculta (status 'hidden') y opcionalmente sube su foto.
+async function handlePutVehicle(id: string, request: Request, env: Env): Promise<Response> {
+  const admin = await getUserFromToken(request, env);
+  if (!admin || admin.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const body = await request.json() as Record<string, unknown>;
+  const { data, error } = normalizeVehicleInput(body);
+  if (!data) return apiError(error ?? 'Datos inválidos');
+  const vehicleId = id === 'new' ? vehicleSlug(data.brand, data.model, data.year) : id.slice(0, 80);
+  let photoKey: string | null | undefined;
+  if (typeof body.imageBase64 === 'string' && body.imageBase64) {
+    if (!env.PHOTOS) return apiError('Almacenamiento de fotos no configurado.', 503);
+    const mime = typeof body.mimeType === 'string' && body.mimeType.startsWith('image/') ? body.mimeType : 'image/jpeg';
+    const bytes = base64ToUint8Array(body.imageBase64);
+    if (bytes.length > 1_500_000) return apiError('La foto pesa más de 1,5 MB. Usa una más liviana.');
+    photoKey = `vehicle_${vehicleId}_${Date.now()}`;
+    await env.PHOTOS.put(photoKey, bytes, { metadata: { contentType: mime } });
+  } else if (body.removePhoto === true) {
+    photoKey = null;
+  }
+  await upsertVehicle(env.DB, vehicleId, data, {
+    verified: body.verified === true,
+    source: typeof body.source === 'string' ? body.source.trim().slice(0, 500) || null : null,
+    adapterNote: typeof body.adapter_note === 'string' ? body.adapter_note.trim().slice(0, 200) || null : null,
+    status: body.status === 'hidden' ? 'hidden' : 'visible',
+    by: admin.email,
+    photoKey,
+  });
+  const row = await env.DB.prepare('SELECT * FROM vehicles WHERE id = ?').bind(vehicleId).first<VehicleRow>();
+  return json(row ? vehicleRowToApi(row) : { ok: true });
+}
+
 function normalizeStationChanges(body: Record<string, unknown>): { changes: Record<string, unknown>; error?: string } {
   const changes: Record<string, unknown> = {};
   if (typeof body.name === 'string' && body.name.trim()) changes.name = body.name.trim();
@@ -2343,6 +2559,17 @@ export default {
         return json({ ok: true });
       }
       if (path === 'visits' && request.method === 'GET') return handleGetVisitStats(request, env);
+
+      // Vehículos: catálogo (público) y propuestas (usuarios) / moderación (admin)
+      if (path === 'vehicles' && request.method === 'GET') return handleGetVehicles(env);
+      const vehicleMatch = path.match(/^vehicles\/([a-z0-9-]+)$/);
+      if (vehicleMatch && request.method === 'PUT') return handlePutVehicle(vehicleMatch[1], request, env);
+      if (path === 'vehicle-proposals') {
+        if (request.method === 'GET') return handleGetVehicleProposals(request, env, url);
+        if (request.method === 'POST') return handlePostVehicleProposal(request, env, ctx);
+      }
+      const vpMatch = path.match(/^vehicle-proposals\/(\d+)\/(approve|reject)$/);
+      if (vpMatch && request.method === 'POST') return handleResolveVehicleProposal(Number(vpMatch[1]), vpMatch[2] as 'approve' | 'reject', request, env);
 
       return apiError('Ruta no encontrada', 404);
     }
