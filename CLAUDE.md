@@ -378,6 +378,10 @@ intento deja fila en `ops_log` con `op='notify_telegram'`, `ok=1/0` y en
 `status`/`error` de Telegram). Nunca se guarda el texto del aviso (lleva
 nombres de usuarios). Para comprobar: `SELECT * FROM ops_log WHERE
 op='notify_telegram' ORDER BY id DESC LIMIT 5`.
+Staging **no tiene** `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (confirmado 6 oct
+2026 con ese registro: "sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID"); a pedido de
+Rafa no se agregan — el aviso de propuestas de vehículos se comprueba en prod
+al publicar (proponer uno de prueba y revisar `ops_log` en `ev-guatemala-db`).
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
