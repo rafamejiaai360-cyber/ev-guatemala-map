@@ -223,7 +223,7 @@ export default function MobileShell() {
       <section className={`m-view${tab === 'saved' ? ' on' : ''}${tab === 'saved' && detailStation ? ' pushed' : ''}`} aria-hidden={tab !== 'saved'}>
         <div className="m-screen m-scroll">
           <div className="m-lt">Guardadas</div>
-          <p className="m-sub">Tus estaciones de siempre, a un toque</p>
+          <p className="m-sub">{currentUser ? 'Sincronizadas con tu cuenta, en todos tus dispositivos' : 'Tus estaciones de siempre, a un toque'}</p>
           {savedIds.map((id) => byId.get(id)).filter((s): s is ChargerStation => !!s).map((s) => (
             <StationCard key={s.id} station={s} km={distanceKm(s, userLocation)} rating={ratings[s.id]} onOpen={openDetail} />
           ))}
@@ -263,6 +263,16 @@ export default function MobileShell() {
               <span className="go">{Icon.chevR}</span>
             </button>
           )}
+          <div className="m-sect">Mi auto</div>
+          <button type="button" className="m-cta m-myauto" onClick={() => setSheet('filters')}>
+            <span className="ic">{Icon.car}</span>
+            {selectedVehicle ? (
+              <span><b>{selectedVehicle.brand} {selectedVehicle.model}</b><small>{currentUser ? 'Guardado en tu cuenta · ' : ''}El mapa te muestra dónde puede cargar</small></span>
+            ) : (
+              <span><b>Elige tu auto</b><small>Y el mapa te muestra solo dónde puede cargar</small></span>
+            )}
+            <span className="go">{selectedVehicle ? 'Cambiar' : Icon.chevR}</span>
+          </button>
           <div className="m-sect">Comunidad</div>
           <HostPromo onOpen={() => setSheet('host')} />
           {isAdmin && (

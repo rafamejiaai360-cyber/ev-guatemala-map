@@ -9,7 +9,7 @@ import { Icon } from './shared';
 const JOIN_COPY: Record<JoinContext, { title: string; text: string }> = {
   save: {
     title: 'Guardada en este teléfono',
-    text: 'Crea tu cuenta gratis para sumarte a la comunidad y aportar al mapa.',
+    text: 'Crea tu cuenta gratis y tus estaciones guardadas te siguen a cualquier teléfono o computadora.',
   },
   aportar: {
     title: 'Crea tu cuenta gratis',
@@ -23,6 +23,7 @@ const JOIN_COPY: Record<JoinContext, { title: string; text: string }> = {
 
 const JOIN_BENEFITS: { icon: keyof typeof Icon; b: string; s: string }[] = [
   { icon: 'house', b: 'Comparte tu cargador en casa', s: 'Aparece en el mapa para quien lo necesite' },
+  { icon: 'star', b: 'Tu auto y tus guardadas, contigo', s: 'En todos tus dispositivos, sin volver a configurarlos' },
   { icon: 'pin', b: 'Propón estaciones nuevas', s: 'Y corrige las que tengan datos viejos' },
   { icon: 'check', b: 'Confirma y deja reseñas', s: 'Avisa si una estación funciona o tiene un problema' },
 ];

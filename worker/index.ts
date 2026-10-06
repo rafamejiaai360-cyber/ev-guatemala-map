@@ -1404,6 +1404,9 @@ interface UserRecord {
   role: 'admin' | 'user';
   createdAt: string;
   subscriptionEnd?: string;
+  /** Preferencias sincronizadas entre dispositivos (oct 2026). */
+  vehicleId?: string;
+  savedIds?: string[];
 }
 
 interface UserRow {
@@ -1416,6 +1419,8 @@ interface UserRow {
   account_status: string;
   subscription_end: string | null;
   created_at: string;
+  vehicle_id?: string | null;          // migración oct 2026 (docs/migracion-mi-auto.sql)
+  saved_station_ids?: string | null;   // JSON: ["id1","id2"]
 }
 
 function rowToUser(r: UserRow): UserRecord {
@@ -1428,7 +1433,17 @@ function rowToUser(r: UserRow): UserRecord {
     role: r.role === 'admin' ? 'admin' : 'user',
     createdAt: r.created_at,
     subscriptionEnd: r.subscription_end ?? undefined,
+    vehicleId: r.vehicle_id ?? undefined,
+    savedIds: parseSavedIds(r.saved_station_ids),
   };
+}
+
+function parseSavedIds(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch { return []; }
 }
 
 // Punto único para consultar si una cuenta tiene suscripción activa. Hoy
@@ -1538,27 +1553,61 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   }
 
   const token = await signJWT({ sub: email, name: user.name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
-  return json({ token, user: { email: user.email, name: user.name, phone: user.phone, role, subscriptionEnd: user.subscriptionEnd } });
+  return json({ token, user: { ...meResponse(user), role } });
 }
 
 async function handleGetMe(request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('No autenticado', 401);
-  return json({ email: user.email, name: user.name, phone: user.phone, role: user.role, subscriptionEnd: user.subscriptionEnd });
+  return json(meResponse(user));
+}
+
+function meResponse(user: UserRecord) {
+  return {
+    email: user.email, name: user.name, phone: user.phone, role: user.role, subscriptionEnd: user.subscriptionEnd,
+    vehicleId: user.vehicleId ?? null, savedIds: user.savedIds ?? [],
+  };
 }
 
 async function handleUpdateProfile(request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('No autenticado', 401);
-  const body = await request.json() as { name?: string; phone?: string };
+  const body = await request.json() as { name?: string; phone?: string; vehicleId?: string | null; savedIds?: unknown };
 
   const name = body.name !== undefined ? body.name.trim() : user.name;
   if (!name) return apiError('El nombre es requerido');
   const phone = body.phone !== undefined ? normalizePhone(body.phone) : user.phone;
   if (body.phone !== undefined && !phone) return apiError('Teléfono inválido — usa 8 dígitos (ej. 5512-3456)');
 
-  await saveUser({ ...user, name, phone: phone ?? undefined }, env);
-  return json({ email: user.email, name, phone, role: user.role, subscriptionEnd: user.subscriptionEnd });
+  // "Mi auto" y "Guardadas" en la cuenta (oct 2026): se actualizan solo si
+  // vienen en el cuerpo, para que la app pueda guardarlos sin tocar el resto.
+  let vehicleId = user.vehicleId;
+  if (body.vehicleId !== undefined) {
+    if (body.vehicleId !== null && (typeof body.vehicleId !== 'string' || !/^[a-z0-9-]{1,80}$/.test(body.vehicleId))) {
+      return apiError('Vehículo inválido');
+    }
+    vehicleId = body.vehicleId ?? undefined;
+  }
+  let savedIds = user.savedIds ?? [];
+  if (body.savedIds !== undefined) {
+    if (!Array.isArray(body.savedIds) || body.savedIds.some((x) => typeof x !== 'string' || !/^[\w.-]{1,120}$/.test(x))) {
+      return apiError('Lista de guardadas inválida');
+    }
+    savedIds = Array.from(new Set(body.savedIds as string[])).slice(0, 300);
+  }
+
+  if (body.name !== undefined || body.phone !== undefined) await saveUser({ ...user, name, phone: phone ?? undefined }, env);
+  if ((body.vehicleId !== undefined || body.savedIds !== undefined) && env.DB) {
+    try {
+      await env.DB.prepare('UPDATE users SET vehicle_id = ?, saved_station_ids = ? WHERE email = ?')
+        .bind(vehicleId ?? null, JSON.stringify(savedIds), user.email.toLowerCase().trim()).run();
+    } catch {
+      // Sin la migración (columnas vehicle_id / saved_station_ids) no rompe
+      // nada: la app sigue guardando estas preferencias en el teléfono.
+      return apiError('Preferencias no disponibles todavía', 503);
+    }
+  }
+  return json(meResponse({ ...user, name, phone: phone ?? undefined, vehicleId, savedIds }));
 }
 
 async function handleChangePassword(request: Request, env: Env): Promise<Response> {
