@@ -43,6 +43,10 @@ export interface ChargerStation {
   /** Residencial vista por el público: lat/lng desplazados 250–600 m por
    *  privacidad del dueño; sin dirección ni link exacto (Worker, oct 2026). */
   approximate?: boolean;
+  /** Estado publicado por el dueño desde "Mis estaciones" (oct 2026). */
+  statusNote?: string;
+  statusUpdatedAt?: string;
+  statusByOwner?: boolean;
   /** Quién dio de alta la estación. Solo viene poblado cuando la API lo
    *  entrega a un admin (ver worker/index.ts handleGetStationsFromD1) —
    *  protege a quien registró una estación residencial. */
@@ -88,4 +92,20 @@ export interface Vehicle {
   verified?: boolean;
   /** Fuente o nota de verificación (enlace a ficha técnica, agencia…). */
   source?: string;
+}
+
+/** Estación de la que el usuario es dueño ("Mis estaciones", GET /api/my-stations). */
+export interface MyStation {
+  id: string;
+  name: string;
+  type: StationType;
+  zone: string;
+  status: ChargerStatus;
+  /** active = publicada · pending = en revisión · rejected = no aprobada */
+  approval: 'active' | 'pending' | 'rejected';
+  statusNote: string | null;
+  statusUpdatedAt: string;
+  statusByOwner: boolean;
+  requests30d: number;
+  requestsTotal: number;
 }

@@ -483,6 +483,35 @@ sección "Mi auto" (abre la hoja Filtros). **Migración manual**:
 `docs/migracion-mi-auto.sql` — aplicada a `ev-guatemala-db-staging` y
 `ev-guatemala-db` (6 oct 2026) — no repetir.
 
+**Mis estaciones + estado publicado por el dueño (oct 2026, rama
+`mis-estaciones`, en prueba)**: dueño = `owner_email`, o quien registró una
+residencial (`submitted_by`); quien propuso una pública NO es dueño.
+`GET /api/my-stations` (`handleGetMyStations`) lista las suyas con estado de
+aprobación y **solo el número** de "Solicitar uso" (30 días / total) — los
+datos de quién pidió siguen siendo solo del admin. `POST
+/api/stations/:id/status` (`handleSetStationStatus`, dueño o admin): estado
+`active|maintenance|offline` + nota opcional (máx. 140) **al instante, sin
+moderación** (decisión de Rafa: un "fuera de servicio" que espera aprobación
+llega tarde); deja evento `status_changed` y aviso a Telegram. Columnas nuevas
+`stations.status_note`, `status_updated_at`, `status_source` (`owner|admin`);
+la API pública expone `statusNote/statusUpdatedAt/statusByOwner` y **ahora
+incluye las `offline`** (antes se ocultaban; pin gris + punto rojo). Una
+edición/aprobación del admin que cambia `status` marca `status_source='admin'`
+y borra la nota. Admin: `GET|POST /api/stations/:id/owner` asigna/quita dueño
+(debe tener cuenta; evento `owner_assigned`), botón de persona en la lista de
+Estaciones del panel. **Se corrigió** que los puntos de estado de esa lista
+solo cambiaban `localStorage` del navegador del admin (`statusOverrides`):
+ahora guardan en D1 vía el mismo endpoint. UI: `mobile/MyStations.tsx`
+(sección en Perfil con 3 luces, nota, "Sugerir cambios" → EditStationModal
+como propuesta) y recordatorio "¿Tu cargador ya está activo?" si lleva ≥ 14
+días en mantenimiento/fuera de servicio (una vez por visita,
+`sessionStorage.ev_stale_prompt`); la ficha muestra la luz grande con
+"Actualizado por el dueño hace X" y la nota. **Migración manual**:
+`docs/migracion-mis-estaciones.sql` — aplicada a `ev-guatemala-db-staging`
+(6 oct 2026); falta `ev-guatemala-db` (prod) ANTES de publicar (sin las
+columnas, `/api/stations` falla y el mapa cae a la semilla). En staging, la
+estación `guat-prueba` quedó asignada a la cuenta de Rafa para que pruebe.
+
 **Ubicación aproximada de residenciales (oct 2026)**: para quitarle al dueño
 el miedo a "publicar dónde vivo". `handleGetStationsFromD1`, para quien no es
 admin, entrega las residenciales con `lat/lng` desplazados entre 250 y 600 m

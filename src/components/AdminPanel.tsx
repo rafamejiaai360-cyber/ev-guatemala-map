@@ -95,7 +95,7 @@ function currentChangeValue(station: PendingStation, key: string): unknown {
 const STATUS_OPTIONS: { value: ChargerStatus; label: string; color: string }[] = [
   { value: 'active', label: 'Activo', color: 'bg-green-500' },
   { value: 'maintenance', label: 'Mantenimiento', color: 'bg-amber-400' },
-  { value: 'offline', label: 'Inactivo', color: 'bg-red-500' },
+  { value: 'offline', label: 'Fuera de servicio', color: 'bg-red-500' },
 ];
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
@@ -315,10 +315,23 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
 // ─── Stations Tab ─────────────────────────────────────────────────────────────
 
 function StationsTab() {
-  const { stations, setStationStatus, currentUser } = useStore();
+  const { stations, publishStationStatus, currentUser } = useStore();
   const [search, setSearch] = useState('');
   const [editStation, setEditStation] = useState<ChargerStation | null>(null);
+  const [ownerFor, setOwnerFor] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  // Antes estos puntos solo cambiaban lo que veía este navegador; ahora
+  // guardan el estado en la base real (mismo endpoint que usan los dueños).
+  async function changeStatus(station: ChargerStation, status: ChargerStatus) {
+    if (station.status === status) return;
+    try {
+      await publishStationStatus(station.id, status);
+      showSaved(`"${station.name}" ahora: ${STATUS_OPTIONS.find(o => o.value === status)?.label ?? status}`);
+    } catch (e) {
+      showSaved(e instanceof Error ? e.message : 'No se pudo cambiar el estado');
+    }
+  }
 
   const filtered = stations.filter(s =>
     !search ||
@@ -345,8 +358,8 @@ function StationsTab() {
           <p className="px-4 py-8 text-center text-sm text-gray-400">Sin resultados para "{search}"</p>
         )}
         {filtered.map((station, idx) => (
-          <div key={station.id}
-            className={`flex items-center gap-3 px-4 py-3 ${idx < filtered.length - 1 ? 'border-b border-gray-100' : ''}`}>
+          <div key={station.id} className={idx < filtered.length - 1 ? 'border-b border-gray-100' : ''}>
+          <div className="flex items-center gap-3 px-4 py-3">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
               station.status === 'active'
                 ? ((station.type ?? 'public') === 'residential' ? 'bg-blue-500' : 'bg-green-500')
@@ -362,7 +375,7 @@ function StationsTab() {
             {/* Status buttons */}
             <div className="flex items-center gap-1">
               {STATUS_OPTIONS.map(opt => (
-                <button key={opt.value} onClick={() => setStationStatus(station.id, opt.value)} title={opt.label}
+                <button key={opt.value} onClick={() => changeStatus(station, opt.value)} title={opt.label}
                   className={`w-5 h-5 rounded-full border-2 transition-all ${
                     station.status === opt.value ? `${opt.color} border-transparent scale-110` : 'bg-gray-100 border-gray-200 hover:border-gray-300'}`} />
               ))}
@@ -377,6 +390,21 @@ function StationsTab() {
                 </svg>
               </button>
             )}
+
+            {/* Asignar dueño */}
+            {currentUser?.role === 'admin' && (
+              <button onClick={() => setOwnerFor(ownerFor === station.id ? null : station.id)} title="Asignar dueño"
+                aria-expanded={ownerFor === station.id}
+                className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="12" cy="8" r="4" /><path strokeLinecap="round" d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {ownerFor === station.id && (
+            <OwnerEditor station={station} onDone={(msg) => { setOwnerFor(null); if (msg) showSaved(msg); }} />
+          )}
           </div>
         ))}
       </div>
@@ -402,6 +430,70 @@ function StationsTab() {
           onSaved={() => { setEditStation(null); showSaved(`"${editStation.name}" actualizada`); }}
         />
       )}
+    </div>
+  );
+}
+
+// El admin asigna el dueño de una estación (la persona debe tener cuenta).
+// Desde ahí la ve en "Mis estaciones" y puede publicar su estado.
+function OwnerEditor({ station, onDone }: { station: ChargerStation; onDone: (msg?: string) => void }) {
+  const { authToken, loadDynamicStations } = useStore();
+  const [current, setCurrent] = useState<{ ownerEmail: string | null; ownerName: string | null } | null>(null);
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/stations/${encodeURIComponent(station.id)}/owner`, { headers: { Authorization: `Bearer ${authToken}` } })
+      .then(r => r.json())
+      .then((d: { ownerEmail?: string | null; ownerName?: string | null }) => {
+        setCurrent({ ownerEmail: d.ownerEmail ?? null, ownerName: d.ownerName ?? null });
+        setEmail(d.ownerEmail ?? '');
+      })
+      .catch(() => setCurrent({ ownerEmail: null, ownerName: null }));
+  }, [station.id, authToken]);
+
+  async function save(next: string) {
+    setBusy(true); setError(null);
+    try {
+      const res = await fetch(`/api/stations/${encodeURIComponent(station.id)}/owner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ email: next }),
+      });
+      const d = await res.json() as { error?: string; ownerName?: string | null };
+      if (!res.ok) throw new Error(d.error ?? 'No se pudo guardar');
+      await loadDynamicStations();
+      onDone(next ? `Dueño de "${station.name}": ${d.ownerName ?? next}` : `"${station.name}" ya no tiene dueño asignado`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="px-4 pb-3">
+      <div className="bg-gray-50 rounded-xl p-3">
+        <p className="text-xs text-gray-500 mb-2">
+          {current === null ? 'Cargando…'
+            : current.ownerEmail ? <>Dueño actual: <b className="text-gray-800">{current.ownerName ?? current.ownerEmail}</b> ({current.ownerEmail})</>
+            : 'Sin dueño asignado. El dueño ve la estación en "Mis estaciones" y puede publicar si está activa, en mantenimiento o fuera de servicio.'}
+        </p>
+        <div className="flex gap-2">
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="correo@de-su-cuenta.com"
+            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400" />
+          <button type="button" disabled={busy || !email.trim()} onClick={() => save(email.trim())}
+            className="px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg">
+            Asignar
+          </button>
+        </div>
+        {current?.ownerEmail && (
+          <button type="button" disabled={busy} onClick={() => save('')} className="mt-2 text-xs text-red-500 hover:underline">
+            Quitar dueño
+          </button>
+        )}
+        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+      </div>
     </div>
   );
 }

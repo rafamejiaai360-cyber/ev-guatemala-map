@@ -8,6 +8,8 @@ import StationCard from './StationCard';
 import { RouteAlertCard, RouteModeBar } from './RouteMode';
 import { useRouteMode } from './routeEngine';
 import { HostPromo, HostSheetContent, JoinSheetContent } from './Growth';
+import { MyStationsSection, StaleStatusSheetContent } from './MyStations';
+import { findStaleStation } from './ownerStatus';
 import {
   Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
   connectorTypes, distanceKm, distanceLabel, formatKw, googleMapsUrl, maxKw, stationType,
@@ -43,6 +45,7 @@ export default function MobileShell() {
     currentUser, isAdminAuthenticated, setAuthModalOpen, openAddStation,
     setProfileModalOpen, setContactAdminModalOpen, setScanModalOpen, logoutUser,
     joinPrompt, setJoinPrompt, openAuth, pendingAddType, setPendingAddType,
+    myStations, loadMyStations,
   } = useStore();
 
   const [tab, setTab] = useState<Tab>('map');
@@ -52,7 +55,17 @@ export default function MobileShell() {
   const [sheet, setSheet] = useState<'none' | 'aportar' | 'filters' | 'host'>('none');
   // La invitación a crear cuenta (JoinSheet) se muestra cuando algo la pide
   // (guardar, aportar sin cuenta, 3.ª ficha) y tiene prioridad sobre las demás.
-  const activeSheet = joinPrompt && !currentUser ? 'join' : sheet;
+  // Recordatorio al dueño: "¿Tu cargador ya está activo?" si lleva 2+ semanas
+  // en mantenimiento/fuera de servicio. Una vez por visita.
+  const [staleDismissed, setStaleDismissed] = useState(() => {
+    try { return sessionStorage.getItem('ev_stale_prompt') === '1'; } catch { return false; }
+  });
+  const staleStation = currentUser && !staleDismissed ? findStaleStation(myStations) : null;
+  const activeSheet = joinPrompt && !currentUser ? 'join' : sheet === 'none' && staleStation ? 'stale' : sheet;
+  function dismissStale() {
+    setStaleDismissed(true);
+    try { sessionStorage.setItem('ev_stale_prompt', '1'); } catch { /* sin almacenamiento */ }
+  }
   const [query, setQuery] = useState('');
 
   const isWide = useIsWide();
@@ -78,6 +91,7 @@ export default function MobileShell() {
     if (isWide) setSelectedStationId(null);
   }
   function goTab(next: Tab) {
+    if (next === 'profile' && currentUser) void loadMyStations();
     setDetailId(null);
     if (isWide) setSelectedStationId(null);
     setTab(next);
@@ -104,7 +118,13 @@ export default function MobileShell() {
       setPendingAddType(null);
     }
   }, [currentUser, pendingAddType, openAddStation, setPendingAddType]);
+  // Mis estaciones: se cargan al iniciar sesión (y al abrir Perfil).
+  const userEmail = currentUser?.email;
+  useEffect(() => {
+    if (userEmail) void loadMyStations();
+  }, [userEmail, loadMyStations]);
   function closeSheet() {
+    if (activeSheet === 'stale') dismissStale();
     setSheet('none');
     if (joinPrompt) setJoinPrompt(null);
   }
@@ -255,6 +275,7 @@ export default function MobileShell() {
                 <div className="r">Correo<span>{currentUser.email}</span></div>
                 <button type="button" className="r accent" onClick={() => setProfileModalOpen(true)}>Editar perfil</button>
               </div>
+              <MyStationsSection />
             </>
           ) : (
             <button type="button" className="m-cta" onClick={() => setAuthModalOpen(true)}>
@@ -383,6 +404,10 @@ export default function MobileShell() {
             onClose={() => { closeSheet(); setPendingAddType(null); }}
           />
         )}
+      </div>
+      <div className={`m-sheet m-scroll${activeSheet === 'stale' ? ' on' : ''}`} role="dialog" aria-label="Estado de tu cargador" aria-hidden={activeSheet !== 'stale'}>
+        <div className="grab" />
+        {staleStation && <StaleStatusSheetContent station={staleStation} onDone={dismissStale} />}
       </div>
       <div className={`m-sheet m-scroll${activeSheet === 'host' ? ' on' : ''}`} role="dialog" aria-label="Comparte tu cargador" aria-hidden={activeSheet !== 'host'}>
         <div className="grab" />

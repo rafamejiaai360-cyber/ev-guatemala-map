@@ -11,6 +11,7 @@ import {
   ACCESS_LABEL, Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
   connectorName, distanceKm, distanceLabel, formatKw, googleMapsUrl, levelName, stationType, wazeUrl,
 } from './shared';
+import { timeAgo } from './ownerStatus';
 
 interface Props {
   station: ChargerStation;
@@ -89,6 +90,20 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
       </div>
 
       <div className="m-dbody">
+        {(station.statusByOwner || station.status !== 'active') && (
+          <div className="m-box">
+            <div className={`m-status ${station.status}`}>
+              <i aria-hidden="true" />
+              <div>
+                <b>{STATUS_LABEL[station.status]}</b>
+                {station.statusUpdatedAt && (
+                  <small>{station.statusByOwner ? 'Actualizado por el dueño' : 'Actualizado'} {timeAgo(station.statusUpdatedAt)}</small>
+                )}
+                {station.statusNote && station.status !== 'active' && <q>{station.statusNote}</q>}
+              </div>
+            </div>
+          </div>
+        )}
         {isResidential && (
           <div className="m-box">
             <div className="k">Estación en una casa</div>
