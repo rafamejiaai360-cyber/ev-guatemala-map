@@ -45,7 +45,7 @@ export default function RequestUseModal({ station, onClose, onSent }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999] px-4">
       <div className="bg-white rounded-2xl w-full max-w-sm p-4 space-y-3">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">Solicitar uso de esta estación</h3>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ChargerStation } from '../../types';
 import { useStore } from '../../store/useStore';
 import EditStationModal from '../EditStationModal';
@@ -137,7 +138,10 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
         )}
       </div>
 
-      {showEdit && (
+      {/* Las ventanas se montan en <body> (portal): la ficha es una capa con su
+          propio z-index y su propio desplazamiento, así que dentro de ella la
+          barra inferior quedaba encima de los botones y el scroll se trababa. */}
+      {showEdit && createPortal(
         <EditStationModal
           station={station}
           onClose={() => setShowEdit(false)}
@@ -147,14 +151,16 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
               ? 'Gracias. Tu propuesta fue enviada y un administrador la revisará antes de publicarla.'
               : 'Cambios guardados.');
           }}
-        />
+        />,
+        document.body,
       )}
-      {showRequestUse && (
+      {showRequestUse && createPortal(
         <RequestUseModal
           station={station}
           onClose={() => setShowRequestUse(false)}
           onSent={() => { setShowRequestUse(false); setRequestSent(true); }}
-        />
+        />,
+        document.body,
       )}
     </>
   );
