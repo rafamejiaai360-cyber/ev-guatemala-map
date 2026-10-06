@@ -338,3 +338,8 @@
 .m-fp-foot { display: flex; gap: 8px; position: sticky; bottom: 0; padding-top: 4px; background: var(--page); }
 .m-fp-foot .m-btn { height: 44px; border-radius: 22px; }
 .m-fp-foot .m-btn:disabled { opacity: .45; cursor: default; }
+.m-fp-propose { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair); }
+.m-fp-propose .m-linkbtn { font-size: 13px; }
+.m-fp-ok { font-style: normal; font-size: 10px; font-weight: 600; color: var(--green); background: var(--green-soft); padding: 2px 6px; border-radius: 999px; margin-left: 6px; vertical-align: 2px; }
+.m-glist .r span.m-vp-approved { color: var(--green); }
+.m-glist .r span.m-vp-rejected { color: var(--danger); }

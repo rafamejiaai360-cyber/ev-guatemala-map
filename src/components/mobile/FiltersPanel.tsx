@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { vehicles } from '../../data/vehicles';
 import { useStore } from '../../store/useStore';
+import VehicleProposalModal from '../VehicleProposalModal';
 import type { ChargerLevel, ConnectorType, Vehicle } from '../../types';
 import { Icon, connectorName } from './shared';
 
@@ -15,11 +15,13 @@ const LEVELS: { value: ChargerLevel | 'all'; label: string }[] = [
 // carga, todo visible sin menús anidados. Pública/Residencial no
 // se repiten aquí porque ya están en los botones rápidos de afuera.
 export default function FiltersPanel({ onDone }: { onDone: () => void }) {
-  const { filters, setFilters, selectedVehicle, setSelectedVehicle, filteredStations } = useStore();
+  const { filters, setFilters, selectedVehicle, setSelectedVehicle, filteredStations, vehicleCatalog } = useStore();
   const [query, setQuery] = useState('');
+  // undefined = cerrado; null = proponer auto nuevo; Vehicle = corregir ese
+  const [proposal, setProposal] = useState<Vehicle | null | undefined>(undefined);
 
   const q = query.trim().toLowerCase();
-  const list = vehicles.filter((v) => !q || `${v.brand} ${v.model} ${v.year}`.toLowerCase().includes(q));
+  const list = vehicleCatalog.filter((v) => !q || `${v.brand} ${v.model} ${v.year}`.toLowerCase().includes(q));
 
   function toggleConnector(t: ConnectorType) {
     const cur = filters.connectorTypes;
@@ -52,7 +54,14 @@ export default function FiltersPanel({ onDone }: { onDone: () => void }) {
           ))}
           {list.length === 0 && <div className="m-empty-line">Sin resultados para “{query}”.</div>}
         </div>
+        <div className="m-fp-propose">
+          <button type="button" className="m-linkbtn" onClick={() => setProposal(null)}>¿No está tu auto? Propónlo</button>
+          {selectedVehicle && (
+            <button type="button" className="m-linkbtn" onClick={() => setProposal(selectedVehicle)}>Corregir datos de {selectedVehicle.model}</button>
+          )}
+        </div>
       </section>
+      {proposal !== undefined && <VehicleProposalModal base={proposal} onClose={() => setProposal(undefined)} />}
 
       <section>
         <div className="m-fp-h">Tipo de conector</div>
@@ -94,7 +103,7 @@ function VehicleRow({ v, selected, onPick }: { v: Vehicle; selected: boolean; on
         {v.image_url ? <img src={v.image_url} alt="" loading="lazy" /> : CAR_ICON}
       </span>
       <span className="txt">
-        <b>{v.brand} {v.model} <small>{v.year}</small></b>
+        <b>{v.brand} {v.model} <small>{v.year}</small>{v.verified && <em className="m-fp-ok">Ficha verificada</em>}</b>
         <small>
           {v.range_km} km de autonomía
           {v.battery_kwh != null && ` · ${String(v.battery_kwh).replace('.', ',')} kWh`}

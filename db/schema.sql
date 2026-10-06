@@ -167,6 +167,49 @@ CREATE TABLE IF NOT EXISTS page_views (
 CREATE INDEX IF NOT EXISTS idx_page_views_created ON page_views(created_at);
 
 -- ============================================================
+-- VEHÍCULOS (oct 2026) — catálogo de "Mi vehículo" editable desde el panel.
+-- La lista base sigue en src/data/vehicles.ts; una fila aquí con el mismo id
+-- la reemplaza (o la oculta con status='hidden'), y una fila con id nuevo la
+-- agrega. Las fotos las sube solo el admin (binario en KV, como las de
+-- estaciones). verified=1 solo cuando el admin confirmó el dato con una
+-- fuente oficial (ficha técnica de la agencia), igual que con ubicaciones.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS vehicles (
+  id TEXT PRIMARY KEY,
+  brand TEXT NOT NULL,
+  model TEXT NOT NULL,
+  year TEXT NOT NULL,
+  range_km INTEGER NOT NULL,
+  battery_kwh REAL,
+  connectors TEXT,                             -- JSON: ["CCS2","Type2"]; NULL = sin confirmar
+  adapter_note TEXT,
+  photo_key TEXT,                              -- clave en KV (PHOTOS); se sirve en /api/photo/:key
+  verified INTEGER NOT NULL DEFAULT 0,         -- 1 = confirmado por admin con fuente oficial
+  source TEXT,                                 -- fuente o nota de verificación
+  status TEXT NOT NULL DEFAULT 'visible',      -- visible | hidden
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Propuestas de usuarios: auto nuevo (vehicle_id NULL) o corrección de uno
+-- existente (vehicle_id = id del catálogo). Nada se borra: se aprueba o rechaza.
+CREATE TABLE IF NOT EXISTS vehicle_proposals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id TEXT,
+  data TEXT NOT NULL,                          -- JSON: {brand, model, year, range_km, battery_kwh, connectors}
+  source TEXT,                                 -- enlace a ficha técnica o nota del usuario
+  submitted_by TEXT NOT NULL,                  -- email
+  status TEXT NOT NULL DEFAULT 'pending',      -- pending | approved | rejected
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  review_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_vehicle_proposals_status ON vehicle_proposals(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_vehicle_proposals_user ON vehicle_proposals(submitted_by, created_at);
+
+-- ============================================================
 -- METADATOS DE SINCRONIZACIÓN Y RESPALDO (observabilidad)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ops_log (

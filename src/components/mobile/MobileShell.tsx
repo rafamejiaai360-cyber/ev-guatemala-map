@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useStore } from '../../store/useStore';
 import type { ChargerStation, StationType } from '../../types';
 import { getMyContributionStationIds } from '../../utils/myContributions';
@@ -372,9 +372,30 @@ function Peek({ station, onOpen }: { station: ChargerStation | null; onOpen: (id
   );
 }
 
+interface MyVehicleProposal {
+  id: number;
+  vehicleId: string | null;
+  data: { brand?: string; model?: string; year?: string };
+  status: 'pending' | 'approved' | 'rejected';
+  reviewNote?: string;
+}
+const PROPOSAL_STATUS: Record<string, string> = { pending: 'En revisión', approved: 'Aprobada', rejected: 'No aprobada' };
+
 function ActivityTab({ onAportar, onOpen }: { onAportar: () => void; onOpen: (id: string) => void }) {
-  const { stations, userLocation, ratings } = useStore();
+  const { stations, userLocation, ratings, authToken, currentUser } = useStore();
   const byId = useMemo(() => new Map(stations.map((s) => [s.id, s])), [stations]);
+
+  // Vehículos que este usuario propuso (solo con sesión).
+  const [vehicleProposals, setVehicleProposals] = useState<MyVehicleProposal[]>([]);
+  useEffect(() => {
+    if (!currentUser || !authToken) return;
+    let alive = true;
+    fetch('/api/vehicle-proposals?mine=1', { headers: { Authorization: `Bearer ${authToken}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => { if (alive && Array.isArray(rows)) setVehicleProposals(rows as MyVehicleProposal[]); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [currentUser, authToken]);
 
   // Estaciones que necesitan que alguien confirme si funcionan: sin
   // confirmación reciente, nunca verificadas o reportadas por la comunidad.
@@ -421,6 +442,20 @@ function ActivityTab({ onAportar, onOpen }: { onAportar: () => void; onOpen: (id
           <b>Aún no tienes aportes</b>
           <p>Cuando dejes una reseña o una foto desde este teléfono, aparecerá aquí.</p>
         </div>
+      )}
+
+      {currentUser && vehicleProposals.length > 0 && (
+        <>
+          <div className="m-sect">Vehículos que propusiste</div>
+          <div className="m-glist">
+            {vehicleProposals.map((p) => (
+              <div key={p.id} className="r">
+                {[p.data.brand, p.data.model, p.data.year].filter(Boolean).join(' ')}
+                <span className={`m-vp-${p.status}`}>{PROPOSAL_STATUS[p.status] ?? p.status}</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
