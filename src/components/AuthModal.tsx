@@ -80,30 +80,20 @@ export default function AuthModal() {
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
 
-        {/* Header */}
-        <div className="px-6 pt-6 pb-4 text-center border-b border-gray-100">
-          <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-3">
-            <span className="text-lg">⚡</span>
+        {/* Encabezado con el estilo de la app (oct 2026) */}
+        <div className="px-6 pt-7 pb-4 text-center">
+          <div className="ev-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M13.2 2 5 13.4h6l-1.2 8.6L18 10.6h-6z" /></svg>
           </div>
-          <h2 className="text-base font-semibold text-gray-900">EV Guatemala</h2>
+          <h2 className="text-lg font-semibold text-gray-900">EV Guatemala</h2>
           <p className="text-xs text-gray-400 mt-0.5">Plataforma de cargadores eléctricos</p>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b border-gray-100">
-          {(['login', 'register'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => switchTab(t)}
-              className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
-                tab === t
-                  ? 'text-green-700 border-b-2 border-green-500 bg-green-50/50'
-                  : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              {t === 'login' ? 'Iniciar sesión' : 'Registrarse'}
-            </button>
-          ))}
+          <div className="ev-seg mt-4" role="group" aria-label="Cuenta">
+            {(['login', 'register'] as const).map((t) => (
+              <button key={t} type="button" onClick={() => switchTab(t)} aria-pressed={tab === t}>
+                {t === 'login' ? 'Iniciar sesión' : 'Registrarse'}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="px-6 py-5">

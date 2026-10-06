@@ -1,0 +1,113 @@
+/* Tema único de la app (oct 2026). El mapa y su navegación (mobile/) ya usan
+   el estilo nuevo con clases propias "m-*". El panel de admin, el login, el
+   perfil y las ventanas de alta/edición se escribieron con clases de
+   Tailwind; en vez de reescribir cada pantalla, aquí se "traducen" esas clases
+   a los mismos colores, tarjetas, botones y campos del estilo nuevo.
+
+   Tailwind 4 pone sus utilidades dentro de @layer, así que estas reglas (sin
+   capa) ganan sobre ellas sin importar la especificidad. Los selectores van
+   dentro de :where() para tener especificidad cero: así las clases "m-*" del
+   mapa (más específicas) nunca se ven afectadas. */
+
+:root {
+  --ev-ink: #1c1c1e;
+  --ev-ink2: #74747a;
+  --ev-ink3: #8e8e93;
+  --ev-hair: rgba(0, 0, 0, .07);
+  --ev-page: #f2f2f7;
+  --ev-surface: #ffffff;
+  --ev-ghost: rgba(118, 118, 128, .12);
+  --ev-green: #16a34a;
+  --ev-green-dark: #15803d;
+  --ev-card-sh: 0 0 0 .5px rgba(0, 0, 0, .05), 0 1px 3px rgba(0, 0, 0, .05);
+}
+
+html, body { background: var(--ev-page); color: var(--ev-ink); -webkit-font-smoothing: antialiased; }
+
+/* Fondos y textos */
+:where(.bg-gray-50) { background-color: var(--ev-page); }
+:where(.text-gray-900, .text-gray-800) { color: var(--ev-ink); }
+:where(.text-gray-600, .text-gray-500) { color: var(--ev-ink2); }
+:where(.text-gray-400) { color: var(--ev-ink3); }
+:where(.border-gray-100, .border-gray-200) { border-color: var(--ev-hair); }
+:where(.divide-gray-100) > :not(:last-child) { border-color: var(--ev-hair); }
+
+/* Tarjetas: sin borde gris, esquinas más redondas y sombra muy suave */
+:where(.bg-white.rounded-xl.border, .bg-white.rounded-2xl.border, .bg-white.rounded-lg.border) {
+  border-color: transparent;
+  box-shadow: var(--ev-card-sh);
+}
+:where(.bg-white.rounded-xl) { border-radius: 16px; }
+:where(.bg-white.rounded-2xl) { border-radius: 22px; }
+
+/* Ventanas emergentes: fondo oscurecido más suave, como las hojas del mapa */
+:where(.fixed.inset-0.bg-black\/50, .fixed.inset-0.bg-black\/40) { background-color: rgba(0, 0, 0, .32); }
+:where(.fixed.inset-0) > :where(.bg-white.rounded-2xl) { box-shadow: 0 24px 60px -12px rgba(0, 0, 0, .35); }
+
+/* Campos de texto: relleno gris claro sin borde; borde verde al escribir */
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]), select, textarea):where(.border) {
+  background-color: var(--ev-ghost);
+  border-color: transparent;
+  border-radius: 12px;
+  transition: background-color .2s, border-color .2s, box-shadow .2s;
+}
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]), select, textarea):where(.border):focus {
+  background-color: var(--ev-surface);
+  border-color: var(--ev-green);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, .15);
+  outline: none;
+}
+/* El verde de Tailwind (#22c55e) se unifica con el verde de la marca */
+:where(.bg-green-500) { background-color: var(--ev-green); }
+
+/* Botones principales: píldora verde o negra, como "Cómo llegar" y "Aportar" */
+:where(button, a):where(.bg-green-600, .bg-green-500) { background-color: var(--ev-green); border-radius: 999px; }
+:where(button, a):where(.bg-green-600, .bg-green-500):hover { background-color: var(--ev-green-dark); }
+:where(button, a):where(.bg-gray-900) { background-color: var(--ev-ink); border-radius: 999px; }
+:where(button):where(.bg-gray-100) { background-color: var(--ev-ghost); }
+:where(button):where(.bg-red-50, .bg-amber-50) { border-radius: 999px; }
+:where(.text-green-600, .text-green-700) { color: var(--ev-green); }
+
+/* ── Panel de administrador: barra superior y pestañas ─────────────────── */
+.adm-top {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(255, 255, 255, .82);
+  backdrop-filter: blur(22px) saturate(1.8); -webkit-backdrop-filter: blur(22px) saturate(1.8);
+  border-bottom: .5px solid var(--ev-hair);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.adm-bar { max-width: 48rem; margin: 0 auto; height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 10px; }
+.adm-back { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--ev-ink2); }
+.adm-back:hover { background: var(--ev-ghost); }
+.adm-back svg { width: 16px; height: 16px; }
+.adm-logo { width: 28px; height: 28px; border-radius: 8px; background: var(--ev-green); display: grid; place-items: center; flex: none; }
+.adm-logo svg { width: 15px; height: 15px; fill: #fff; }
+.adm-title { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.adm-title b { font-size: 15px; font-weight: 650; letter-spacing: -.015em; display: flex; align-items: center; gap: 6px; }
+.adm-title b i { font-style: normal; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: var(--ev-green); background: rgba(22, 163, 74, .12); border-radius: 6px; padding: 2px 6px; }
+.adm-title small { font-size: 11.5px; color: var(--ev-ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adm-user { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.adm-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--ev-ink); color: #fff; font-size: 12.5px; font-weight: 600; display: grid; place-items: center; }
+.adm-out { border: 0; background: var(--ev-ghost); color: var(--ev-ink); font-size: 12.5px; font-weight: 500; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.adm-out:hover { color: #d70015; }
+.adm-tabs { max-width: 48rem; margin: 0 auto; padding: 2px 16px 10px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.adm-tabs::-webkit-scrollbar { display: none; }
+.adm-tab { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--ev-ghost); color: var(--ev-ink); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: background-color .2s, color .2s; }
+.adm-tab svg { width: 14px; height: 14px; }
+.adm-tab[aria-pressed="true"] { background: var(--ev-ink); color: #fff; }
+.adm-page { max-width: 48rem; margin: 0 auto; padding: 20px 16px calc(32px + env(safe-area-inset-bottom, 0px)); }
+.adm-page h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+
+/* Selector segmentado (ej. Iniciar sesión / Registrarse) */
+.ev-seg { display: flex; padding: 3px; border-radius: 12px; background: var(--ev-ghost); gap: 2px; }
+.ev-seg button { flex: 1; height: 32px; border: 0; border-radius: 9px; background: transparent; font-size: 13px; font-weight: 500; color: var(--ev-ink2); cursor: pointer; transition: background-color .2s, color .2s, box-shadow .2s; }
+.ev-seg button[aria-pressed="true"] { background: var(--ev-surface); color: var(--ev-ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .1); }
+.ev-brand-mark { width: 44px; height: 44px; border-radius: 13px; background: var(--ev-green); display: grid; place-items: center; margin: 0 auto 10px; }
+.ev-brand-mark svg { width: 22px; height: 22px; fill: #fff; }
+
+/* Botones secundarios con borde gris ("Editar", "Cancelar"…) → píldora gris */
+:where(button, a):where(.border.border-gray-200, .border.border-gray-300):not(:where(input, select, textarea)) {
+  background-color: var(--ev-ghost);
+  border-color: transparent;
+  border-radius: 999px;
+}
