@@ -387,6 +387,19 @@ Staging **no tiene** `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (confirmado 6 oct
 Rafa no se agregan — el aviso de propuestas de vehículos se comprueba en prod
 al publicar (proponer uno de prueba y revisar `ops_log` en `ev-guatemala-db`).
 
+**Acceso directo como app en el celular (6 oct 2026)**: Rafa vio en su
+iPhone (acceso directo en el dock) la parte de arriba difuminada: el sitio no
+tenía configuración de "app de pantalla de inicio", así que iOS lo abría como
+página web y ponía su propia franja borrosa detrás de la hora (el mapa se
+dibuja hasta el borde por `viewport-fit=cover`). Se agregó `public/manifest.json`
+(`display: standalone`), íconos propios (`apple-touch-icon.png`, `icon-192/512`,
+generados con el rayo verde de la marca; `favicon.svg` era el logo morado por
+defecto de Vite) y en `index.html` las meta `apple-mobile-web-app-capable` +
+`apple-mobile-web-app-status-bar-style=default` (barra de la hora blanca
+sólida, el contenido empieza debajo). **iOS lee esta configuración solo al
+agregar el acceso directo**: quien ya lo tenía debe borrarlo y volver a
+agregarlo (Safari → Compartir → Agregar a pantalla de inicio).
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
