@@ -3,6 +3,7 @@ import { chargerStations } from '../data/chargers';
 import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } from '../utils/ocm';
 import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType } from '../types';
 import { getAllRatings } from '../utils/reviewsApi';
+import { vehicles as baseVehicles } from '../data/vehicles';
 
 async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
   // Fuente principal: D1 (/api/stations). Si falla, degrada al endpoint
@@ -101,6 +102,11 @@ interface AppState {
 
   // Computed filtered stations
   filteredStations: ChargerStation[];
+
+  // Catálogo de vehículos: lista base (src/data/vehicles.ts) + lo que el
+  // admin agregó, corrigió u ocultó en D1 (GET /api/vehicles).
+  vehicleCatalog: Vehicle[];
+  loadVehicles: () => Promise<void>;
 
   // Vehicle selector
   selectedVehicle: Vehicle | null;
@@ -260,6 +266,28 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   filteredStations: computeFiltered(allInitial, initialFilters, null),
+
+  vehicleCatalog: baseVehicles,
+  loadVehicles: async () => {
+    try {
+      const res = await fetch('/api/vehicles');
+      if (!res.ok) return;
+      const rows = await res.json() as (Vehicle & { status?: string })[];
+      if (!Array.isArray(rows)) return;
+      const byId = new Map(baseVehicles.map((v) => [v.id, v]));
+      for (const r of rows) {
+        if (r.status === 'hidden') { byId.delete(r.id); continue; }
+        const { status: _status, ...v } = r;
+        void _status;
+        byId.set(v.id, v);
+      }
+      const catalog = Array.from(byId.values())
+        .sort((a, b) => a.brand.localeCompare(b.brand) || a.model.localeCompare(b.model));
+      set({ vehicleCatalog: catalog });
+    } catch {
+      // sin API (desarrollo local con vite) se queda la lista base
+    }
+  },
 
   selectedVehicle: null,
   setSelectedVehicle: (vehicle) => {

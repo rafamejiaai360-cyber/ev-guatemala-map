@@ -37,12 +37,13 @@ function getOptionalCoords(): Promise<{ coords: { lat: number; lng: number } | n
 }
 
 export default function App() {
-  const { scanModalOpen, addStationModalOpen, authModalOpen, profileModalOpen, contactAdminModalOpen, loadRatings, loadDynamicStations, loadCurrentUser, setUserLocation } = useStore();
+  const { scanModalOpen, addStationModalOpen, authModalOpen, profileModalOpen, contactAdminModalOpen, loadRatings, loadDynamicStations, loadCurrentUser, loadVehicles, setUserLocation } = useStore();
 
   useEffect(() => {
     loadRatings();
     loadDynamicStations();
     loadCurrentUser();
+    loadVehicles();
     if (!isAdminPanel) {
       getOptionalCoords().then(({ coords, reason }) => {
         if (coords) setUserLocation(coords);

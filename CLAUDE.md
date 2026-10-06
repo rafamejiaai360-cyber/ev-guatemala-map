@@ -345,6 +345,44 @@ ocultan en vez de atenuarse. "Guardadas" (`savedIds` en el store) vive solo en
 `localStorage` del navegador, sin cuenta ni servidor por ahora. Prototipo
 navegable de referencia: https://claude.ai/artifact/MecCx1MFcjX339tVkjGPZN
 
+**Catálogo de vehículos y propuestas de usuarios (oct 2026, rama
+`vehiculos-propuestas`, en prueba)**: la lista base sigue en
+`src/data/vehicles.ts`; la tabla D1 `vehicles` la sobreescribe o amplía por
+`id` (`status='hidden'` la oculta) y el frontend las combina en
+`vehicleCatalog` (`loadVehicles()` en el store, `GET /api/vehicles`). Los
+usuarios con cuenta proponen autos nuevos o correcciones desde la hoja
+"Filtros" (`VehicleProposalModal.tsx` → `POST /api/vehicle-proposals`, cola
+`vehicle_proposals`, máx. 10 pendientes por usuario) y ven el estado en
+Actividad (`?mine=1`). El admin revisa en la pestaña "Vehículos" del panel
+(`src/components/admin/VehiclesTab.tsx`): aprobar / aprobar como verificada /
+rechazar, y editar el catálogo (`PUT /api/vehicles/:id|new`). `verified=1`
+("Ficha verificada") **solo** con fuente oficial (agencia/ficha técnica).
+**Fotos: solo las sube el admin** (a KV, servidas por `/api/photo/:key`) y
+solo propias o con permiso de la marca/agencia — decisión explícita de Rafa:
+nada de fotos con derechos de autor bajadas de internet. Los usuarios no
+suben fotos de vehículos. Los datos agregados a `vehicles.ts` desde la web
+tienen comentario de fuente; lo no confirmado queda marcado `PENDIENTE` y
+sin conectores (el filtro solo usa conectores confirmados).
+**Requiere migración manual** (las tablas no se crean solas) en staging y
+luego en prod: `npx wrangler d1 execute ev-guatemala-db-staging --remote
+--file=db/schema.sql` (y `ev-guatemala-db` al publicar) — seguro de re-correr
+por `IF NOT EXISTS`. Sin las tablas, `GET /api/vehicles` falla y la app usa
+la lista base sin romperse. **Estado**: aplicada a `ev-guatemala-db-staging`
+(6 oct 2026, vía conector MCP de Cloudflare); falta `ev-guatemala-db` (prod)
+al publicar. SQL listo para pegar: `docs/migracion-vehiculos.sql`.
+
+**Rastro de avisos a Telegram (6 oct 2026)**: `notifyAdmin()` antes fallaba
+en silencio (fetch no lanza error ante 401/400 de Telegram). Ahora cada
+intento deja fila en `ops_log` con `op='notify_telegram'`, `ok=1/0` y en
+`detail` el título + motivo del fallo (`sin TELEGRAM_BOT_TOKEN/...`,
+`status`/`error` de Telegram). Nunca se guarda el texto del aviso (lleva
+nombres de usuarios). Para comprobar: `SELECT * FROM ops_log WHERE
+op='notify_telegram' ORDER BY id DESC LIMIT 5`.
+Staging **no tiene** `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (confirmado 6 oct
+2026 con ese registro: "sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID"); a pedido de
+Rafa no se agregan — el aviso de propuestas de vehículos se comprueba en prod
+al publicar (proponer uno de prueba y revisar `ops_log` en `ev-guatemala-db`).
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

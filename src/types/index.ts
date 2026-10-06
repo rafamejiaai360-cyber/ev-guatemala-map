@@ -81,4 +81,8 @@ export interface Vehicle {
    *  para la lista de "Mi vehículo". Opcional: sin ella se muestra un ícono
    *  genérico de auto. Se llenará con las fichas técnicas oficiales. */
   image_url?: string;
+  /** true solo si el admin confirmó la ficha con una fuente oficial. */
+  verified?: boolean;
+  /** Fuente o nota de verificación (enlace a ficha técnica, agencia…). */
+  source?: string;
 }
