@@ -483,8 +483,7 @@ sección "Mi auto" (abre la hoja Filtros). **Migración manual**:
 `docs/migracion-mi-auto.sql` — aplicada a `ev-guatemala-db-staging` y
 `ev-guatemala-db` (6 oct 2026) — no repetir.
 
-**Mis estaciones + estado publicado por el dueño (oct 2026, rama
-`mis-estaciones`, en prueba)**: dueño = `owner_email`, o quien registró una
+**Mis estaciones + estado publicado por el dueño (7 oct 2026, publicado en prod)**: dueño = `owner_email`, o quien registró una
 residencial (`submitted_by`); quien propuso una pública NO es dueño.
 `GET /api/my-stations` (`handleGetMyStations`) lista las suyas con estado de
 aprobación y **solo el número** de "Solicitar uso" (30 días / total) — los
@@ -508,8 +507,8 @@ días en mantenimiento/fuera de servicio (una vez por visita,
 `sessionStorage.ev_stale_prompt`); la ficha muestra la luz grande con
 "Actualizado por el dueño hace X" y la nota. **Migración manual**:
 `docs/migracion-mis-estaciones.sql` — aplicada a `ev-guatemala-db-staging`
-(6 oct 2026); falta `ev-guatemala-db` (prod) ANTES de publicar (sin las
-columnas, `/api/stations` falla y el mapa cae a la semilla). En staging, la
+y `ev-guatemala-db` (6–7 oct 2026) — no repetir (sin las columnas,
+`/api/stations` falla y el mapa cae a la semilla). En staging, la
 estación `guat-prueba` quedó asignada a la cuenta de Rafa para que pruebe.
 Ojo: staging **no tenía** la tabla `station_requests` (prod sí) — se creó a
 mano el 6 oct 2026; antes eso escondía toda la sección (ahora, si falla el
