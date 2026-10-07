@@ -137,6 +137,16 @@ interface AppState {
   routeRadiusKm: number;
   setRouteRadiusKm: (km: number) => void;
 
+  // Dirección hacia donde va/mira el usuario (grados desde el norte, 0–360).
+  // Viene del GPS en movimiento o de la brújula del teléfono. Solo vive en
+  // el teléfono: no se manda a ningún lado.
+  userHeading: number | null;
+  setUserHeading: (deg: number | null) => void;
+  // Modo ruta: el mapa gira con la dirección del usuario (true) o queda con
+  // el norte arriba (false). Se recuerda en este teléfono.
+  headingUp: boolean;
+  setHeadingUp: (on: boolean) => void;
+
   // Sidebar visibility (mobile)
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -281,6 +291,10 @@ function loadRouteRadius(): number {
   return 2;
 }
 
+function loadHeadingUp(): boolean {
+  try { return localStorage.getItem('ev_heading_up') !== '0'; } catch { return true; }
+}
+
 function markNoCountDevice() {
   try { localStorage.setItem('ev_no_count', '1'); } catch { /* sin almacenamiento: no pasa nada */ }
 }
@@ -374,6 +388,13 @@ export const useStore = create<AppState>((set, get) => ({
   setUserLocation: (loc) => set({ userLocation: loc }),
   routeMode: false,
   setRouteMode: (on) => set({ routeMode: on }),
+  userHeading: null,
+  setUserHeading: (deg) => set({ userHeading: deg }),
+  headingUp: loadHeadingUp(),
+  setHeadingUp: (on) => {
+    try { localStorage.setItem('ev_heading_up', on ? '1' : '0'); } catch { /* sin almacenamiento */ }
+    set({ headingUp: on });
+  },
   routeRadiusKm: loadRouteRadius(),
   setRouteRadiusKm: (km) => {
     try { localStorage.setItem('ev_route_radius', String(km)); } catch { /* sin almacenamiento */ }

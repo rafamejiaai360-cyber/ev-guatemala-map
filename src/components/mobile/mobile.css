@@ -449,3 +449,15 @@
 .m-status b { display: block; font-size: 15px; font-weight: 600; }
 .m-status small { display: block; font-size: 12.5px; color: var(--ink2); margin-top: 2px; }
 .m-status q { display: block; font-size: 13.5px; color: var(--ink); margin-top: 6px; quotes: "“" "”"; }
+
+/* ---------- Dirección del usuario y brújula (oct 2026) ---------- */
+.ev-me-wrap { background: none; border: 0; }
+.ev-me { position: relative; width: 56px; height: 56px; pointer-events: none; }
+.ev-me-dot { position: absolute; left: 20px; top: 20px; width: 16px; height: 16px; border-radius: 50%; background: #0a84ff; border: 3px solid #fff; box-sizing: border-box; box-shadow: 0 0 0 6px rgba(10, 132, 255, .18), 0 2px 6px rgba(0, 0, 0, .3); pointer-events: auto; }
+/* Haz en forma de abanico que nace en el punto y apunta hacia arriba; se gira con transform. */
+.ev-me-cone { position: absolute; inset: 0; opacity: 0; transition: opacity .3s, transform .35s ease-out; background: conic-gradient(from -32deg at 50% 50%, rgba(10, 132, 255, .55), rgba(10, 132, 255, .08) 64deg, transparent 64deg); -webkit-mask: radial-gradient(circle at 50% 50%, #000 0 27px, transparent 28px); mask: radial-gradient(circle at 50% 50%, #000 0 27px, transparent 28px); }
+.m-compass svg { stroke: none !important; transition: transform .35s ease-out; width: 19px !important; height: 19px !important; }
+.m-compass .n { fill: #ff3b30; }
+.m-compass .s { fill: #8e8e93; }
+.m-compass.on { background: var(--green); }
+.m-compass.on .s { fill: rgba(255, 255, 255, .7); }

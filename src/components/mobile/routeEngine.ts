@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import type { ChargerStation } from '../../types';
 import { distanceKm } from './shared';
+import { pushGpsHeading } from './heading';
 
 // Modo ruta (oct 2026). El usuario lo enciende con el botón del mapa: la app
 // sigue su ubicación en vivo (watchPosition) y, al pasar a menos de la
@@ -79,6 +80,7 @@ export function useRouteMode(): [RouteAlert | null, () => void] {
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
+        pushGpsHeading(pos.coords);
         let best: RouteAlert | null = null;
         for (const s of stationsRef.current) {
           if (s.status === 'offline' || alerted.current.has(s.id)) continue;
