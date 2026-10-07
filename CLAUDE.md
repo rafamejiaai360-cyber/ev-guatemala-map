@@ -436,8 +436,7 @@ pantalla encendida (con la app cerrada haría falta app nativa de tienda).
 Sin el modo ruta, la ubicación sigue siendo una foto (al abrir el mapa o al
 tocar "mi ubicación"), no se actualiza sola.
 
-**Dirección del usuario y mapa que gira (oct 2026, rama `mapa-direccion`, en
-prueba)**: a pedido de Rafa ("el usuario se pierde con el mapa fijo al
+**Dirección del usuario y mapa que gira (7 oct 2026, publicado en prod)**: a pedido de Rafa ("el usuario se pierde con el mapa fijo al
 norte"). (1) El punto azul tiene un haz (`.ev-me-cone`) que apunta a
 `userHeading` (store, grados desde el norte). Fuentes en
 `mobile/heading.ts`: rumbo del GPS del modo ruta cuando hay velocidad ≥ 1,5 m/s
