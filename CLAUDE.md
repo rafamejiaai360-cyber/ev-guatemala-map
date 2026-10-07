@@ -436,6 +436,25 @@ pantalla encendida (con la app cerrada haría falta app nativa de tienda).
 Sin el modo ruta, la ubicación sigue siendo una foto (al abrir el mapa o al
 tocar "mi ubicación"), no se actualiza sola.
 
+**Dirección del usuario y mapa que gira (7 oct 2026, publicado en prod)**: a pedido de Rafa ("el usuario se pierde con el mapa fijo al
+norte"). (1) El punto azul tiene un haz (`.ev-me-cone`) que apunta a
+`userHeading` (store, grados desde el norte). Fuentes en
+`mobile/heading.ts`: rumbo del GPS del modo ruta cuando hay velocidad ≥ 1,5 m/s
+(`pushGpsHeading`, manda 4 s sobre la brújula) y brújula del teléfono
+(`deviceorientationabsolute` en Android sin permiso; en iPhone
+`webkitCompassHeading` tras `requestCompass()`, que **debe** llamarse dentro de
+un toque: se llama al tocar "Mi ubicación", encender el modo ruta y la
+brújula). Suavizado circular, solo actualiza si cambia ≥ 2°. (2) Mapa
+giratorio con `leaflet-rotate` (0.2.8, única dependencia nueva; tipos propios
+en `src/types/leaflet-rotate*.d.ts`; `rotate` activado con giro a dos dedos,
+botón propio y Shift+rueda **desactivados**). Convención: `setBearing(360 -
+rumbo)` deja el rumbo arriba; los íconos no giran con el mapa, por eso el haz
+se dibuja a `rumbo + bearing`. En modo ruta con `headingUp` (por defecto sí,
+`localStorage.ev_heading_up`) `MapController` gira el mapa; fuera del modo
+ruta siempre vuelve al norte. Botón brújula (`.m-compass`, aguja roja = norte
+real) visible en modo ruta: alterna girar / norte arriba. Todo en el
+teléfono, nada se envía al servidor. Sin migración de base de datos.
+
 **Tema único en paneles y ventanas (oct 2026)**: el mapa ya tenía el estilo
 nuevo (clases `m-*`); el panel de admin, el login, el perfil y las ventanas de
 alta/edición seguían con el estilo viejo de Tailwind. `src/theme.css`
