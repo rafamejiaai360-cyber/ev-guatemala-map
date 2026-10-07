@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { chargerStations } from '../data/chargers';
 import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } from '../utils/ocm';
-import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType } from '../types';
+import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType, MyStation } from '../types';
 import { getAllRatings } from '../utils/reviewsApi';
 import { vehicles as baseVehicles } from '../data/vehicles';
 
@@ -199,6 +199,11 @@ interface AppState {
   // Ratings (loaded from Worker API)
   ratings: Record<string, RatingInfo>;
   loadRatings: () => Promise<void>;
+
+  // Mis estaciones (dueños): lista propia y estado publicado al instante
+  myStations: MyStation[] | null;
+  loadMyStations: () => Promise<void>;
+  publishStationStatus: (id: string, status: ChargerStatus, note?: string) => Promise<void>;
 }
 
 function computeFiltered(
@@ -514,7 +519,7 @@ export const useStore = create<AppState>((set, get) => ({
   logoutUser: () => {
     localStorage.removeItem('ev_auth_token');
     localStorage.removeItem('ev_admin_auth');
-    set({ authToken: null, currentUser: null, isAdminAuthenticated: false });
+    set({ authToken: null, currentUser: null, isAdminAuthenticated: false, myStations: null });
   },
 
   loadCurrentUser: async () => {
@@ -565,6 +570,54 @@ export const useStore = create<AppState>((set, get) => ({
   contactAdminModalOpen: false,
   setContactAdminModalOpen: (open) => set({ contactAdminModalOpen: open }),
 
+
+  myStations: null,
+  loadMyStations: async () => {
+    const token = get().authToken;
+    if (!token) { set({ myStations: null }); return; }
+    try {
+      const res = await fetch('/api/my-stations', { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json() as MyStation[];
+      if (Array.isArray(data)) set({ myStations: data });
+    } catch { /* sin conexión: se intenta de nuevo al volver a Perfil */ }
+  },
+  publishStationStatus: async (id, status, note = '') => {
+    const token = get().authToken;
+    if (!token) throw new Error('Debes iniciar sesión');
+    const res = await fetch(`/api/stations/${encodeURIComponent(id)}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status, note }),
+    });
+    const data = await res.json().catch(() => ({})) as { error?: string; statusNote?: string | null };
+    if (!res.ok) throw new Error(data.error ?? 'No se pudo guardar el estado');
+    // Se refleja de inmediato en este dispositivo (la lista del servidor puede
+    // tardar hasta un minuto por su caché). Un estado viejo guardado solo en
+    // este navegador ya no debe taparlo.
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const statusNote = data.statusNote ?? undefined;
+    const mine = get().myStations?.some((m) => m.id === id) ?? false;
+    const overrides = { ...get().statusOverrides };
+    delete overrides[id];
+    saveOverrides(overrides);
+    const patch = { status, statusNote, statusUpdatedAt: now, statusByOwner: mine || undefined };
+    const known = get().dynamicStations.some((d) => d.id === id);
+    const base = get().stations.find((x) => x.id === id);
+    const dynamic = known
+      ? get().dynamicStations.map((d) => (d.id === id ? { ...d, ...patch } : d))
+      : base ? [...get().dynamicStations, { ...base, ...patch }] : get().dynamicStations;
+    const stations = buildAllStations(overrides, get().customStations, dynamic, get().dynamicLoaded);
+    set({
+      statusOverrides: overrides,
+      dynamicStations: dynamic,
+      stations,
+      filteredStations: computeFiltered(stations, get().filters, get().selectedVehicle),
+      myStations: get().myStations?.map((m) => (m.id === id
+        ? { ...m, status, statusNote: statusNote ?? null, statusUpdatedAt: now, statusByOwner: true }
+        : m)) ?? null,
+    });
+  },
   ratings: {},
   loadRatings: async () => {
     try {

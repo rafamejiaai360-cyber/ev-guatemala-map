@@ -134,7 +134,7 @@ function pageToReview(page: NotionPage) {
 type EventType =
   | 'created' | 'updated' | 'confirmed_ok' | 'reported_issue' | 'reported_closed'
   | 'report_resolved' | 'proposal_submitted' | 'proposal_approved'
-  | 'proposal_rejected' | 'status_changed' | 'archived' | 'restored';
+  | 'proposal_rejected' | 'status_changed' | 'archived' | 'restored' | 'owner_assigned';
 
 function eventStmt(
   db: D1Database,
@@ -797,6 +797,11 @@ function buildStationUpdate(
     values.push(newVal as string | number | null);
     diff.push({ field, old: oldVal, new: newVal });
   }
+  // Cambio de estado hecho por el admin (edición directa o propuesta
+  // aprobada): queda registrado como suyo y borra la nota del dueño.
+  if (diff.some((d) => d.field === 'status')) {
+    sets.push("status_updated_at = datetime('now')", "status_source = 'admin'", 'status_note = NULL');
+  }
   if (typeof changes.lat === 'number' && typeof changes.lng === 'number') {
     sets.push('google_maps_url = ?');
     values.push(`https://www.google.com/maps/search/?api=1&query=${changes.lat},${changes.lng}`);
@@ -1059,12 +1064,16 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
   const { results } = await env.DB.prepare(
     `SELECT s.id, s.type, s.name, s.address, s.zone, s.lat, s.lng, s.status, s.connectors, s.network, s.access,
             s.notes, s.verification_status, s.google_maps_url, s.last_confirmed_at,
-            s.confirm_count, s.open_reports, s.submitted_by, u.name AS submitted_by_name
+            s.confirm_count, s.open_reports, s.submitted_by, u.name AS submitted_by_name,
+            s.status_note, s.status_updated_at, s.status_source
        FROM stations s
        LEFT JOIN users u ON u.email = s.submitted_by
-      WHERE s.approval_status = 'active' AND s.status IN ('active', 'maintenance')
+      WHERE s.approval_status = 'active' AND s.status IN ('active', 'maintenance', 'offline')
       ORDER BY s.id`
-  ).all<StationRow & { last_confirmed_at: string | null; confirm_count: number; open_reports: number }>();
+  ).all<StationRow & {
+    last_confirmed_at: string | null; confirm_count: number; open_reports: number;
+    status_note: string | null; status_updated_at: string | null; status_source: string | null;
+  }>();
 
   const stations = await Promise.all(results.map(async (r) => {
     // Residencial vista por alguien que no es admin: ubicación aproximada, sin
@@ -1092,6 +1101,10 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       lng: approx ? approx.lng : r.lng,
       ...(hideExact ? { approximate: true } : {}),
       status: r.status,
+      // Estado publicado por el dueño (Mis estaciones): nota corta y fecha.
+      statusNote: r.status_note || undefined,
+      statusUpdatedAt: r.status_updated_at || undefined,
+      statusByOwner: r.status_source === 'owner' || undefined,
       connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
       network: r.network || 'Desconocido',
       access: ['public', 'semi-public', 'private'].includes(r.access) ? r.access : 'public',
@@ -2335,6 +2348,132 @@ async function handlePostStationRequest(stationId: string, request: Request, env
   return json({ ok: true, id }, 201);
 }
 
+// ─── Mis estaciones (dueños) ─────────────────────────────────────────────────
+// Dueño = owner_email (asignado al crear una residencial o por el admin), o
+// quien registró una residencial. Quien propuso una estación pública NO es
+// su dueño: no puede cambiarle el estado.
+const OWNER_SQL = "(s.owner_email = ?1 OR (s.type = 'residential' AND s.submitted_by = ?1))";
+const OWNER_STATUSES = ['active', 'maintenance', 'offline'];
+
+function isOwner(station: FullStationRow, email: string): boolean {
+  return station.owner_email === email || (station.type === 'residential' && station.submitted_by === email);
+}
+
+async function handleGetMyStations(request: Request, env: Env): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('No autenticado', 401);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  type Row = {
+    id: string; name: string; type: string; zone: string | null; status: string; approval_status: string;
+    status_note: string | null; status_updated_at: string | null; status_source: string | null; created_at: string;
+    requests_30d: number; requests_total: number;
+  };
+  const cols = `s.id, s.name, s.type, s.zone, s.status, s.approval_status, s.status_note, s.status_updated_at,
+                s.status_source, s.created_at`;
+  const counts = `(SELECT COUNT(*) FROM station_requests r
+                    WHERE r.station_id = s.id AND r.created_at >= datetime('now', '-30 days')) AS requests_30d,
+                  (SELECT COUNT(*) FROM station_requests r WHERE r.station_id = s.id) AS requests_total`;
+  const run = (select: string) => env.DB!.prepare(
+    `SELECT ${select} FROM stations s WHERE ${OWNER_SQL} ORDER BY s.created_at DESC LIMIT 50`
+  ).bind(user.email).all<Row>();
+  let results: Row[];
+  try {
+    ({ results } = await run(`${cols}, ${counts}`));
+  } catch {
+    // Sin la tabla de solicitudes (pasó en staging) la lista igual se muestra,
+    // con 0 solicitudes, en vez de esconder toda la sección.
+    try {
+      ({ results } = await run(`${cols}, 0 AS requests_30d, 0 AS requests_total`));
+    } catch {
+      return apiError('Mis estaciones no disponible todavía', 503);
+    }
+  }
+  // Solo números: quién pidió usar el cargador lo sigue manejando el admin.
+  return json(results.map((r) => ({
+    id: r.id, name: r.name, type: r.type, zone: r.zone || '', status: r.status,
+    approval: r.approval_status, statusNote: r.status_note || null,
+    statusUpdatedAt: r.status_updated_at || r.created_at, statusByOwner: r.status_source === 'owner',
+    requests30d: r.requests_30d, requestsTotal: r.requests_total,
+  })));
+}
+
+// El dueño publica el estado de su cargador al instante (sin moderación, como
+// las confirmaciones de conductores): un "fuera de servicio" que espera
+// aprobación llegaría tarde. Queda en el historial y el admin puede corregirlo.
+async function handleSetStationStatus(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('Debes iniciar sesión', 401);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
+  const isAdmin = user.role === 'admin';
+  if (!isAdmin && !isOwner(station, user.email)) return apiError('Solo el dueño puede cambiar el estado', 403);
+  if (station.approval_status !== 'active') return apiError('La estación todavía no está publicada', 409);
+
+  const body = await request.json().catch(() => ({})) as { status?: unknown; note?: unknown };
+  const status = typeof body.status === 'string' ? body.status : '';
+  if (!OWNER_STATUSES.includes(status)) return apiError('Estado no válido');
+  const rawNote = typeof body.note === 'string' ? body.note.trim().replace(/\s+/g, ' ') : '';
+  if (rawNote.length > 140) return apiError('La nota debe tener máximo 140 caracteres');
+  const note = status === 'active' ? null : (rawNote || null);
+  const source = isAdmin && !isOwner(station, user.email) ? 'admin' : 'owner';
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE stations SET status = ?, status_note = ?, status_source = ?,
+         status_updated_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`
+    ).bind(status, note, source, stationId),
+    eventStmt(env.DB, stationId, 'status_changed', user, { from: station.status, to: status, note, by: source }),
+  ]);
+  invalidateStationsCache();
+  ctx.waitUntil(syncStationToNotion(env, stationId));
+  if (station.status !== status) {
+    const label: Record<string, string> = { active: 'Activa', maintenance: 'En mantenimiento', offline: 'Fuera de servicio' };
+    ctx.waitUntil(notifyAdmin(env, 'Estado actualizado por el dueño',
+      `${station.name} → ${label[status]}${note ? ` (${note})` : ''}`));
+  }
+  return json({ ok: true, status, statusNote: note });
+}
+
+// El admin asigna (o quita) el dueño de una estación: la persona debe tener
+// cuenta. Desde ahí la ve en "Mis estaciones" y puede publicar su estado.
+async function handleAssignOwner(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const admin = await getUserFromToken(request, env);
+  if (!admin || admin.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
+  const body = await request.json().catch(() => ({})) as { email?: unknown };
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  let ownerEmail: string | null = null;
+  let ownerName: string | null = null;
+  if (email) {
+    const owner = await getUser(email, env);
+    if (!owner) return apiError('No hay ninguna cuenta con ese correo. Pídele que se registre primero.', 404);
+    ownerEmail = owner.email;
+    ownerName = owner.name;
+  }
+  if (ownerEmail === station.owner_email) return json({ ok: true, ownerEmail, ownerName });
+  await env.DB.batch([
+    env.DB.prepare("UPDATE stations SET owner_email = ?, updated_at = datetime('now') WHERE id = ?").bind(ownerEmail, stationId),
+    eventStmt(env.DB, stationId, 'owner_assigned', admin, { from: station.owner_email, to: ownerEmail }),
+  ]);
+  invalidateStationsCache();
+  ctx.waitUntil(syncStationToNotion(env, stationId));
+  return json({ ok: true, ownerEmail, ownerName });
+}
+
+async function handleGetStationOwner(stationId: string, request: Request, env: Env): Promise<Response> {
+  const admin = await getUserFromToken(request, env);
+  if (!admin || admin.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const r = await env.DB.prepare(
+    `SELECT s.owner_email, u.name FROM stations s LEFT JOIN users u ON u.email = s.owner_email WHERE s.id = ?`
+  ).bind(stationId).first<{ owner_email: string | null; name: string | null }>();
+  if (!r) return apiError('Estación no encontrada', 404);
+  return json({ ownerEmail: r.owner_email, ownerName: r.name });
+}
+
 async function handleDeleteStation(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user || user.role !== 'admin') return apiError('Solo administradores pueden eliminar estaciones', 403);
@@ -2606,6 +2745,21 @@ export default {
       }
 
       // Solicitud de uso de estación residencial: POST /api/stations/:id/request-use
+      if (path === 'my-stations' && request.method === 'GET') {
+        return handleGetMyStations(request, env);
+      }
+      const stationStatusMatch = path.match(/^stations\/([^/]+)\/status$/);
+      if (stationStatusMatch && request.method === 'POST') {
+        return handleSetStationStatus(stationStatusMatch[1], request, env, ctx);
+      }
+      const stationOwnerMatch = path.match(/^stations\/([^/]+)\/owner$/);
+      if (stationOwnerMatch && request.method === 'GET') {
+        return handleGetStationOwner(stationOwnerMatch[1], request, env);
+      }
+      if (stationOwnerMatch && request.method === 'POST') {
+        return handleAssignOwner(stationOwnerMatch[1], request, env, ctx);
+      }
+
       const stationRequestMatch = path.match(/^stations\/([^/]+)\/request-use$/);
       if (stationRequestMatch && request.method === 'POST') {
         return handlePostStationRequest(stationRequestMatch[1], request, env, ctx);

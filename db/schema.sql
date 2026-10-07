@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS stations (
   rating_count INTEGER NOT NULL DEFAULT 0,
   -- --------------------------------------------------------------------
   notion_page_id TEXT,                         -- referencia al espejo editorial en Notion
+  status_note TEXT,                            -- nota corta del dueño ("Vuelve el lunes")
+  status_updated_at TEXT,                      -- última vez que alguien publicó el estado
+  status_source TEXT,                          -- owner | admin (quién lo publicó)
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -50,7 +53,7 @@ CREATE TABLE IF NOT EXISTS station_events (
   event_type TEXT NOT NULL,
     -- created | updated | confirmed_ok | reported_issue | reported_closed
     -- report_resolved | proposal_submitted | proposal_approved
-    -- proposal_rejected | status_changed | archived | restored
+    -- proposal_rejected | status_changed | archived | restored | owner_assigned
   actor_email TEXT,                    -- quién lo hizo (NULL = sistema)
   actor_role TEXT,                     -- user | admin | system (rol AL MOMENTO del evento)
   payload TEXT NOT NULL DEFAULT '{}',  -- JSON con el detalle del evento
