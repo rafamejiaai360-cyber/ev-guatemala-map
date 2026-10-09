@@ -7,6 +7,7 @@ export interface StationUseRequest {
   vehicle?: string;
   preferredDate?: string;
   message?: string;
+  acceptedTerms: boolean;
 }
 
 export async function requestStationUse(data: StationUseRequest, authToken?: string | null): Promise<{ ok: boolean; id: string }> {

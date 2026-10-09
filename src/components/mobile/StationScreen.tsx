@@ -4,6 +4,7 @@ import type { ChargerStation } from '../../types';
 import { useStore } from '../../store/useStore';
 import EditStationModal from '../EditStationModal';
 import RequestUseModal from '../RequestUseModal';
+import IdentityVerifyModal from '../IdentityVerifyModal';
 import StationPhotos from '../StationPhotos';
 import StationReviews from '../StationReviews';
 import StationVerification from '../StationVerification';
@@ -28,6 +29,11 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
   const [editMsg, setEditMsg] = useState<string | null>(null);
   const [showRequestUse, setShowRequestUse] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
+  const [showIdentity, setShowIdentity] = useState(false);
+  // Oct 2026: pedir un cargador en casa exige identidad revisada (DPI +
+  // selfie + placa). Los admins no la necesitan.
+  const canRequest = currentUser?.role === 'admin' || currentUser?.identityStatus === 'verified';
+  const identityPending = currentUser?.identityStatus === 'pending';
 
   const t = stationType(station);
   const isResidential = t === 'residential';
@@ -99,6 +105,22 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
             </p>
             {requestSent ? (
               <p className="m-note" style={{ color: 'var(--blue)', margin: 0 }}>Solicitud enviada. Un administrador te contactará pronto.</p>
+            ) : currentUser && !canRequest ? (
+              <>
+                <p className="m-note" style={{ margin: '0 0 10px' }}>
+                  {identityPending
+                    ? 'Tu identidad está en revisión. Cuando un administrador la apruebe podrás enviar la solicitud.'
+                    : 'Para proteger a los dueños, antes de tu primera solicitud verificamos tu identidad (solo una vez).'}
+                </p>
+                <button
+                  type="button"
+                  className="m-btn primary"
+                  style={{ width: '100%', background: 'var(--blue)' }}
+                  onClick={() => setShowIdentity(true)}
+                >
+                  {identityPending ? 'Ver estado de mi verificación' : 'Verificar mi identidad'}
+                </button>
+              </>
             ) : (
               <button
                 type="button"
@@ -168,6 +190,10 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
               : 'Cambios guardados.');
           }}
         />,
+        document.body,
+      )}
+      {showIdentity && createPortal(
+        <IdentityVerifyModal onClose={() => setShowIdentity(false)} />,
         document.body,
       )}
       {showRequestUse && createPortal(

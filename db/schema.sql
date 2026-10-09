@@ -94,7 +94,13 @@ CREATE TABLE IF NOT EXISTS users (
   subscription_end TEXT,
   contributions_count INTEGER NOT NULL DEFAULT 0, -- derivado del historial
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_login_at TEXT
+  last_login_at TEXT,
+  -- Verificación de identidad (oct 2026, ver identity_submissions). En bases
+  -- ya existentes requieren ALTER TABLE manual: docs/migracion-identidad.sql
+  identity_status TEXT NOT NULL DEFAULT 'none', -- none | pending | verified | rejected
+  identity_plate TEXT,                          -- placa revisada por el admin (sin guion)
+  identity_verified_at TEXT,
+  identity_note TEXT                            -- motivo de rechazo / aviso al usuario
 );
 
 -- ============================================================
@@ -138,10 +144,55 @@ CREATE TABLE IF NOT EXISTS station_requests (
   preferred_date TEXT,
   message TEXT,
   status TEXT NOT NULL DEFAULT 'pending',      -- pending | shared | declined
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  requester_email TEXT,                        -- oct 2026 (ALTER manual en bases existentes)
+  plate TEXT                                   -- placa verificada del solicitante
 );
 CREATE INDEX IF NOT EXISTS idx_requests_station ON station_requests(station_id);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON station_requests(status, created_at);
+
+-- ============================================================
+-- VERIFICACIÓN DE IDENTIDAD (oct 2026) — requisito para pedir un cargador
+-- en casa. El conductor sube DPI (frente y reverso), selfie con el DPI y
+-- foto del carro con la placa. Los binarios viven en KV bajo "private/"
+-- (nunca los sirve /api/photo): las 3 fotos del DPI se guardan con
+-- expiración de 7 días y el admin las borra antes con "Descargar y borrar"
+-- (se las lleva a su nube privada). La foto del carro se queda en la app.
+-- Aquí solo queda el registro: nunca el número de DPI ni las imágenes.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS identity_submissions (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL REFERENCES users(email),
+  plate TEXT NOT NULL,                          -- normalizada, sin guion (ej. P123ABC)
+  status TEXT NOT NULL DEFAULT 'pending',       -- pending | verified | rejected | expired
+  files_status TEXT NOT NULL DEFAULT 'stored',  -- stored | deleted (por el admin) | expired (7 días)
+  expires_at TEXT NOT NULL,                     -- cuándo se borran solas las fotos del DPI
+  warned_at TEXT,                               -- aviso de "vencen mañana" ya enviado
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  review_note TEXT,
+  files_deleted_at TEXT,
+  files_deleted_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_identity_user ON identity_submissions(user_email, created_at);
+CREATE INDEX IF NOT EXISTS idx_identity_files ON identity_submissions(files_status, expires_at);
+
+-- ============================================================
+-- ACEPTACIÓN DEL AVISO / TÉRMINOS (oct 2026) — prueba de que cada persona
+-- aceptó el aviso de responsabilidad, en qué momento y qué versión.
+-- context: register | request_use | host_station | identity
+-- ref: id de la estación o de la verificación, según el contexto.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS terms_acceptances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_email TEXT NOT NULL,
+  context TEXT NOT NULL,
+  ref TEXT,
+  version TEXT NOT NULL,
+  accepted_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_terms_user ON terms_acceptances(user_email, accepted_at);
 
 -- ============================================================
 -- VISITAS — contador simple de aperturas de la app, solo para el admin.

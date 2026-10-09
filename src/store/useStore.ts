@@ -4,6 +4,20 @@ import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } 
 import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType } from '../types';
 import { getAllRatings } from '../utils/reviewsApi';
 import { vehicles as baseVehicles } from '../data/vehicles';
+import type { IdentityStatus } from '../utils/identityApi';
+
+// Cuenta con sesión. identityStatus: verificación de identidad (DPI + placa),
+// requisito para pedir un cargador en casa (oct 2026).
+export interface CurrentUser {
+  email: string;
+  name: string;
+  phone?: string;
+  role: 'admin' | 'user';
+  subscriptionEnd?: string;
+  identityStatus?: IdentityStatus;
+  identityPlate?: string;
+  identityNote?: string;
+}
 
 async function fetchDynamicStations(): Promise<ChargerStation[] | null> {
   // Fuente principal: D1 (/api/stations). Si falla, degrada al endpoint
@@ -156,7 +170,7 @@ interface AppState {
   isAdminAuthenticated: boolean;
 
   // User auth (JWT system)
-  currentUser: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string } | null;
+  currentUser: CurrentUser | null;
   authToken: string | null;
   authModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
@@ -171,7 +185,7 @@ interface AppState {
   pendingAddType: StationType | null;
   setPendingAddType: (t: StationType | null) => void;
   loginUser: (email: string, password: string) => Promise<void>;
-  registerUser: (email: string, password: string, name: string, phone: string) => Promise<void>;
+  registerUser: (email: string, password: string, name: string, phone: string, acceptedTerms: boolean) => Promise<void>;
   logoutUser: () => void;
   loadCurrentUser: () => Promise<void>;
   profileModalOpen: boolean;
@@ -425,7 +439,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json() as { token?: string; user?: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
+    const data = await res.json() as { token?: string; user?: CurrentUser; error?: string };
     if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al iniciar sesión');
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
@@ -439,13 +453,13 @@ export const useStore = create<AppState>((set, get) => ({
     if (data.user.role === 'admin') await get().loadDynamicStations();
   },
 
-  registerUser: async (email, password, name, phone) => {
+  registerUser: async (email, password, name, phone, acceptedTerms) => {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name, phone }),
+      body: JSON.stringify({ email, password, name, phone, acceptedTerms }),
     });
-    const data = await res.json() as { token?: string; user?: { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string }; error?: string };
+    const data = await res.json() as { token?: string; user?: CurrentUser; error?: string };
     if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al registrarse');
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
@@ -468,7 +482,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) { localStorage.removeItem('ev_auth_token'); set({ authToken: null, currentUser: null }); return; }
-      const user = await res.json() as { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string };
+      const user = await res.json() as CurrentUser;
       if (user.role === 'admin') {
         localStorage.setItem('ev_admin_auth', '1');
         markNoCountDevice();
@@ -489,7 +503,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ name, phone }),
     });
-    const data = await res.json() as { email: string; name: string; phone?: string; role: 'admin' | 'user'; subscriptionEnd?: string; error?: string };
+    const data = await res.json() as CurrentUser & { error?: string };
     if (!res.ok) throw new Error(data.error ?? 'Error al actualizar el perfil');
     set({ currentUser: data });
   },

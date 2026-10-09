@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ChargerStation } from '../types';
 import { useStore } from '../store/useStore';
 import { requestStationUse } from '../utils/stationRequestsApi';
+import TermsNotice from './TermsNotice';
 
 interface Props {
   station: ChargerStation;
@@ -10,10 +11,12 @@ interface Props {
 }
 
 export default function RequestUseModal({ station, onClose, onSent }: Props) {
-  const { authToken } = useStore();
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const { authToken, currentUser } = useStore();
+  // Se llena con los datos de la cuenta (verificada); se pueden ajustar.
+  const [name, setName] = useState(currentUser?.name ?? '');
+  const [phone, setPhone] = useState(currentUser?.phone ?? '');
   const [vehicle, setVehicle] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [preferredDate, setPreferredDate] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -23,6 +26,10 @@ export default function RequestUseModal({ station, onClose, onSent }: Props) {
     e.preventDefault();
     if (!name.trim() || !phone.trim()) {
       setError('Nombre y teléfono son requeridos');
+      return;
+    }
+    if (!accepted) {
+      setError('Debes aceptar el aviso para enviar la solicitud');
       return;
     }
     setSubmitting(true);
@@ -35,6 +42,7 @@ export default function RequestUseModal({ station, onClose, onSent }: Props) {
         vehicle: vehicle.trim(),
         preferredDate,
         message: message.trim(),
+        acceptedTerms: true,
       }, authToken);
       onSent();
     } catch (err) {
@@ -45,13 +53,18 @@ export default function RequestUseModal({ station, onClose, onSent }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999] px-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm p-4 space-y-3">
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-[9999] p-4 overflow-y-auto overscroll-contain">
+      <div className="bg-white rounded-2xl w-full max-w-sm p-4 space-y-3 my-auto">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">Solicitar uso de esta estación</h3>
           <p className="text-[11px] text-gray-500 mt-0.5">
             Tu solicitud llega primero a un administrador, quien contacta al dueño para coordinar contigo.
           </p>
+          {currentUser?.identityStatus === 'verified' && (
+            <p className="text-[11px] text-green-700 mt-1.5">
+              ✓ Identidad revisada{currentUser.identityPlate ? ` · Placa ${currentUser.identityPlate}` : ''}
+            </p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -109,6 +122,8 @@ export default function RequestUseModal({ station, onClose, onSent }: Props) {
               className="w-full text-xs border border-gray-200 rounded-md p-2 focus:outline-none focus:border-blue-400 bg-white resize-none leading-relaxed"
             />
           </div>
+
+          <TermsNotice variant="driver" accepted={accepted} onChange={setAccepted} />
 
           {error && <p className="text-[10px] text-red-500">{error}</p>}
 

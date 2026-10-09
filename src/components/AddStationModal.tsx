@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import LocationPicker from './LocationPicker';
+import TermsNotice from './TermsNotice';
 import type { ConnectorType, ChargerLevel, StationType } from '../types/index';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
@@ -45,6 +46,9 @@ export default function AddStationModal() {
   // comparte un cargador en casa y aún no lo registró (para poder contactarlo).
   const [ownerPhone, setOwnerPhone] = useState('');
   const needsPhone = type === 'residential' && !!currentUser && !currentUser.phone;
+  // El dueño acepta el aviso de anfitrión (oct 2026); el admin no lo necesita.
+  const needsHostTerms = type === 'residential' && !!currentUser && !isAdmin;
+  const [hostTerms, setHostTerms] = useState(false);
 
   function addConnector() {
     setConnectors(prev => [...prev, { type: 'Type2', power_kw: null }]);
@@ -80,6 +84,10 @@ export default function AddStationModal() {
       setError('Escribe tu teléfono de 8 dígitos para que podamos contactarte por tu cargador');
       return;
     }
+    if (needsHostTerms && !hostTerms) {
+      setError('Para publicar tu cargador debes aceptar el aviso para anfitriones');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -104,6 +112,7 @@ export default function AddStationModal() {
           access,
           source: 'Manual',
           ...(notes.trim() && { notes: notes.trim() }),
+          ...(needsHostTerms && { acceptedTerms: hostTerms }),
         }),
       });
 
@@ -132,7 +141,7 @@ export default function AddStationModal() {
     setLat(null); setLng(null);
     setNetwork(''); setNotes(''); setAccess('public');
     setConnectors([{ type: 'Type2', power_kw: null }]);
-    setSuccess(false); setPendingApproval(false); setError(null);
+    setSuccess(false); setPendingApproval(false); setError(null); setHostTerms(false);
     setLocationResetKey(k => k + 1);
   }
 
@@ -404,6 +413,8 @@ export default function AddStationModal() {
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400"
                 />
               </div>
+
+              {needsHostTerms && <TermsNotice variant="host" accepted={hostTerms} onChange={setHostTerms} />}
 
               {error && (
                 <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>

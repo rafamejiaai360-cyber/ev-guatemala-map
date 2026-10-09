@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
+import { TermsLinks } from './TermsNotice';
 
 type Tab = 'login' | 'register' | 'forgot';
 
@@ -11,6 +12,7 @@ export default function AuthModal() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -44,9 +46,10 @@ export default function AuthModal() {
     if (phoneDigits && !/^\d{8}$/.test(phoneDigits)) { setError('El teléfono debe tener 8 dígitos (ej. 5512-3456)'); return; }
     if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return; }
     if (password !== confirmPassword) { setError('Las contraseñas no coinciden'); return; }
+    if (!acceptedTerms) { setError('Para crear tu cuenta debes aceptar los Términos de uso y la Política de privacidad'); return; }
     setLoading(true);
     try {
-      await registerUser(email, password, name.trim(), phoneDigits);
+      await registerUser(email, password, name.trim(), phoneDigits, acceptedTerms);
       setAuthModalOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrarse');
@@ -196,6 +199,17 @@ export default function AuthModal() {
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-green-400"
                 />
               </div>
+              <label className="flex items-start gap-2 text-[11px] text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={e => { setAcceptedTerms(e.target.checked); reset(); }}
+                  className="accent-green-600 w-4 h-4 mt-0.5 flex-shrink-0"
+                />
+                <span>
+                  Acepto <TermsLinks />. Entiendo que la app es solo una plataforma de contacto entre conductores y dueños de cargadores.
+                </span>
+              </label>
               {error && <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
               <button
                 type="submit"

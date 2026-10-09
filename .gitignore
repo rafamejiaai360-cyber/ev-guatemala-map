@@ -31,3 +31,16 @@ dist-ssr
 
 # Credenciales locales de wrangler dev (nunca commitear)
 .dev.vars
+
+# Fotos de verificación de identidad (DPI, selfies, placas): nunca deben
+# entrar al repositorio aunque alguien las guarde por error en esta carpeta.
+# Se guardan en la nube privada del admin, fuera del proyecto.
+verificacion-identidad-*.zip
+*DPI*.jpg
+*DPI*.jpeg
+*DPI*.png
+*dpi*.jpg
+*dpi*.jpeg
+*dpi*.png
+*selfie*.jpg
+*selfie*.jpeg

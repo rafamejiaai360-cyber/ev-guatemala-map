@@ -51,6 +51,7 @@ export function JoinSheetContent({ ctx, onRegister, onLogin, onClose }: {
 const HOST_POINTS: { b: string; s: string }[] = [
   { b: 'Ayudas a que más gente maneje eléctrico', s: 'Un cargador cerca es lo que muchos necesitan para animarse.' },
   { b: 'Tú decides el acceso', s: 'Privado, compartido o público. Los conductores te piden permiso desde la app con "Solicitar uso".' },
+  { b: 'Conductores con identidad revisada', s: 'Antes de pedirte acceso, cada conductor verifica su DPI y la placa de su carro con nosotros.' },
   { b: 'Tu privacidad está protegida', s: 'Tu correo y teléfono nunca se muestran en el mapa. Puedes usar un nombre de referencia, no el tuyo.' },
   { b: 'Revisado antes de publicarse', s: 'Un administrador revisa cada estación para que el mapa sea confiable.' },
 ];

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore } from '../../store/useStore';
 import type { ChargerStation, StationType } from '../../types';
 import { getMyContributionStationIds } from '../../utils/myContributions';
@@ -8,6 +9,7 @@ import StationCard from './StationCard';
 import { RouteAlertCard, RouteModeBar } from './RouteMode';
 import { useRouteMode } from './routeEngine';
 import { HostPromo, HostSheetContent, JoinSheetContent } from './Growth';
+import IdentityVerifyModal from '../IdentityVerifyModal';
 import {
   Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
   connectorTypes, distanceKm, distanceLabel, formatKw, googleMapsUrl, maxKw, stationType,
@@ -17,6 +19,7 @@ import './mobile.css';
 const EVMap = lazy(() => import('../Map'));
 
 type Tab = 'map' | 'activity' | 'saved' | 'profile';
+const IDENTITY_LABEL = { none: 'Sin verificar', pending: 'En revisión', verified: 'Identidad revisada', rejected: 'No aprobada' } as const;
 const BACK_LABEL: Record<Tab, string> = { map: 'Mapa', activity: 'Actividad', saved: 'Guardadas', profile: 'Perfil' };
 
 // Computadora (>= 1024 px): barra superior + lista fija a la izquierda + mapa
@@ -54,6 +57,7 @@ export default function MobileShell() {
   // (guardar, aportar sin cuenta, 3.ª ficha) y tiene prioridad sobre las demás.
   const activeSheet = joinPrompt && !currentUser ? 'join' : sheet;
   const [query, setQuery] = useState('');
+  const [showIdentity, setShowIdentity] = useState(false);
 
   const isWide = useIsWide();
   const [routeAlert, dismissRouteAlert] = useRouteMode();
@@ -255,6 +259,18 @@ export default function MobileShell() {
                 <div className="r">Correo<span>{currentUser.email}</span></div>
                 <button type="button" className="r accent" onClick={() => setProfileModalOpen(true)}>Editar perfil</button>
               </div>
+              <div className="m-sect">Verificación de identidad</div>
+              <div className="m-glist">
+                <button type="button" className="r" onClick={() => setShowIdentity(true)}>
+                  {IDENTITY_LABEL[currentUser.identityStatus ?? 'none']}
+                  <span className={currentUser.identityStatus === 'verified' ? 'm-vp-approved' : undefined}>
+                    {currentUser.identityStatus === 'verified'
+                      ? `✓ ${currentUser.identityPlate ?? 'Revisada'}`
+                      : currentUser.identityStatus === 'pending' ? 'Ver estado ›' : 'Verificar ›'}
+                  </span>
+                </button>
+              </div>
+              <p className="m-note" style={{ margin: '6px 4px 0' }}>Necesaria para pedir un cargador en casa. Tu DPI solo lo ve el administrador.</p>
             </>
           ) : (
             <button type="button" className="m-cta" onClick={() => setAuthModalOpen(true)}>
@@ -277,6 +293,8 @@ export default function MobileShell() {
           <div className="m-sect">Ayuda</div>
           <div className="m-glist">
             <button type="button" className="r" onClick={() => setContactAdminModalOpen(true)}>Contáctanos<span>›</span></button>
+            <a className="r" href="/terminos.html" target="_blank" rel="noopener noreferrer">Términos de uso<span>›</span></a>
+            <a className="r" href="/privacidad.html" target="_blank" rel="noopener noreferrer">Política de privacidad<span>›</span></a>
           </div>
           {currentUser && (
             <>
@@ -329,6 +347,8 @@ export default function MobileShell() {
         <TabButton label="Guardadas" icon={Icon.star} selected={tab === 'saved'} onClick={() => goTab('saved')} />
         <TabButton label="Perfil" icon={Icon.user} selected={tab === 'profile'} onClick={() => goTab('profile')} />
       </nav>
+
+      {showIdentity && createPortal(<IdentityVerifyModal onClose={() => setShowIdentity(false)} />, document.body)}
 
       {/* ---------- Hojas ---------- */}
       <div className={`m-scrim${activeSheet !== 'none' ? ' on' : ''}`} onClick={closeSheet} />

@@ -276,7 +276,10 @@ async function recalcFreshness(env: Env): Promise<void> {
   }
 }
 
-const BACKUP_TABLES = ['stations', 'station_events', 'station_proposals', 'users', 'reviews', 'photos', 'ops_log'];
+// identity_submissions y terms_acceptances: solo registros (quién, placa,
+// fechas, versión aceptada) — las fotos del DPI nunca se respaldan a R2,
+// para que "borrar" signifique borrar de verdad.
+const BACKUP_TABLES = ['stations', 'station_events', 'station_proposals', 'users', 'reviews', 'photos', 'ops_log', 'identity_submissions', 'terms_acceptances'];
 
 // Retención: 30 respaldos diarios + los del día 1 de cada mes por 12 meses.
 async function applyBackupRetention(bucket: R2Bucket): Promise<number> {
@@ -360,6 +363,7 @@ async function runBackup(env: Env): Promise<void> {
 async function runNightlyMaintenance(env: Env): Promise<void> {
   await recalcFreshness(env);
   await runBackup(env);
+  await runIdentityMaintenance(env);
 }
 
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
@@ -618,7 +622,7 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
     zone?: string; lat: number; lng: number;
     network?: string; status?: string; type?: string;
     connectors?: Array<{ type: string; power_kw: number; level: string }>;
-    access?: string; source?: string; notes?: string;
+    access?: string; source?: string; notes?: string; acceptedTerms?: boolean;
   };
 
   if (!body.id || !body.name || body.lat == null || body.lng == null) {
@@ -639,6 +643,11 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
   if (type === 'residential' && !requester) {
     return apiError('Debes iniciar sesión para agregar una estación residencial', 401);
   }
+  // El dueño acepta el aviso de anfitrión (la app solo pone en contacto;
+  // las condiciones de cada carga las acuerdan él y el conductor).
+  if (type === 'residential' && !isAdmin && body.acceptedTerms !== true) {
+    return apiError('Debes aceptar el aviso para anfitriones antes de publicar tu cargador');
+  }
 
   // Ensure no duplicate by checking ID
   const existing = await getStation(env.DB, body.id);
@@ -653,6 +662,8 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
   const isPending = !isAdmin && !!submittedBy;
   const access = ['public', 'semi-public', 'private'].includes(body.access ?? '') ? body.access! : 'public';
   const ownerEmail = type === 'residential' ? requester!.email : null;
+
+  if (type === 'residential' && !isAdmin) await recordTermsAcceptance(env, requester!.email, 'host_station', body.id);
 
   await env.DB.batch([
     env.DB.prepare(
@@ -1280,10 +1291,20 @@ async function handleGetPhotos(stationId: string, env: Env): Promise<Response> {
   return json(results.map(r => ({ id: r.id, url: `/api/photo/${r.id}` })));
 }
 
+// Claves de KV que NUNCA se sirven por /api/photo: "private/" (fotos de
+// verificación de identidad) y "user:" (cuentas heredadas de antes de D1,
+// con hash de contraseña). Esta ruta es pública y sin sesión.
+function isPrivateKvKey(key: string): boolean {
+  let decoded = key;
+  try { decoded = decodeURIComponent(key); } catch { /* clave tal cual */ }
+  return [key, decoded].some(k => /^(private\/|user:)/i.test(k.trim()));
+}
+
 async function handleGetPhoto(photoId: string, env: Env): Promise<Response> {
   if (!env.PHOTOS) {
     return new Response('KV no configurado', { status: 503 });
   }
+  if (isPrivateKvKey(photoId)) return new Response('Foto no encontrada', { status: 404 });
   const result = await env.PHOTOS.getWithMetadata<{ contentType: string }>(photoId, { type: 'arrayBuffer' });
   if (!result.value) return new Response('Foto no encontrada', { status: 404 });
 
@@ -1404,7 +1425,12 @@ interface UserRecord {
   role: 'admin' | 'user';
   createdAt: string;
   subscriptionEnd?: string;
+  identityStatus: IdentityStatus;
+  identityPlate?: string;
+  identityNote?: string;
 }
+
+type IdentityStatus = 'none' | 'pending' | 'verified' | 'rejected';
 
 interface UserRow {
   email: string;
@@ -1416,9 +1442,14 @@ interface UserRow {
   account_status: string;
   subscription_end: string | null;
   created_at: string;
+  // Opcionales: no existen hasta aplicar docs/migracion-identidad.sql.
+  identity_status?: string | null;
+  identity_plate?: string | null;
+  identity_note?: string | null;
 }
 
 function rowToUser(r: UserRow): UserRecord {
+  const idStatus = r.identity_status;
   return {
     email: r.email,
     name: r.name,
@@ -1428,6 +1459,19 @@ function rowToUser(r: UserRow): UserRecord {
     role: r.role === 'admin' ? 'admin' : 'user',
     createdAt: r.created_at,
     subscriptionEnd: r.subscription_end ?? undefined,
+    identityStatus: idStatus === 'pending' || idStatus === 'verified' || idStatus === 'rejected' ? idStatus : 'none',
+    identityPlate: r.identity_plate ?? undefined,
+    identityNote: r.identity_note ?? undefined,
+  };
+}
+
+// Lo que el frontend recibe de la cuenta propia (login, registro, /auth/me).
+function publicUser(user: UserRecord, role: 'admin' | 'user' = user.role) {
+  return {
+    email: user.email, name: user.name, phone: user.phone, role, subscriptionEnd: user.subscriptionEnd,
+    identityStatus: user.identityStatus,
+    identityPlate: user.identityPlate ? formatPlate(user.identityPlate) : undefined,
+    identityNote: user.identityNote,
   };
 }
 
@@ -1482,13 +1526,14 @@ async function getUserFromToken(request: Request, env: Env): Promise<UserRecord 
 
 async function handleRegister(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!env.JWT_SECRET) return apiError('Autenticación no configurada en el servidor', 503);
-  const body = await request.json() as { email?: string; password?: string; name?: string; phone?: string };
+  const body = await request.json() as { email?: string; password?: string; name?: string; phone?: string; acceptedTerms?: boolean };
   const email = body.email?.toLowerCase().trim() ?? '';
   const password = body.password ?? '';
   const name = body.name?.trim() ?? '';
   if (!email || !email.includes('@')) return apiError('Email inválido');
   if (password.length < 6) return apiError('La contraseña debe tener al menos 6 caracteres');
   if (!name) return apiError('El nombre es requerido');
+  if (body.acceptedTerms !== true) return apiError('Debes aceptar los Términos de uso y la Política de privacidad');
   // Teléfono opcional al registrarse (oct 2026): se pide solo a quien
   // comparte un cargador en casa (AddStationModal), para bajar la fricción.
   const rawPhone = (body.phone ?? '').trim();
@@ -1505,6 +1550,12 @@ async function handleRegister(request: Request, env: Env, ctx: ExecutionContext)
   await env.DB.prepare(
     'INSERT INTO users (email, name, phone, password_hash, salt, role, last_login_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))'
   ).bind(email, name, phone, passwordHash, salt, role).run();
+  // Si falla el registro de la aceptación no se bloquea la cuenta recién
+  // creada: queda rastro en ops_log y se vuelve a pedir al solicitar o
+  // publicar un cargador en casa (ahí sí es obligatorio que se guarde).
+  await recordTermsAcceptance(env, email, 'register', null).catch(async (e) => {
+    await logOp(env.DB!, 'terms_acceptance', false, { context: 'register', error: String(e) });
+  });
 
   const token = await signJWT({ sub: email, name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
 
@@ -1514,7 +1565,7 @@ async function handleRegister(request: Request, env: Env, ctx: ExecutionContext)
     `Nombre: ${name}\nCorreo: ${email}\nTeléfono: ${phone ?? 'sin registrar'}\nRol: ${role}`,
   ));
 
-  return json({ token, user: { email, name, phone: phone ?? undefined, role, subscriptionEnd: undefined } }, 201);
+  return json({ token, user: { email, name, phone: phone ?? undefined, role, subscriptionEnd: undefined, identityStatus: 'none' } }, 201);
 }
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
@@ -1538,13 +1589,13 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   }
 
   const token = await signJWT({ sub: email, name: user.name, role, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, env.JWT_SECRET);
-  return json({ token, user: { email: user.email, name: user.name, phone: user.phone, role, subscriptionEnd: user.subscriptionEnd } });
+  return json({ token, user: publicUser(user, role) });
 }
 
 async function handleGetMe(request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('No autenticado', 401);
-  return json({ email: user.email, name: user.name, phone: user.phone, role: user.role, subscriptionEnd: user.subscriptionEnd });
+  return json(publicUser(user));
 }
 
 async function handleUpdateProfile(request: Request, env: Env): Promise<Response> {
@@ -1558,7 +1609,7 @@ async function handleUpdateProfile(request: Request, env: Env): Promise<Response
   if (body.phone !== undefined && !phone) return apiError('Teléfono inválido — usa 8 dígitos (ej. 5512-3456)');
 
   await saveUser({ ...user, name, phone: phone ?? undefined }, env);
-  return json({ email: user.email, name, phone, role: user.role, subscriptionEnd: user.subscriptionEnd });
+  return json(publicUser({ ...user, name, phone: phone ?? undefined }));
 }
 
 async function handleChangePassword(request: Request, env: Env): Promise<Response> {
@@ -2259,12 +2310,18 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
 async function handlePostStationRequest(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('Debes iniciar sesión para solicitar el uso de una estación residencial', 401);
+  // Oct 2026: el dueño abre su casa, así que solo se acepta la solicitud de
+  // quien ya pasó la verificación de identidad (DPI + selfie + placa).
+  if (user.identityStatus !== 'verified' && user.role !== 'admin') {
+    return json({ error: 'Antes de solicitar un cargador en casa necesitas verificar tu identidad.', code: 'identity_required' }, 403);
+  }
 
   const body = await request.json() as {
-    name?: string; phone?: string; vehicle?: string; preferredDate?: string; message?: string;
+    name?: string; phone?: string; vehicle?: string; preferredDate?: string; message?: string; acceptedTerms?: boolean;
   };
   const { name, phone, vehicle = '', preferredDate = '', message = '' } = body;
   if (!name || !phone) return apiError('name y phone son requeridos');
+  if (body.acceptedTerms !== true) return apiError('Debes aceptar el aviso de responsabilidad para enviar la solicitud');
   if (!env.DB) return apiError('Base de datos no configurada', 503);
 
   const station = await getStation(env.DB, stationId);
@@ -2272,15 +2329,19 @@ async function handlePostStationRequest(stationId: string, request: Request, env
   if (station.type !== 'residential') return apiError('Esta estación no admite solicitudes de uso');
 
   const id = crypto.randomUUID();
+  await recordTermsAcceptance(env, user.email, 'request_use', id);
   await env.DB.prepare(
-    `INSERT INTO station_requests (id, station_id, requester_name, requester_phone, vehicle, preferred_date, message)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).bind(id, stationId, name, phone, vehicle, preferredDate, message).run();
+    `INSERT INTO station_requests (id, station_id, requester_name, requester_phone, vehicle, preferred_date, message, requester_email, plate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, stationId, name, phone, vehicle, preferredDate, message, user.email, user.identityPlate ?? null).run();
 
+  const verifiedLine = user.identityStatus === 'verified'
+    ? `\nIdentidad revisada ✓ · Placa: ${formatPlate(user.identityPlate ?? '')}`
+    : '\n(Solicitud de un administrador, sin verificación)';
   ctx.waitUntil(notifyAdmin(
     env,
     'Nueva solicitud de uso',
-    `${station.name}\nSolicitante: ${name} (${phone})\nVehículo: ${vehicle || 'N/D'}\nFecha deseada: ${preferredDate || 'N/D'}${message ? `\nMensaje: ${message}` : ''}`,
+    `${station.name}\nSolicitante: ${name} (${phone})${verifiedLine}\nVehículo: ${vehicle || 'N/D'}\nFecha deseada: ${preferredDate || 'N/D'}${message ? `\nMensaje: ${message}` : ''}`,
   ));
 
   return json({ ok: true, id }, 201);
@@ -2304,6 +2365,314 @@ async function handleDeleteStation(stationId: string, request: Request, env: Env
   invalidateStationsCache();
   ctx.waitUntil(syncStationToNotion(env, stationId));
   return json({ ok: true });
+}
+
+// ─── Aviso de responsabilidad / términos (oct 2026) ──────────────────────────
+// Cada aceptación queda en terms_acceptances con la versión vigente, como
+// prueba de que la persona aceptó el aviso. Al cambiar el texto de
+// public/terminos.html o del aviso en src/components/TermsNotice.tsx, subir
+// esta versión (y la de TermsNotice.tsx).
+const TERMS_VERSION = '2026-10-09';
+type TermsContext = 'register' | 'request_use' | 'host_station' | 'identity';
+
+async function recordTermsAcceptance(env: Env, email: string, context: TermsContext, ref: string | null): Promise<void> {
+  if (!env.DB) throw new Error('Base de datos no configurada');
+  await env.DB.prepare('INSERT INTO terms_acceptances (user_email, context, ref, version) VALUES (?, ?, ?, ?)')
+    .bind(email, context, ref, TERMS_VERSION).run();
+}
+
+// ─── Verificación de identidad (oct 2026) ────────────────────────────────────
+// Requisito para pedir un cargador en casa. El conductor sube 4 fotos:
+// DPI frente, DPI reverso, selfie sosteniendo el DPI y su carro con la placa.
+// - Todo va a KV bajo "private/" (isPrivateKvKey impide servirlo por
+//   /api/photo); solo el admin las ve, con su sesión, por /api/identity.
+// - Las 3 del DPI se guardan con expiración de 7 días en KV: se borran
+//   solas aunque nadie haga nada. El admin las borra antes con "Descargar y
+//   borrar" (se las lleva a su nube privada). Nunca se respaldan a R2.
+// - La del carro se queda: es la que verá el dueño del cargador.
+// - En D1 solo queda el registro (placa, fechas, quién revisó), nunca el
+//   número de DPI ni las imágenes.
+const IDV_TTL_DAYS = 7;
+const IDV_KINDS = ['dpi_front', 'dpi_back', 'selfie', 'car'] as const;
+type IdvKind = typeof IDV_KINDS[number];
+const IDV_DPI_KINDS: IdvKind[] = ['dpi_front', 'dpi_back', 'selfie'];
+
+function idvKey(id: string, kind: IdvKind): string {
+  return kind === 'car' ? `private/idcar/${id}` : `private/idv/${id}/${kind}`;
+}
+
+// Placa guatemalteca: tipo (P, M, C, A, O, CD…) + 3 números + 3 letras. Se
+// acepta con o sin guion/espacios; se guarda sin ellos. Margen amplio a
+// propósito (placas extranjeras o antiguas): el admin la compara con la foto.
+function normalizePlate(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const p = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return /^[A-Z0-9]{5,10}$/.test(p) ? p : null;
+}
+
+function formatPlate(p: string): string {
+  const m = p.match(/^([A-Z]{1,3})(\d{3}[A-Z]{3})$/);
+  return m ? `${m[1]}-${m[2]}` : p;
+}
+
+// El navegador convierte todo a JPEG antes de subir (src/utils/identityApi.ts);
+// aquí solo se acepta JPEG real y de tamaño razonable.
+function decodeIdvJpeg(b64: unknown): Uint8Array | null {
+  if (typeof b64 !== 'string' || !b64) return null;
+  let bytes: Uint8Array;
+  try { bytes = base64ToUint8Array(b64); } catch { return null; }
+  if (bytes.length < 2_000 || bytes.length > 3_000_000) return null;
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) return null;
+  return bytes;
+}
+
+interface IdentityRow {
+  id: string;
+  user_email: string;
+  plate: string;
+  status: string;
+  files_status: string;
+  expires_at: string;
+  warned_at: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  files_deleted_at: string | null;
+  files_deleted_by: string | null;
+  created_at: string;
+}
+
+// Marca como vencidas las verificaciones cuyas fotos del DPI ya pasaron los
+// 7 días (KV ya las borró sola; aquí se borran de nuevo por si acaso y se
+// actualiza el registro). Si nadie la revisó a tiempo, el usuario vuelve a
+// "sin verificar" y debe enviarla otra vez. Devuelve las vencidas.
+async function sweepExpiredIdentity(env: Env): Promise<IdentityRow[]> {
+  if (!env.DB) return [];
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM identity_submissions WHERE files_status = 'stored' AND expires_at <= datetime('now')"
+  ).all<IdentityRow>();
+  for (const r of results) {
+    if (env.PHOTOS) await Promise.all(IDV_DPI_KINDS.map(k => env.PHOTOS!.delete(idvKey(r.id, k)).catch(() => undefined)));
+    const stmts = [
+      env.DB.prepare(
+        `UPDATE identity_submissions SET files_status = 'expired', files_deleted_at = datetime('now'),
+           status = CASE WHEN status = 'pending' THEN 'expired' ELSE status END
+         WHERE id = ?`
+      ).bind(r.id),
+    ];
+    if (r.status === 'pending') {
+      stmts.push(env.DB.prepare(
+        "UPDATE users SET identity_status = 'none', identity_note = ? WHERE email = ? AND identity_status = 'pending'"
+      ).bind('Tu verificación venció antes de ser revisada. Envíala de nuevo, por favor.', r.user_email));
+    }
+    await env.DB.batch(stmts);
+  }
+  return results;
+}
+
+// Cron nocturno (solo producción): avisa al admin por Telegram de las
+// verificaciones cuyas fotos vencen en las próximas 24 h sin haberse
+// descargado, y de las que ya vencieron.
+async function runIdentityMaintenance(env: Env): Promise<void> {
+  if (!env.DB) return;
+  try {
+    const expired = await sweepExpiredIdentity(env);
+    if (expired.length) {
+      await notifyAdmin(env, 'Fotos de verificación borradas',
+        `${expired.length} verificación(es) llegaron a los ${IDV_TTL_DAYS} días y sus fotos del DPI se borraron de la app.`
+        + (expired.some(r => r.status === 'pending') ? ' Algunas no se revisaron a tiempo: esos usuarios deberán enviarlas de nuevo.' : ''));
+    }
+    const { results: soon } = await env.DB.prepare(
+      `SELECT s.id, u.name FROM identity_submissions s LEFT JOIN users u ON u.email = s.user_email
+       WHERE s.files_status = 'stored' AND s.warned_at IS NULL AND s.expires_at <= datetime('now', '+1 day')`
+    ).all<{ id: string; name: string | null }>();
+    if (soon.length) {
+      await notifyAdmin(env, 'Fotos de verificación vencen mañana',
+        `Descarga y guarda en tu nube las fotos de: ${soon.map(r => r.name ?? 'usuario').join(', ')}. Mañana la app las borra sola.`);
+      await env.DB.batch(soon.map(r =>
+        env.DB!.prepare("UPDATE identity_submissions SET warned_at = datetime('now') WHERE id = ?").bind(r.id)));
+    }
+    await logOp(env.DB, 'identity_maintenance', true, { expired: expired.length, warned: soon.length });
+  } catch (e) {
+    await logOp(env.DB, 'identity_maintenance', false, { error: String(e) });
+  }
+}
+
+// GET /api/identity/me — estado de la verificación propia.
+async function handleGetMyIdentity(request: Request, env: Env): Promise<Response> {
+  if (env.DB) await sweepExpiredIdentity(env).catch(() => undefined);
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('No autenticado', 401);
+  let pendingSince: string | null = null;
+  if (env.DB) {
+    const row = await env.DB.prepare(
+      "SELECT created_at FROM identity_submissions WHERE user_email = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1"
+    ).bind(user.email).first<{ created_at: string }>().catch(() => null);
+    pendingSince = row?.created_at ?? null;
+  }
+  return json({
+    status: user.identityStatus,
+    plate: user.identityPlate ? formatPlate(user.identityPlate) : null,
+    note: user.identityNote ?? null,
+    pendingSince,
+  });
+}
+
+// POST /api/identity — el usuario envía sus 4 fotos y la placa.
+async function handlePostIdentity(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const user = await getUserFromToken(request, env);
+  if (!user) return apiError('Debes iniciar sesión para verificar tu identidad', 401);
+  if (!env.DB || !env.PHOTOS) return apiError('Almacenamiento no configurado', 503);
+
+  const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  if (body.acceptedTerms !== true) return apiError('Debes aceptar el aviso y la Política de privacidad');
+  const plate = normalizePlate(body.plate);
+  if (!plate) return apiError('Escribe la placa de tu carro (ej. P-123ABC)');
+
+  const labels: Record<IdvKind, string> = {
+    dpi_front: 'del frente del DPI', dpi_back: 'del reverso del DPI', selfie: 'de la selfie con tu DPI', car: 'de tu carro con la placa',
+  };
+  const files = {} as Record<IdvKind, Uint8Array>;
+  for (const kind of IDV_KINDS) {
+    const bytes = decodeIdvJpeg(body[kind]);
+    if (!bytes) return apiError(`Falta la foto ${labels[kind]} o no se pudo leer. Toma otra e inténtalo de nuevo.`);
+    files[kind] = bytes;
+  }
+
+  const pending = await env.DB.prepare(
+    "SELECT id FROM identity_submissions WHERE user_email = ? AND status = 'pending' LIMIT 1"
+  ).bind(user.email).first();
+  if (pending) return apiError('Ya tienes una verificación en revisión. Te avisaremos cuando esté lista.', 409);
+
+  const id = crypto.randomUUID();
+  // Primero las fotos (si algo falla aquí no queda registro a medias; las
+  // del DPI que alcanzaran a subirse vencen solas en 7 días).
+  for (const kind of IDV_KINDS) {
+    await env.PHOTOS.put(idvKey(id, kind), files[kind], {
+      metadata: { contentType: 'image/jpeg' },
+      ...(kind === 'car' ? {} : { expirationTtl: IDV_TTL_DAYS * 86400 }),
+    });
+  }
+  await recordTermsAcceptance(env, user.email, 'identity', id);
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO identity_submissions (id, user_email, plate, expires_at)
+       VALUES (?, ?, ?, datetime('now', '+${IDV_TTL_DAYS} days'))`
+    ).bind(id, user.email, plate),
+    // Quien ya estaba verificado (p. ej. cambió de carro) sigue verificado
+    // mientras se revisa la nueva.
+    env.DB.prepare(
+      "UPDATE users SET identity_status = CASE WHEN identity_status = 'verified' THEN 'verified' ELSE 'pending' END, identity_note = NULL WHERE email = ?"
+    ).bind(user.email),
+  ]);
+
+  ctx.waitUntil(notifyAdmin(env, 'Nueva verificación de identidad',
+    `${user.name} (${user.email})\nPlaca: ${formatPlate(plate)}\nRevísala en el panel → Identidad. Las fotos del DPI se borran solas en ${IDV_TTL_DAYS} días.`));
+
+  return json({ ok: true, status: user.identityStatus === 'verified' ? 'verified' : 'pending' }, 201);
+}
+
+async function requireAdmin(request: Request, env: Env): Promise<UserRecord | null> {
+  const user = await getUserFromToken(request, env);
+  return user && user.role === 'admin' ? user : null;
+}
+
+// GET /api/identity — lista para el panel de admin.
+async function handleListIdentity(request: Request, env: Env): Promise<Response> {
+  if (!await requireAdmin(request, env)) return apiError('Solo administradores', 403);
+  if (!env.DB) return json([]);
+  await sweepExpiredIdentity(env);
+  const { results } = await env.DB.prepare(
+    `SELECT s.*, u.name AS user_name, u.phone AS user_phone
+     FROM identity_submissions s LEFT JOIN users u ON u.email = s.user_email
+     ORDER BY CASE WHEN s.status = 'pending' THEN 0 WHEN s.files_status = 'stored' THEN 1 ELSE 2 END, s.created_at DESC
+     LIMIT 100`
+  ).all<IdentityRow & { user_name: string | null; user_phone: string | null }>();
+  return json(results.map(r => ({
+    id: r.id,
+    email: r.user_email,
+    name: r.user_name,
+    phone: r.user_phone,
+    plate: formatPlate(r.plate),
+    status: r.status,
+    filesStatus: r.files_status,
+    expiresAt: r.expires_at,
+    reviewedBy: r.reviewed_by,
+    reviewedAt: r.reviewed_at,
+    reviewNote: r.review_note,
+    filesDeletedAt: r.files_deleted_at,
+    createdAt: r.created_at,
+  })));
+}
+
+// GET /api/identity/:id/file/:kind — una foto, solo admin, sin caché.
+async function handleGetIdentityFile(id: string, kind: string, request: Request, env: Env): Promise<Response> {
+  if (!await requireAdmin(request, env)) return apiError('Solo administradores', 403);
+  if (!env.DB || !env.PHOTOS) return apiError('Almacenamiento no configurado', 503);
+  if (!(IDV_KINDS as readonly string[]).includes(kind)) return apiError('Tipo de foto inválido');
+  const row = await env.DB.prepare('SELECT files_status FROM identity_submissions WHERE id = ?').bind(id).first<{ files_status: string }>();
+  if (!row) return apiError('Verificación no encontrada', 404);
+  if (kind !== 'car' && row.files_status !== 'stored') return apiError('Estas fotos ya se borraron de la app', 410);
+  const obj = await env.PHOTOS.get(idvKey(id, kind as IdvKind), { type: 'arrayBuffer' });
+  if (!obj) return apiError('Foto no encontrada', 404);
+  return new Response(obj, {
+    headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, no-store', 'Access-Control-Allow-Origin': '*' },
+  });
+}
+
+// POST /api/identity/:id/approve | reject | purge — acciones del admin.
+async function handleIdentityAction(id: string, action: string, request: Request, env: Env): Promise<Response> {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const row = await env.DB.prepare('SELECT * FROM identity_submissions WHERE id = ?').bind(id).first<IdentityRow>();
+  if (!row) return apiError('Verificación no encontrada', 404);
+  const body = await request.json().catch(() => ({})) as { note?: string; plate?: string };
+
+  if (action === 'purge') {
+    // "Descargar y borrar": el admin ya bajó las fotos a su nube; aquí se
+    // borran las del DPI de la app. La del carro se queda.
+    if (row.files_status === 'stored' && env.PHOTOS) {
+      await Promise.all(IDV_DPI_KINDS.map(k => env.PHOTOS!.delete(idvKey(id, k))));
+    }
+    await env.DB.prepare(
+      "UPDATE identity_submissions SET files_status = 'deleted', files_deleted_at = datetime('now'), files_deleted_by = ? WHERE id = ? AND files_status = 'stored'"
+    ).bind(admin.email, id).run();
+    await logOp(env.DB, 'identity_purge', true, { id, by: admin.email });
+    return json({ ok: true });
+  }
+
+  if (row.status !== 'pending') return apiError('Esta verificación ya fue resuelta o venció');
+
+  if (action === 'approve') {
+    const plate = body.plate !== undefined ? normalizePlate(body.plate) : row.plate;
+    if (!plate) return apiError('Placa inválida');
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE identity_submissions SET status = 'verified', plate = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?"
+      ).bind(plate, admin.email, id),
+      env.DB.prepare(
+        "UPDATE users SET identity_status = 'verified', identity_plate = ?, identity_verified_at = datetime('now'), identity_note = NULL WHERE email = ?"
+      ).bind(plate, row.user_email),
+    ]);
+    return json({ ok: true });
+  }
+
+  if (action === 'reject') {
+    const note = (body.note ?? '').trim().slice(0, 300) || 'No pudimos confirmar tu identidad con las fotos enviadas.';
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE identity_submissions SET status = 'rejected', review_note = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?"
+      ).bind(note, admin.email, id),
+      // Si ya estaba verificado (renovación rechazada), conserva lo anterior.
+      env.DB.prepare(
+        "UPDATE users SET identity_status = CASE WHEN identity_status = 'verified' THEN 'verified' ELSE 'rejected' END, identity_note = ? WHERE email = ?"
+      ).bind(note, row.user_email),
+    ]);
+    return json({ ok: true });
+  }
+
+  return apiError('Acción inválida');
 }
 
 // ─── Main fetch handler ───────────────────────────────────────────────────────
@@ -2561,6 +2930,15 @@ export default {
       if (stationRequestMatch && request.method === 'POST') {
         return handlePostStationRequest(stationRequestMatch[1], request, env, ctx);
       }
+
+      // Verificación de identidad (usuario: me / enviar; admin: lista, fotos, acciones)
+      if (path === 'identity/me' && request.method === 'GET') return handleGetMyIdentity(request, env);
+      if (path === 'identity' && request.method === 'POST') return handlePostIdentity(request, env, ctx);
+      if (path === 'identity' && request.method === 'GET') return handleListIdentity(request, env);
+      const idvFileMatch = path.match(/^identity\/([0-9a-f-]{36})\/file\/([a-z_]+)$/);
+      if (idvFileMatch && request.method === 'GET') return handleGetIdentityFile(idvFileMatch[1], idvFileMatch[2], request, env);
+      const idvActionMatch = path.match(/^identity\/([0-9a-f-]{36})\/(approve|reject|purge)$/);
+      if (idvActionMatch && request.method === 'POST') return handleIdentityAction(idvActionMatch[1], idvActionMatch[2], request, env);
 
       // Station edit / delete: PATCH|DELETE /api/stations/:id
       const stationMatch = path.match(/^stations\/([^/]+)$/);

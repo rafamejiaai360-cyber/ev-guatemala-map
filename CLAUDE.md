@@ -491,6 +491,53 @@ por el flujo existente "Solicitar uso" (el admin media el contacto).
 `EditStationModal` solo envía campos cambiados, así que sugerir una corrección
 sin tocar el mapa no "mueve" la casa a la ubicación aproximada.
 
+**Verificación de identidad + aviso de responsabilidad (9 oct 2026, rama
+`verificacion-identidad`, en staging, pendiente de visto bueno de Rafa)**:
+motivo — a Rafa le señalaron en un evento el riesgo para el dueño de recibir
+a desconocidos en su casa. Decisiones acordadas con él:
+- **Pedir un cargador en casa exige identidad revisada**
+  (`users.identity_status='verified'`; `handlePostStationRequest` responde
+  403 `code:'identity_required'`; admins exentos). Se hace **una sola vez**
+  por cuenta (`IdentityVerifyModal.tsx`, desde la ficha y desde Perfil): DPI
+  frente, DPI reverso, selfie sosteniendo el DPI y carro con placa + placa
+  escrita. Renovar (cambio de carro) = enviar de nuevo; sigue verificado
+  mientras se revisa.
+- **Almacenamiento**: KV bajo `private/` (`isPrivateKvKey` impide servirlo
+  por `/api/photo`). Las 3 del DPI con `expirationTtl` de 7 días (se borran
+  solas aunque no haya cron, p. ej. en staging); la del carro sin vencimiento
+  (la verá el dueño en el futuro "paso 3"). Solo el admin las ve vía
+  `/api/identity/:id/file/:kind` con su JWT. **Nunca se respaldan a R2**. En
+  D1 (`identity_submissions`) solo el registro: placa, fechas, quién revisó.
+  Nunca el número de DPI. El navegador re-codifica a JPEG (quita EXIF/GPS).
+- **Pestaña "Identidad" del panel** (`admin/IdentityTab.tsx`): ver fotos,
+  aprobar (corrigiendo placa) / rechazar (motivo visible al usuario), y
+  **"Descargar y borrar"**: arma un .zip en el navegador (`utils/zip.ts`, sin
+  librerías), Rafa lo guarda en su nube privada (iCloud con Protección
+  avanzada), confirma, y se borran de KV las del DPI. Si nadie las revisa en
+  7 días, `sweepExpiredIdentity` (al listar y en el cron) la marca `expired` y
+  el usuario vuelve a `none`. El cron de prod avisa por Telegram el día antes.
+- **Aviso de responsabilidad** (`TermsNotice.tsx`, variantes conductor y
+  anfitrión) con casilla obligatoria al registrarse, al verificar identidad,
+  al solicitar uso y al publicar un cargador en casa (no-admin). Cada
+  aceptación en `terms_acceptances` con `TERMS_VERSION` (worker) — subirla si
+  cambia el texto. Páginas estáticas `public/terminos.html` y
+  `public/privacidad.html` (enlazadas en registro y Perfil → Ayuda). Rafa
+  quiere que un abogado guatemalteco revise ambos textos. La política
+  promete: copia del DPI en la nube del admin mientras la cuenta esté activa
+  + 1 año, y borrarla si el usuario elimina su cuenta (manual, a cargo de Rafa).
+- `.gitignore` bloquea `verificacion-identidad-*.zip` y `*DPI*`/`*selfie*`.
+- **Fuga cerrada de paso**: `/api/photo/:key` servía CUALQUIER clave de KV,
+  incluidos los `user:*` heredados (con hash de contraseña). Confirmado en
+  prod el 9 oct 2026 (200 en `/api/photo/user:kv_test2@test.com`). Arreglado
+  en esta rama; sigue abierto en prod hasta el merge.
+- **Migración manual**: `docs/migracion-identidad.sql` (ALTER no
+  re-ejecutables + CREATE). Aplicada a `ev-guatemala-db-staging` el 9 oct
+  2026 vía MCP. **Falta prod, ANTES del merge** (sin columnas, el registro y
+  las solicitudes fallan).
+- Wrangler: la sesión OAuth había vencido (ago 2026); en una shell no
+  interactiva no se renueva. Se renovó con `npx wrangler whoami` en la
+  terminal de la app (Rafa autorizó en el navegador).
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

@@ -4,10 +4,11 @@ import type { ChargerStatus, ConnectorType, ChargerLevel, StationType } from '..
 import type { ChargerStation } from '../types';
 import EditStationModal from './EditStationModal';
 import VehiclesTab from './admin/VehiclesTab';
+import IdentityTab from './admin/IdentityTab';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'stations' | 'add' | 'pending' | 'users' | 'visits' | 'vehicles';
+type Tab = 'stations' | 'add' | 'pending' | 'users' | 'identity' | 'visits' | 'vehicles';
 
 interface UserInfo {
   email: string;
@@ -1132,6 +1133,7 @@ export default function AdminPanel() {
             { id: 'add', label: 'Agregar', icon: 'M12 4v16m8-8H4' },
             { id: 'pending', label: 'Pendientes', icon: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' },
             { id: 'users', label: 'Usuarios', icon: 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z' },
+            { id: 'identity', label: 'Identidad', icon: 'M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Zm6-10.125a1.875 1.875 0 1 1-3.75 0 1.875 1.875 0 0 1 3.75 0Zm1.294 6.336a6.721 6.721 0 0 1-3.17.789 6.721 6.721 0 0 1-3.168-.789 3.376 3.376 0 0 1 6.338 0Z' },
             { id: 'visits', label: 'Visitas', icon: 'M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z' },
             { id: 'vehicles', label: 'Vehículos', icon: 'M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12' },
           ] as const).map(t => (
@@ -1179,6 +1181,14 @@ export default function AdminPanel() {
             <h2 className="text-sm font-semibold text-gray-900 mb-1">Usuarios registrados</h2>
             <p className="text-xs text-gray-400 mb-5">Gestiona las cuentas y suscripciones de los usuarios</p>
             <UsersTab />
+          </div>
+        )}
+
+        {tab === 'identity' && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900 mb-1">Verificación de identidad</h2>
+            <p className="text-xs text-gray-400 mb-5">Conductores que quieren pedir un cargador en casa (DPI, selfie con DPI y carro con placa)</p>
+            <IdentityTab />
           </div>
         )}
 
