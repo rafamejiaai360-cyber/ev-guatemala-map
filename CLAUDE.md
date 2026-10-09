@@ -526,6 +526,12 @@ a desconocidos en su casa. Decisiones acordadas con él:
   promete: copia del DPI en la nube del admin mientras la cuenta esté activa
   + 1 año, y borrarla si el usuario elimina su cuenta (manual, a cargo de Rafa).
 - `.gitignore` bloquea `verificacion-identidad-*.zip` y `*DPI*`/`*selfie*`.
+- Pestaña **Usuarios** del panel: insignia azul (`VerifiedBadge.tsx`) junto
+  al nombre de los verificados + placa y fecha; botón "Ver aceptaciones"
+  (`GET /api/auth/terms-acceptances?email=`, solo admin) con fecha/hora de
+  Guatemala y la estación cuando aplica. La insignia también sale en el
+  Perfil del propio usuario. **No** se muestra en vistas públicas (reseñas,
+  etc.) — decisión pendiente con Rafa; recomendación: sumarla después.
 - **Fuga cerrada de paso**: `/api/photo/:key` servía CUALQUIER clave de KV,
   incluidos los `user:*` heredados (con hash de contraseña). Confirmado en
   prod el 9 oct 2026 (200 en `/api/photo/user:kv_test2@test.com`). Arreglado

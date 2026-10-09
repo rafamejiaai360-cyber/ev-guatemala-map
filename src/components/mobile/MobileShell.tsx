@@ -10,6 +10,7 @@ import { RouteAlertCard, RouteModeBar } from './RouteMode';
 import { useRouteMode } from './routeEngine';
 import { HostPromo, HostSheetContent, JoinSheetContent } from './Growth';
 import IdentityVerifyModal from '../IdentityVerifyModal';
+import VerifiedBadge from '../VerifiedBadge';
 import {
   Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
   connectorTypes, distanceKm, distanceLabel, formatKw, googleMapsUrl, maxKw, stationType,
@@ -250,7 +251,13 @@ export default function MobileShell() {
             <>
               <div className="m-me">
                 <div className="m-avatar">{currentUser.name.charAt(0).toUpperCase()}</div>
-                <div><b>{currentUser.name}</b><small>{currentUser.email}</small></div>
+                <div>
+                  <b>
+                    {currentUser.name}
+                    {currentUser.identityStatus === 'verified' && <VerifiedBadge size={16} className="m-vbadge" />}
+                  </b>
+                  <small>{currentUser.email}</small>
+                </div>
               </div>
               <div className="m-sect">Datos</div>
               <div className="m-glist">

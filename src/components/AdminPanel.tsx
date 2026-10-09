@@ -5,6 +5,7 @@ import type { ChargerStation } from '../types';
 import EditStationModal from './EditStationModal';
 import VehiclesTab from './admin/VehiclesTab';
 import IdentityTab from './admin/IdentityTab';
+import VerifiedBadge from './VerifiedBadge';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,30 @@ interface UserInfo {
   role: 'admin' | 'user';
   createdAt: string;
   subscriptionEnd?: string;
+  identityStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+  identityPlate?: string;
+  identityVerifiedAt?: string;
+}
+
+interface TermsAcceptance {
+  context: 'register' | 'identity' | 'request_use' | 'host_station';
+  version: string;
+  acceptedAt: string;
+  stationName?: string;
+}
+
+const TERMS_CONTEXT_LABEL: Record<TermsAcceptance['context'], string> = {
+  register: 'Al crear su cuenta',
+  identity: 'Al verificar su identidad',
+  request_use: 'Al solicitar un cargador en casa',
+  host_station: 'Al publicar su cargador en casa',
+};
+
+// Fechas de D1: texto en UTC ("2026-10-09 23:03:35") → hora de Guatemala.
+function gtDateTime(sql: string): string {
+  return new Date(sql.replace(' ', 'T') + 'Z').toLocaleString('es-GT', {
+    timeZone: 'America/Guatemala', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
 }
 
 interface PendingStation {
@@ -593,6 +618,22 @@ function UsersTab() {
   const [confirmResetEmail, setConfirmResetEmail] = useState<string | null>(null);
   const [resettingEmail, setResettingEmail] = useState<string | null>(null);
   const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
+  // Aceptaciones del aviso/términos por usuario (se cargan al abrirlas).
+  const [termsOpenEmail, setTermsOpenEmail] = useState<string | null>(null);
+  const [termsByEmail, setTermsByEmail] = useState<Record<string, TermsAcceptance[] | 'error'>>({});
+
+  async function toggleTerms(email: string) {
+    if (termsOpenEmail === email) { setTermsOpenEmail(null); return; }
+    setTermsOpenEmail(email);
+    try {
+      const res = await fetch(`/api/auth/terms-acceptances?email=${encodeURIComponent(email)}`, { headers: { Authorization: `Bearer ${authToken}` } });
+      if (!res.ok) throw new Error();
+      const rows = await res.json() as TermsAcceptance[];
+      setTermsByEmail(prev => ({ ...prev, [email]: rows }));
+    } catch {
+      setTermsByEmail(prev => ({ ...prev, [email]: 'error' }));
+    }
+  }
 
   useEffect(() => {
     fetch('/api/auth/users', { headers: { Authorization: `Bearer ${authToken}` } })
@@ -744,7 +785,10 @@ function UsersTab() {
               </div>
               <div className="flex-1 min-w-[160px]">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-gray-900">{user.name}</span>
+                  <span className="text-sm font-medium text-gray-900 inline-flex items-center gap-1">
+                    {user.name}
+                    {user.identityStatus === 'verified' && <VerifiedBadge size={15} />}
+                  </span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                     user.role === 'admin' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                     {user.role === 'admin' ? 'Admin' : 'Usuario'}
@@ -752,6 +796,13 @@ function UsersTab() {
                 </div>
                 <div className="text-xs text-gray-400">{user.email}</div>
                 {user.phone && <div className="text-xs text-gray-400">📞 {user.phone}</div>}
+                {user.identityStatus === 'verified' && (
+                  <div className="text-xs text-blue-600">
+                    Identidad revisada{user.identityPlate && ` · Placa ${user.identityPlate}`}
+                    {user.identityVerifiedAt && ` · ${gtDateTime(user.identityVerifiedAt)}`}
+                  </div>
+                )}
+                {user.identityStatus === 'pending' && <div className="text-xs text-amber-600">Verificación de identidad en revisión</div>}
                 <div className="text-xs text-gray-400 mt-0.5">
                   Registro: {new Date(user.createdAt).toLocaleDateString('es-GT')}
                   {user.subscriptionEnd && (
@@ -774,6 +825,10 @@ function UsersTab() {
                     {savingRoleEmail === user.email ? 'Guardando…' : user.role === 'admin' ? 'Quitar admin' : 'Hacer admin'}
                   </button>
                 )}
+                <button onClick={() => toggleTerms(user.email)}
+                  className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-gray-600 flex-shrink-0">
+                  {termsOpenEmail === user.email ? 'Ocultar aceptaciones' : 'Ver aceptaciones'}
+                </button>
                 <button onClick={() => { setEditingEmail(editingEmail === user.email ? null : user.email); setSubEnd(user.subscriptionEnd ?? ''); }}
                   className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-gray-600 flex-shrink-0">
                   {editingEmail === user.email ? 'Cancelar' : 'Suscripción'}
@@ -790,6 +845,30 @@ function UsersTab() {
                 )}
               </div>
             </div>
+
+            {/* Aceptaciones del aviso / términos (prueba de cuándo aceptó) */}
+            {termsOpenEmail === user.email && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-700 mb-1.5">Aceptaciones del aviso y los términos (hora de Guatemala)</p>
+                {!termsByEmail[user.email] ? (
+                  <p className="text-xs text-gray-400">Cargando…</p>
+                ) : termsByEmail[user.email] === 'error' ? (
+                  <p className="text-xs text-red-500">No se pudieron cargar.</p>
+                ) : (termsByEmail[user.email] as TermsAcceptance[]).length === 0 ? (
+                  <p className="text-xs text-gray-400">Sin aceptaciones registradas (cuenta creada antes del aviso, 9 oct 2026).</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {(termsByEmail[user.email] as TermsAcceptance[]).map((t, i) => (
+                      <li key={i} className="text-xs text-gray-600 flex flex-wrap gap-x-2">
+                        <span className="font-medium text-gray-800">{gtDateTime(t.acceptedAt)}</span>
+                        <span>{TERMS_CONTEXT_LABEL[t.context] ?? t.context}{t.stationName && ` · ${t.stationName}`}</span>
+                        <span className="text-gray-400">versión {t.version}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {/* Reset password confirmation */}
             {confirmResetEmail === user.email && (

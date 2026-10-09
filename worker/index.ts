@@ -1675,8 +1675,12 @@ async function handleListUsers(request: Request, env: Env): Promise<Response> {
   if (!env.DB) return json([]);
 
   const { results } = await env.DB.prepare(
-    "SELECT email, name, phone, role, created_at, subscription_end FROM users WHERE account_status = 'active' ORDER BY created_at"
-  ).all<{ email: string; name: string; phone: string | null; role: string; created_at: string; subscription_end: string | null }>();
+    `SELECT email, name, phone, role, created_at, subscription_end, identity_status, identity_plate, identity_verified_at
+     FROM users WHERE account_status = 'active' ORDER BY created_at`
+  ).all<{
+    email: string; name: string; phone: string | null; role: string; created_at: string; subscription_end: string | null;
+    identity_status: string | null; identity_plate: string | null; identity_verified_at: string | null;
+  }>();
 
   return json(results.map(u => ({
     email: u.email,
@@ -1685,6 +1689,32 @@ async function handleListUsers(request: Request, env: Env): Promise<Response> {
     role: u.role,
     createdAt: u.created_at,
     subscriptionEnd: u.subscription_end ?? undefined,
+    identityStatus: u.identity_status ?? 'none',
+    identityPlate: u.identity_plate ? formatPlate(u.identity_plate) : undefined,
+    identityVerifiedAt: u.identity_verified_at ?? undefined,
+  })));
+}
+
+// GET /api/auth/terms-acceptances?email=… — historial de aceptaciones del
+// aviso/términos de un usuario (solo admin), con el nombre de la estación
+// cuando la aceptación fue al pedir o publicar un cargador en casa.
+async function handleListTermsAcceptances(request: Request, env: Env, url: URL): Promise<Response> {
+  const requester = await getUserFromToken(request, env);
+  if (!requester || requester.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return json([]);
+  const email = (url.searchParams.get('email') ?? '').toLowerCase().trim();
+  if (!email) return apiError('email requerido');
+  const { results } = await env.DB.prepare(
+    `SELECT t.context, t.version, t.accepted_at, COALESCE(s1.name, s2.name) AS station_name
+     FROM terms_acceptances t
+     LEFT JOIN stations s1 ON t.context = 'host_station' AND s1.id = t.ref
+     LEFT JOIN station_requests r ON t.context = 'request_use' AND r.id = t.ref
+     LEFT JOIN stations s2 ON s2.id = r.station_id
+     WHERE t.user_email = ?
+     ORDER BY t.id DESC`
+  ).bind(email).all<{ context: string; version: string; accepted_at: string; station_name: string | null }>();
+  return json(results.map(r => ({
+    context: r.context, version: r.version, acceptedAt: r.accepted_at, stationName: r.station_name ?? undefined,
   })));
 }
 
@@ -2724,6 +2754,7 @@ export default {
       if (path === 'auth/set-subscription' && request.method === 'POST') return handleSetSubscription(request, env);
       if (path === 'auth/set-role' && request.method === 'POST') return handleSetRole(request, env);
       if (path === 'auth/users' && request.method === 'GET') return handleListUsers(request, env);
+      if (path === 'auth/terms-acceptances' && request.method === 'GET') return handleListTermsAcceptances(request, env, url);
       if (path === 'auth/delete-user' && request.method === 'POST') return handleDeleteUser(request, env);
       if (path === 'auth/admin-reset-password' && request.method === 'POST') return handleAdminResetPassword(request, env);
       if (path === 'auth/request-password-reset' && request.method === 'POST') return handleRequestPasswordReset(request, env, ctx);
