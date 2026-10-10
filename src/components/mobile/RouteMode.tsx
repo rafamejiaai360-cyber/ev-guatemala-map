@@ -15,7 +15,7 @@ export function RouteModeBar() {
     <div className="m-route m-glass" role="status">
       {hint && (
         <p className="m-route-hint">
-          Te avisamos con un sonido al pasar cerca de una estación de las que ves en el mapa. Deja la app abierta en pantalla. Tu ubicación no sale de tu teléfono.
+          Te avisamos con un sonido al pasar cerca de una estación de las que ves en el mapa. El mapa gira con tu dirección; toca la brújula para poner el norte arriba. Deja la app abierta en pantalla. Tu ubicación no sale de tu teléfono.
           <button type="button" onClick={() => { setHint(false); try { localStorage.setItem('ev_route_hint', '1'); } catch { /* */ } }}>Entendido</button>
         </p>
       )}

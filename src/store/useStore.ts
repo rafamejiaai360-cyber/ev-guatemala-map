@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { chargerStations } from '../data/chargers';
 import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } from '../utils/ocm';
-import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType } from '../types';
+import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType, MyStation } from '../types';
 import { getAllRatings } from '../utils/reviewsApi';
 import { vehicles as baseVehicles } from '../data/vehicles';
 import type { IdentityStatus } from '../utils/identityApi';
@@ -50,6 +50,17 @@ function loadSaved(): string[] {
     return [];
   }
 }
+// "Mi auto" (oct 2026): el id del vehículo elegido se recuerda en el teléfono
+// y, si hay cuenta, también en el servidor (users.vehicle_id).
+const VEHICLE_KEY = 'ev_gt_vehicle';
+function loadVehicleId(): string | null {
+  try { return localStorage.getItem(VEHICLE_KEY); } catch { return null; }
+}
+function storeVehicleId(id: string | null) {
+  try { if (id) localStorage.setItem(VEHICLE_KEY, id); else localStorage.removeItem(VEHICLE_KEY); } catch { /* sin almacenamiento */ }
+}
+type AccountUser = CurrentUser & { vehicleId?: string | null; savedIds?: string[] };
+
 const CUSTOM_KEY = 'ev_gt_custom_stations';
 
 function loadOverrides(): Record<string, ChargerStatus> {
@@ -140,6 +151,16 @@ interface AppState {
   routeRadiusKm: number;
   setRouteRadiusKm: (km: number) => void;
 
+  // Dirección hacia donde va/mira el usuario (grados desde el norte, 0–360).
+  // Viene del GPS en movimiento o de la brújula del teléfono. Solo vive en
+  // el teléfono: no se manda a ningún lado.
+  userHeading: number | null;
+  setUserHeading: (deg: number | null) => void;
+  // Modo ruta: el mapa gira con la dirección del usuario (true) o queda con
+  // el norte arriba (false). Se recuerda en este teléfono.
+  headingUp: boolean;
+  setHeadingUp: (on: boolean) => void;
+
   // Sidebar visibility (mobile)
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -170,7 +191,9 @@ interface AppState {
   isAdminAuthenticated: boolean;
 
   // User auth (JWT system)
-  currentUser: CurrentUser | null;
+  currentUser: AccountUser | null;
+  /** Une "Mi auto" y "Guardadas" del teléfono con los de la cuenta al iniciar sesión. */
+  syncAccountPrefs: (user: AccountUser) => void;
   authToken: string | null;
   authModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
@@ -200,6 +223,11 @@ interface AppState {
   // Ratings (loaded from Worker API)
   ratings: Record<string, RatingInfo>;
   loadRatings: () => Promise<void>;
+
+  // Mis estaciones (dueños): lista propia y estado publicado al instante
+  myStations: MyStation[] | null;
+  loadMyStations: () => Promise<void>;
+  publishStationStatus: (id: string, status: ChargerStatus, note?: string) => Promise<void>;
 }
 
 function computeFiltered(
@@ -254,6 +282,17 @@ const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all
 // Marca este navegador como "del admin" para el contador de visitas. A
 // diferencia de ev_admin_auth, NO se borra al cerrar sesión: así las visitas
 // de Rafa en sus dispositivos no se cuentan aunque luego entre sin sesión.
+// Guarda "Mi auto" / "Guardadas" en la cuenta, sin bloquear la pantalla. Si
+// falla (sin conexión o sin la migración), quedan igual en el teléfono.
+function pushPrefs(token: string | null, body: { vehicleId?: string | null; savedIds?: string[] }) {
+  if (!token) return;
+  fetch('/api/auth/me', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}
+
 export type JoinContext = 'save' | 'aportar' | 'browse';
 
 // Distancia de aviso del modo ruta elegida por el usuario (1, 2 o 5 km).
@@ -264,6 +303,10 @@ function loadRouteRadius(): number {
     if (ROUTE_RADII.includes(v)) return v;
   } catch { /* sin almacenamiento */ }
   return 2;
+}
+
+function loadHeadingUp(): boolean {
+  try { return localStorage.getItem('ev_heading_up') !== '0'; } catch { return true; }
 }
 
 function markNoCountDevice() {
@@ -333,15 +376,23 @@ export const useStore = create<AppState>((set, get) => ({
       const catalog = Array.from(byId.values())
         .sort((a, b) => a.brand.localeCompare(b.brand) || a.model.localeCompare(b.model));
       set({ vehicleCatalog: catalog });
+      // El auto guardado puede ser uno agregado desde el panel (solo en D1).
+      const wanted = get().currentUser?.vehicleId ?? loadVehicleId();
+      if (wanted && get().selectedVehicle?.id !== wanted) {
+        const v = catalog.find((x) => x.id === wanted);
+        if (v) set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v) });
+      }
     } catch {
       // sin API (desarrollo local con vite) se queda la lista base
     }
   },
 
-  selectedVehicle: null,
+  selectedVehicle: baseVehicles.find((v) => v.id === loadVehicleId()) ?? null,
   setSelectedVehicle: (vehicle) => {
     const filteredStations = computeFiltered(get().stations, get().filters, vehicle);
     set({ selectedVehicle: vehicle, filteredStations });
+    storeVehicleId(vehicle?.id ?? null);
+    if (get().currentUser) pushPrefs(get().authToken, { vehicleId: vehicle?.id ?? null });
   },
 
   selectedStationId: null,
@@ -351,6 +402,13 @@ export const useStore = create<AppState>((set, get) => ({
   setUserLocation: (loc) => set({ userLocation: loc }),
   routeMode: false,
   setRouteMode: (on) => set({ routeMode: on }),
+  userHeading: null,
+  setUserHeading: (deg) => set({ userHeading: deg }),
+  headingUp: loadHeadingUp(),
+  setHeadingUp: (on) => {
+    try { localStorage.setItem('ev_heading_up', on ? '1' : '0'); } catch { /* sin almacenamiento */ }
+    set({ headingUp: on });
+  },
   routeRadiusKm: loadRouteRadius(),
   setRouteRadiusKm: (km) => {
     try { localStorage.setItem('ev_route_radius', String(km)); } catch { /* sin almacenamiento */ }
@@ -418,6 +476,27 @@ export const useStore = create<AppState>((set, get) => ({
     const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)); } catch { /* almacenamiento bloqueado */ }
     set({ savedIds: next });
+    if (get().currentUser) pushPrefs(get().authToken, { savedIds: next });
+  },
+
+  syncAccountPrefs: (user) => {
+    const token = get().authToken;
+    // Guardadas: se suman las del teléfono y las de la cuenta (no se pierde nada).
+    const server = user.savedIds ?? [];
+    const merged = Array.from(new Set([...server, ...get().savedIds]));
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(merged)); } catch { /* */ }
+    set({ savedIds: merged });
+    if (merged.length !== server.length) pushPrefs(token, { savedIds: merged });
+    // Mi auto: manda el de la cuenta; si la cuenta no tiene, se sube el del teléfono.
+    if (user.vehicleId) {
+      const v = get().vehicleCatalog.find((x) => x.id === user.vehicleId);
+      storeVehicleId(user.vehicleId);
+      if (v && v.id !== get().selectedVehicle?.id) {
+        set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v) });
+      }
+    } else if (get().selectedVehicle) {
+      pushPrefs(token, { vehicleId: get().selectedVehicle!.id });
+    }
   },
 
   isAdminAuthenticated: localStorage.getItem('ev_admin_auth') === '1',
@@ -439,7 +518,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json() as { token?: string; user?: CurrentUser; error?: string };
+    const data = await res.json() as { token?: string; user?: AccountUser; error?: string };
     if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al iniciar sesión');
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
@@ -448,6 +527,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ isAdminAuthenticated: true });
     }
     set({ authToken: data.token, currentUser: data.user });
+    get().syncAccountPrefs(data.user);
     // Vuelve a pedir las estaciones con el token ya guardado: si es admin,
     // la respuesta ahora trae quién dio de alta cada una.
     if (data.user.role === 'admin') await get().loadDynamicStations();
@@ -459,7 +539,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name, phone, acceptedTerms }),
     });
-    const data = await res.json() as { token?: string; user?: CurrentUser; error?: string };
+    const data = await res.json() as { token?: string; user?: AccountUser; error?: string };
     if (!res.ok || !data.token || !data.user) throw new Error(data.error ?? 'Error al registrarse');
     localStorage.setItem('ev_auth_token', data.token);
     if (data.user.role === 'admin') {
@@ -468,12 +548,13 @@ export const useStore = create<AppState>((set, get) => ({
       set({ isAdminAuthenticated: true });
     }
     set({ authToken: data.token, currentUser: data.user });
+    get().syncAccountPrefs(data.user);
   },
 
   logoutUser: () => {
     localStorage.removeItem('ev_auth_token');
     localStorage.removeItem('ev_admin_auth');
-    set({ authToken: null, currentUser: null, isAdminAuthenticated: false });
+    set({ authToken: null, currentUser: null, isAdminAuthenticated: false, myStations: null });
   },
 
   loadCurrentUser: async () => {
@@ -482,13 +563,14 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) { localStorage.removeItem('ev_auth_token'); set({ authToken: null, currentUser: null }); return; }
-      const user = await res.json() as CurrentUser;
+      const user = await res.json() as AccountUser;
       if (user.role === 'admin') {
         localStorage.setItem('ev_admin_auth', '1');
         markNoCountDevice();
         set({ isAdminAuthenticated: true });
       }
       set({ currentUser: user, authToken: token });
+      get().syncAccountPrefs(user);
     } catch { /* silently fail */ }
   },
 
@@ -503,7 +585,7 @@ export const useStore = create<AppState>((set, get) => ({
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ name, phone }),
     });
-    const data = await res.json() as CurrentUser & { error?: string };
+    const data = await res.json() as AccountUser & { error?: string };
     if (!res.ok) throw new Error(data.error ?? 'Error al actualizar el perfil');
     set({ currentUser: data });
   },
@@ -523,6 +605,54 @@ export const useStore = create<AppState>((set, get) => ({
   contactAdminModalOpen: false,
   setContactAdminModalOpen: (open) => set({ contactAdminModalOpen: open }),
 
+
+  myStations: null,
+  loadMyStations: async () => {
+    const token = get().authToken;
+    if (!token) { set({ myStations: null }); return; }
+    try {
+      const res = await fetch('/api/my-stations', { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json() as MyStation[];
+      if (Array.isArray(data)) set({ myStations: data });
+    } catch { /* sin conexión: se intenta de nuevo al volver a Perfil */ }
+  },
+  publishStationStatus: async (id, status, note = '') => {
+    const token = get().authToken;
+    if (!token) throw new Error('Debes iniciar sesión');
+    const res = await fetch(`/api/stations/${encodeURIComponent(id)}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status, note }),
+    });
+    const data = await res.json().catch(() => ({})) as { error?: string; statusNote?: string | null };
+    if (!res.ok) throw new Error(data.error ?? 'No se pudo guardar el estado');
+    // Se refleja de inmediato en este dispositivo (la lista del servidor puede
+    // tardar hasta un minuto por su caché). Un estado viejo guardado solo en
+    // este navegador ya no debe taparlo.
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const statusNote = data.statusNote ?? undefined;
+    const mine = get().myStations?.some((m) => m.id === id) ?? false;
+    const overrides = { ...get().statusOverrides };
+    delete overrides[id];
+    saveOverrides(overrides);
+    const patch = { status, statusNote, statusUpdatedAt: now, statusByOwner: mine || undefined };
+    const known = get().dynamicStations.some((d) => d.id === id);
+    const base = get().stations.find((x) => x.id === id);
+    const dynamic = known
+      ? get().dynamicStations.map((d) => (d.id === id ? { ...d, ...patch } : d))
+      : base ? [...get().dynamicStations, { ...base, ...patch }] : get().dynamicStations;
+    const stations = buildAllStations(overrides, get().customStations, dynamic, get().dynamicLoaded);
+    set({
+      statusOverrides: overrides,
+      dynamicStations: dynamic,
+      stations,
+      filteredStations: computeFiltered(stations, get().filters, get().selectedVehicle),
+      myStations: get().myStations?.map((m) => (m.id === id
+        ? { ...m, status, statusNote: statusNote ?? null, statusUpdatedAt: now, statusByOwner: true }
+        : m)) ?? null,
+    });
+  },
   ratings: {},
   loadRatings: async () => {
     try {

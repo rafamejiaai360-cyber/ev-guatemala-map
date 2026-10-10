@@ -11,6 +11,8 @@ import { useRouteMode } from './routeEngine';
 import { HostPromo, HostSheetContent, JoinSheetContent } from './Growth';
 import IdentityVerifyModal from '../IdentityVerifyModal';
 import VerifiedBadge from '../VerifiedBadge';
+import { MyStationsSection, StaleStatusSheetContent } from './MyStations';
+import { findStaleStation } from './ownerStatus';
 import {
   Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
   connectorTypes, distanceKm, distanceLabel, formatKw, googleMapsUrl, maxKw, stationType,
@@ -47,6 +49,7 @@ export default function MobileShell() {
     currentUser, isAdminAuthenticated, setAuthModalOpen, openAddStation,
     setProfileModalOpen, setContactAdminModalOpen, setScanModalOpen, logoutUser,
     joinPrompt, setJoinPrompt, openAuth, pendingAddType, setPendingAddType,
+    myStations, loadMyStations,
   } = useStore();
 
   const [tab, setTab] = useState<Tab>('map');
@@ -56,7 +59,17 @@ export default function MobileShell() {
   const [sheet, setSheet] = useState<'none' | 'aportar' | 'filters' | 'host'>('none');
   // La invitación a crear cuenta (JoinSheet) se muestra cuando algo la pide
   // (guardar, aportar sin cuenta, 3.ª ficha) y tiene prioridad sobre las demás.
-  const activeSheet = joinPrompt && !currentUser ? 'join' : sheet;
+  // Recordatorio al dueño: "¿Tu cargador ya está activo?" si lleva 2+ semanas
+  // en mantenimiento/fuera de servicio. Una vez por visita.
+  const [staleDismissed, setStaleDismissed] = useState(() => {
+    try { return sessionStorage.getItem('ev_stale_prompt') === '1'; } catch { return false; }
+  });
+  const staleStation = currentUser && !staleDismissed ? findStaleStation(myStations) : null;
+  const activeSheet = joinPrompt && !currentUser ? 'join' : sheet === 'none' && staleStation ? 'stale' : sheet;
+  function dismissStale() {
+    setStaleDismissed(true);
+    try { sessionStorage.setItem('ev_stale_prompt', '1'); } catch { /* sin almacenamiento */ }
+  }
   const [query, setQuery] = useState('');
   const [showIdentity, setShowIdentity] = useState(false);
 
@@ -83,6 +96,7 @@ export default function MobileShell() {
     if (isWide) setSelectedStationId(null);
   }
   function goTab(next: Tab) {
+    if (next === 'profile' && currentUser) void loadMyStations();
     setDetailId(null);
     if (isWide) setSelectedStationId(null);
     setTab(next);
@@ -109,7 +123,13 @@ export default function MobileShell() {
       setPendingAddType(null);
     }
   }, [currentUser, pendingAddType, openAddStation, setPendingAddType]);
+  // Mis estaciones: se cargan al iniciar sesión (y al abrir Perfil).
+  const userEmail = currentUser?.email;
+  useEffect(() => {
+    if (userEmail) void loadMyStations();
+  }, [userEmail, loadMyStations]);
   function closeSheet() {
+    if (activeSheet === 'stale') dismissStale();
     setSheet('none');
     if (joinPrompt) setJoinPrompt(null);
   }
@@ -228,7 +248,7 @@ export default function MobileShell() {
       <section className={`m-view${tab === 'saved' ? ' on' : ''}${tab === 'saved' && detailStation ? ' pushed' : ''}`} aria-hidden={tab !== 'saved'}>
         <div className="m-screen m-scroll">
           <div className="m-lt">Guardadas</div>
-          <p className="m-sub">Tus estaciones de siempre, a un toque</p>
+          <p className="m-sub">{currentUser ? 'Sincronizadas con tu cuenta, en todos tus dispositivos' : 'Tus estaciones de siempre, a un toque'}</p>
           {savedIds.map((id) => byId.get(id)).filter((s): s is ChargerStation => !!s).map((s) => (
             <StationCard key={s.id} station={s} km={distanceKm(s, userLocation)} rating={ratings[s.id]} onOpen={openDetail} />
           ))}
@@ -278,6 +298,7 @@ export default function MobileShell() {
                 </button>
               </div>
               <p className="m-note" style={{ margin: '6px 4px 0' }}>Necesaria para pedir un cargador en casa. Tu DPI solo lo ve el administrador.</p>
+              <MyStationsSection />
             </>
           ) : (
             <button type="button" className="m-cta" onClick={() => setAuthModalOpen(true)}>
@@ -286,6 +307,16 @@ export default function MobileShell() {
               <span className="go">{Icon.chevR}</span>
             </button>
           )}
+          <div className="m-sect">Mi auto</div>
+          <button type="button" className="m-cta m-myauto" onClick={() => setSheet('filters')}>
+            <span className="ic">{Icon.car}</span>
+            {selectedVehicle ? (
+              <span><b>{selectedVehicle.brand} {selectedVehicle.model}</b><small>{currentUser ? 'Guardado en tu cuenta · ' : ''}El mapa te muestra dónde puede cargar</small></span>
+            ) : (
+              <span><b>Elige tu auto</b><small>Y el mapa te muestra solo dónde puede cargar</small></span>
+            )}
+            <span className="go">{selectedVehicle ? 'Cambiar' : Icon.chevR}</span>
+          </button>
           <div className="m-sect">Comunidad</div>
           <HostPromo onOpen={() => setSheet('host')} />
           {isAdmin && (
@@ -400,6 +431,10 @@ export default function MobileShell() {
             onClose={() => { closeSheet(); setPendingAddType(null); }}
           />
         )}
+      </div>
+      <div className={`m-sheet m-scroll${activeSheet === 'stale' ? ' on' : ''}`} role="dialog" aria-label="Estado de tu cargador" aria-hidden={activeSheet !== 'stale'}>
+        <div className="grab" />
+        {staleStation && <StaleStatusSheetContent station={staleStation} onDone={dismissStale} />}
       </div>
       <div className={`m-sheet m-scroll${activeSheet === 'host' ? ' on' : ''}`} role="dialog" aria-label="Comparte tu cargador" aria-hidden={activeSheet !== 'host'}>
         <div className="grab" />

@@ -2,8 +2,12 @@ import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Tooltip, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+// Permite girar el mapa (modo ruta: "lo que tienes enfrente, arriba").
+// Debe cargarse después de Leaflet y antes de crear el mapa.
+import 'leaflet-rotate';
 import { useStore } from '../store/useStore';
 import { primeRouteSound } from './mobile/routeEngine';
+import { requestCompass, useCompassWhenLocated } from './mobile/heading';
 import type { ChargerStation } from '../types';
 
 const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
@@ -57,11 +61,14 @@ function makeClusterIcon(count: number, hasResidential: boolean) {
   return icon;
 }
 
+// Punto azul del usuario con un "haz" que apunta hacia donde va o mira
+// (oculto mientras no se conoce la dirección). El haz se gira desde
+// UserMarker sin recrear el ícono.
 const userIcon = L.divIcon({
-  className: '',
-  html: `<div style="background:#0a84ff;width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 6px rgba(10,132,255,0.18),0 2px 6px rgba(0,0,0,0.3);"></div>`,
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
+  className: 'ev-me-wrap',
+  html: '<div class="ev-me"><span class="ev-me-cone"></span><span class="ev-me-dot"></span></div>',
+  iconSize: [56, 56],
+  iconAnchor: [28, 28],
 });
 
 const CONNECTOR_LEVEL_STYLE: Record<string, React.CSSProperties> = {
@@ -164,6 +171,15 @@ function MapController({ variant }: { variant: Variant }) {
     if (useStore.getState().selectedStationId || Date.now() - lastDragRef.current < 15000) return;
     map.panTo(at, { animate: true });
   }, [userLocation, routeMode, map]);
+
+  // Modo ruta con "girar con mi dirección": lo que el usuario tiene enfrente
+  // queda arriba. Fuera del modo ruta (o con "norte arriba") vuelve a 0.
+  const userHeading = useStore((s) => s.userHeading);
+  const headingUp = useStore((s) => s.headingUp);
+  useEffect(() => {
+    const target = routeMode && headingUp && userHeading != null ? (360 - userHeading) % 360 : 0;
+    if (Math.round(map.getBearing()) !== Math.round(target)) map.setBearing(target);
+  }, [routeMode, headingUp, userHeading, map]);
 
   return null;
 }
@@ -328,6 +344,11 @@ export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
         zoom={11}
         style={{ width: '100%', height: '100%' }}
         zoomControl={false}
+        rotate={true}
+        bearing={0}
+        touchRotate={false}
+        rotateControl={false}
+        shiftKeyRotate={false}
       >
         {/* Mapa base: las mismas imágenes de OpenStreetMap de siempre (gratis,
             sin clave), pasadas a grises suaves con un filtro CSS (.ev-tiles en
@@ -351,6 +372,7 @@ export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
 
         {/* User location marker */}
         <UserMarker />
+        <CompassStarter />
 
         {variant === 'mobile' ? <MobileMapTools /> : <ZoomControls />}
       </MapContainer>
@@ -360,11 +382,46 @@ export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
   );
 }
 
+/** Grados que el mapa está girado (0 = norte arriba). */
+function useMapBearing(): number {
+  const map = useMap();
+  const [bearing, setBearing] = useState(() => Math.round(map.getBearing()));
+  // 'rotate' lo dispara leaflet-rotate (no está en los tipos de Leaflet).
+  useEffect(() => {
+    const onRotate = () => setBearing(Math.round(map.getBearing()));
+    map.on('rotate', onRotate);
+    return () => { map.off('rotate', onRotate); };
+  }, [map]);
+  return bearing;
+}
+
+function CompassStarter() {
+  useCompassWhenLocated();
+  return null;
+}
+
 function UserMarker() {
-  const { userLocation } = useStore();
+  const { userLocation, userHeading } = useStore();
+  const bearing = useMapBearing();
+  const ref = useRef<L.Marker | null>(null);
+  const angleRef = useRef<number | null>(null);
+  // El haz apunta a la dirección real: rumbo + giro del mapa (los íconos no
+  // giran con el mapa, así que hay que sumarlo). El ángulo se acumula sin
+  // "dar la vuelta" en 360° para que la animación tome siempre el giro corto.
+  useEffect(() => {
+    const cone = ref.current?.getElement()?.querySelector<HTMLElement>('.ev-me-cone');
+    if (!cone) return;
+    if (userHeading == null) { cone.style.opacity = '0'; return; }
+    const want = (userHeading + bearing) % 360;
+    const prev = angleRef.current;
+    const next = prev == null ? want : prev + ((((want - prev) % 360) + 540) % 360) - 180;
+    angleRef.current = next;
+    cone.style.opacity = '1';
+    cone.style.transform = `rotate(${next}deg)`;
+  }, [userHeading, bearing, userLocation]);
   if (!userLocation) return null;
   return (
-    <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
+    <Marker ref={ref} position={[userLocation.lat, userLocation.lng]} icon={userIcon} zIndexOffset={2000}>
       <Popup>
         <div className="text-xs text-gray-700 px-1 py-0.5 font-medium">Tu ubicación</div>
       </Popup>
@@ -397,7 +454,8 @@ function ZoomControls() {
 function MobileMapTools() {
   const map = useMap();
   const locate = useLocate();
-  const { routeMode, setRouteMode } = useStore();
+  const { routeMode, setRouteMode, headingUp, setHeadingUp } = useStore();
+  const bearing = useMapBearing();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Que tocar los botones no arrastre ni haga zoom en el mapa de fondo
@@ -417,7 +475,7 @@ function MobileMapTools() {
         </button>
       </div>
       <div className="m-tgroup m-glass">
-        <button type="button" className="m-tbtn" aria-label="Mi ubicación" onClick={locate}>
+        <button type="button" className="m-tbtn" aria-label="Mi ubicación" onClick={() => { requestCompass(); locate(); }}>
           <svg viewBox="0 0 24 24"><path d="M20.5 3.5 3.5 10.8l7 2.7 2.7 7z" /></svg>
         </button>
         <button
@@ -426,11 +484,30 @@ function MobileMapTools() {
           aria-label={routeMode ? 'Apagar modo ruta' : 'Encender modo ruta'}
           aria-pressed={routeMode}
           title="Modo ruta: avisa al pasar cerca de una estación"
-          onClick={() => { if (!routeMode) primeRouteSound(); setRouteMode(!routeMode); }}
+          onClick={() => { if (!routeMode) { primeRouteSound(); requestCompass(); } setRouteMode(!routeMode); }}
         >
           <svg viewBox="0 0 24 24"><path d="M5 17h14M6.5 17V11l1.8-4.2A2 2 0 0 1 10.1 5.5h3.8a2 2 0 0 1 1.8 1.3L17.5 11v6" /><path d="M6.5 11h11" /><circle cx="8.5" cy="17.5" r="1.5" /><circle cx="15.5" cy="17.5" r="1.5" /></svg>
         </button>
       </div>
+      {/* Brújula: en modo ruta alterna "girar con mi dirección" / "norte
+          arriba". La aguja roja siempre señala el norte real. */}
+      {(routeMode || bearing !== 0) && (
+        <div className="m-tgroup m-glass">
+          <button
+            type="button"
+            className={`m-tbtn m-compass${routeMode && headingUp ? ' on' : ''}`}
+            aria-label={headingUp ? 'Poner el norte arriba' : 'Girar el mapa con mi dirección'}
+            aria-pressed={routeMode && headingUp}
+            title={headingUp ? 'El mapa gira con tu dirección. Toca para poner el norte arriba.' : 'Norte arriba. Toca para que el mapa gire con tu dirección.'}
+            onClick={() => { if (!headingUp) requestCompass(); setHeadingUp(!headingUp); }}
+          >
+            <svg viewBox="0 0 24 24" style={{ transform: `rotate(${bearing}deg)` }}>
+              <path className="n" d="M12 3.5 15 12H9z" />
+              <path className="s" d="M12 20.5 9 12h6z" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

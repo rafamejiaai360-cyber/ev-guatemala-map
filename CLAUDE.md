@@ -436,6 +436,25 @@ pantalla encendida (con la app cerrada haría falta app nativa de tienda).
 Sin el modo ruta, la ubicación sigue siendo una foto (al abrir el mapa o al
 tocar "mi ubicación"), no se actualiza sola.
 
+**Dirección del usuario y mapa que gira (7 oct 2026, publicado en prod)**: a pedido de Rafa ("el usuario se pierde con el mapa fijo al
+norte"). (1) El punto azul tiene un haz (`.ev-me-cone`) que apunta a
+`userHeading` (store, grados desde el norte). Fuentes en
+`mobile/heading.ts`: rumbo del GPS del modo ruta cuando hay velocidad ≥ 1,5 m/s
+(`pushGpsHeading`, manda 4 s sobre la brújula) y brújula del teléfono
+(`deviceorientationabsolute` en Android sin permiso; en iPhone
+`webkitCompassHeading` tras `requestCompass()`, que **debe** llamarse dentro de
+un toque: se llama al tocar "Mi ubicación", encender el modo ruta y la
+brújula). Suavizado circular, solo actualiza si cambia ≥ 2°. (2) Mapa
+giratorio con `leaflet-rotate` (0.2.8, única dependencia nueva; tipos propios
+en `src/types/leaflet-rotate*.d.ts`; `rotate` activado con giro a dos dedos,
+botón propio y Shift+rueda **desactivados**). Convención: `setBearing(360 -
+rumbo)` deja el rumbo arriba; los íconos no giran con el mapa, por eso el haz
+se dibuja a `rumbo + bearing`. En modo ruta con `headingUp` (por defecto sí,
+`localStorage.ev_heading_up`) `MapController` gira el mapa; fuera del modo
+ruta siempre vuelve al norte. Botón brújula (`.m-compass`, aguja roja = norte
+real) visible en modo ruta: alterna girar / norte arriba. Todo en el
+teléfono, nada se envía al servidor. Sin migración de base de datos.
+
 **Tema único en paneles y ventanas (oct 2026)**: el mapa ya tenía el estilo
 nuevo (clases `m-*`); el panel de admin, el login, el perfil y las ventanas de
 alta/edición seguían con el estilo viejo de Tailwind. `src/theme.css`
@@ -470,6 +489,49 @@ más visitantes se registren y, sobre todo, publiquen su cargador en casa
   → `NULL`; `AuthModal` lo marca "(opcional)"). Se pide en `AddStationModal`
   solo para residenciales si la cuenta no lo tiene, y se guarda con
   `updateProfile` antes de enviar.
+
+**Mi auto + Guardadas en la cuenta (6 oct 2026, publicado en prod)**: con sesión, el auto elegido y las estaciones guardadas viajan con la
+cuenta (columnas `users.vehicle_id` y `users.saved_station_ids`, JSON, máx.
+300). `GET /api/auth/me` y el login devuelven `vehicleId`/`savedIds`
+(`meResponse()`); `PATCH /api/auth/me` los acepta (503 si faltan las columnas,
+sin romper nada). En el store, `syncAccountPrefs()` al iniciar sesión:
+Guardadas = unión de lo local y lo de la cuenta (nunca se pierde nada); auto =
+el de la cuenta si tiene, si no se sube el local. Sin cuenta todo sigue en
+`localStorage` (`ev_gt_saved_stations`, `ev_gt_vehicle`). Perfil muestra la
+sección "Mi auto" (abre la hoja Filtros). **Migración manual**:
+`docs/migracion-mi-auto.sql` — aplicada a `ev-guatemala-db-staging` y
+`ev-guatemala-db` (6 oct 2026) — no repetir.
+
+**Mis estaciones + estado publicado por el dueño (7 oct 2026, publicado en prod)**: dueño = `owner_email`, o quien registró una
+residencial (`submitted_by`); quien propuso una pública NO es dueño.
+`GET /api/my-stations` (`handleGetMyStations`) lista las suyas con estado de
+aprobación y **solo el número** de "Solicitar uso" (30 días / total) — los
+datos de quién pidió siguen siendo solo del admin. `POST
+/api/stations/:id/status` (`handleSetStationStatus`, dueño o admin): estado
+`active|maintenance|offline` + nota opcional (máx. 140) **al instante, sin
+moderación** (decisión de Rafa: un "fuera de servicio" que espera aprobación
+llega tarde); deja evento `status_changed` y aviso a Telegram. Columnas nuevas
+`stations.status_note`, `status_updated_at`, `status_source` (`owner|admin`);
+la API pública expone `statusNote/statusUpdatedAt/statusByOwner` y **ahora
+incluye las `offline`** (antes se ocultaban; pin gris + punto rojo). Una
+edición/aprobación del admin que cambia `status` marca `status_source='admin'`
+y borra la nota. Admin: `GET|POST /api/stations/:id/owner` asigna/quita dueño
+(debe tener cuenta; evento `owner_assigned`), botón de persona en la lista de
+Estaciones del panel. **Se corrigió** que los puntos de estado de esa lista
+solo cambiaban `localStorage` del navegador del admin (`statusOverrides`):
+ahora guardan en D1 vía el mismo endpoint. UI: `mobile/MyStations.tsx`
+(sección en Perfil con 3 luces, nota, "Sugerir cambios" → EditStationModal
+como propuesta) y recordatorio "¿Tu cargador ya está activo?" si lleva ≥ 14
+días en mantenimiento/fuera de servicio (una vez por visita,
+`sessionStorage.ev_stale_prompt`); la ficha muestra la luz grande con
+"Actualizado por el dueño hace X" y la nota. **Migración manual**:
+`docs/migracion-mis-estaciones.sql` — aplicada a `ev-guatemala-db-staging`
+y `ev-guatemala-db` (6–7 oct 2026) — no repetir (sin las columnas,
+`/api/stations` falla y el mapa cae a la semilla). En staging, la
+estación `guat-prueba` quedó asignada a la cuenta de Rafa para que pruebe.
+Ojo: staging **no tenía** la tabla `station_requests` (prod sí) — se creó a
+mano el 6 oct 2026; antes eso escondía toda la sección (ahora, si falla el
+conteo, la lista se muestra igual con 0 solicitudes).
 
 **Ubicación aproximada de residenciales (oct 2026)**: para quitarle al dueño
 el miedo a "publicar dónde vivo". `handleGetStationsFromD1`, para quien no es
