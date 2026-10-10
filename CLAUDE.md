@@ -553,8 +553,8 @@ por el flujo existente "Solicitar uso" (el admin media el contacto).
 `EditStationModal` solo envía campos cambiados, así que sugerir una corrección
 sin tocar el mapa no "mueve" la casa a la ubicación aproximada.
 
-**Verificación de identidad + aviso de responsabilidad (9 oct 2026, rama
-`verificacion-identidad`, en staging, pendiente de visto bueno de Rafa)**:
+**Verificación de identidad + aviso de responsabilidad (9 oct 2026,
+publicado en prod el 10 oct 2026 con visto bueno de Rafa)**:
 motivo — a Rafa le señalaron en un evento el riesgo para el dueño de recibir
 a desconocidos en su casa. Decisiones acordadas con él:
 - **Pedir un cargador en casa exige identidad revisada**
@@ -597,11 +597,11 @@ a desconocidos en su casa. Decisiones acordadas con él:
 - **Fuga cerrada de paso**: `/api/photo/:key` servía CUALQUIER clave de KV,
   incluidos los `user:*` heredados (con hash de contraseña). Confirmado en
   prod el 9 oct 2026 (200 en `/api/photo/user:kv_test2@test.com`). Arreglado
-  en esta rama; sigue abierto en prod hasta el merge.
+  al publicar (10 oct 2026).
 - **Migración manual**: `docs/migracion-identidad.sql` (ALTER no
   re-ejecutables + CREATE). Aplicada a `ev-guatemala-db-staging` el 9 oct
-  2026 vía MCP. **Falta prod, ANTES del merge** (sin columnas, el registro y
-  las solicitudes fallan).
+  2026 vía MCP, y a `ev-guatemala-db` antes del merge (comprobado el 10 oct
+  2026: columnas, tablas e índices presentes) — no repetir.
 - Wrangler: la sesión OAuth había vencido (ago 2026); en una shell no
   interactiva no se renueva. Se renovó con `npx wrangler whoami` en la
   terminal de la app (Rafa autorizó en el navegador).
