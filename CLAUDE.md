@@ -606,8 +606,8 @@ a desconocidos en su casa. Decisiones acordadas con él:
   interactiva no se renueva. Se renovó con `npx wrangler whoami` en la
   terminal de la app (Rafa autorizó en el navegador).
 
-**Adaptadores que presta la estación (10 oct 2026, rama `adaptadores`, en
-staging, pendiente de visto bueno de Rafa)**: idea de Rafa tras cargar en Naves
+**Adaptadores que presta la estación (10 oct 2026, publicado en prod con
+visto bueno de Rafa)**: idea de Rafa tras cargar en Naves
 z.15 (GB/T + CCS1) con su auto CCS2 gracias a un adaptador prestado. Columna
 `stations.adapters` (JSON, lista de conectores de AUTO que cargan ahí con el
 adaptador; NULL = ninguno). Casilla "La estación presta adaptadores" + chips
@@ -620,10 +620,9 @@ cuenta los adaptadores como conector disponible — por tipo de conector y por
 si el auto elegido solo carga ahí gracias al adaptador, "Tu X carga aquí con
 el adaptador"; la tarjeta de la lista muestra "+ adaptador". **Migración
 manual**: `docs/migracion-adaptadores.sql` — aplicada a
-`ev-guatemala-db-staging` (10 oct 2026); **falta prod antes del merge** (sin la
-columna, `/api/stations` falla y el mapa cae a la semilla). En staging quedó
-la estación de prueba `prueba-adaptador-claude` (marcarla `rejected` al
-terminar).
+`ev-guatemala-db-staging` y `ev-guatemala-db` (10 oct 2026) — no repetir
+(sin la columna, `/api/stations` falla y el mapa cae a la semilla). La
+estación de prueba `prueba-adaptador-claude` de staging quedó `rejected`.
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
