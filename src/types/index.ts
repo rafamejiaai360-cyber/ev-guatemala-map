@@ -30,6 +30,9 @@ export interface ChargerStation {
   lng: number;
   status: ChargerStatus;
   connectors: Connector[];
+  /** Conectores de AUTO que también cargan aquí con un adaptador que presta
+   *  la estación (ej. CCS2 en una estación GB/T + CCS1). Oct 2026. */
+  adapters?: ConnectorType[];
   network: string;
   access: 'public' | 'semi-public' | 'private';
   notes?: string;

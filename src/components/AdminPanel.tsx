@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import type { ChargerStatus, ConnectorType, ChargerLevel, StationType } from '../types';
+import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
+import { connectorName } from './mobile/shared';
 import type { ChargerStation } from '../types';
 import EditStationModal from './EditStationModal';
 import VehiclesTab from './admin/VehiclesTab';
@@ -54,6 +56,7 @@ interface PendingStation {
   lat: number;
   lng: number;
   connectors: Array<{ type: string; power_kw: number; level: string }>;
+  adapters?: string[];
   network: string;
   access: string;
   submittedBy: string;
@@ -77,6 +80,7 @@ const CHANGE_LABELS: Record<string, string> = {
   lat: 'Latitud',
   lng: 'Longitud',
   connectors: 'Conectores',
+  adapters: 'Adaptadores',
   notes: 'Notas',
 };
 
@@ -88,6 +92,9 @@ const TYPE_LABELS: Record<string, string> = {
 function formatChangeValue(value: unknown, key?: string): string {
   if (value == null || value === '') return '—';
   if (key === 'type' && typeof value === 'string') return TYPE_LABELS[value] ?? value;
+  if (key === 'adapters' && Array.isArray(value)) {
+    return value.length ? value.map(t => connectorName(String(t))).join(', ') : 'Ninguno';
+  }
   if (Array.isArray(value)) {
     return value
       .map(c => {
@@ -111,6 +118,7 @@ function currentChangeValue(station: PendingStation, key: string): unknown {
     case 'lat': return station.lat;
     case 'lng': return station.lng;
     case 'connectors': return station.connectors;
+    case 'adapters': return station.adapters ?? [];
     case 'notes': return station.notes;
     default: return undefined;
   }
@@ -154,6 +162,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
   const [connectors, setConnectors] = useState<ConnectorRow[]>([{ type: 'Type2', power_kw: null }]);
+  const [adapters, setAdapters] = useState<AdaptersValue>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,6 +191,8 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
     if (lat == null || lng == null) { setError('Resuelve la ubicación primero'); return; }
     if (lat < 13 || lat > 18 || lng < -93 || lng > -88) { setError('Coordenadas fuera de Guatemala'); return; }
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
+    const adaptersMsg = adaptersError(adapters);
+    if (adaptersMsg) { setError(adaptersMsg); return; }
 
     setSubmitting(true);
     try {
@@ -193,6 +204,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
           zone: zone.trim() || 'Guatemala', lat, lng,
           network: network.trim() || 'Desconocido', status: 'active',
           connectors: connectors.map(c => ({ type: c.type, ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }) })),
+          adapters: cleanAdapters(adapters, connectors.map(c => c.type)),
           access, source: 'Manual', ...(notes.trim() && { notes: notes.trim() }),
         }),
       });
@@ -201,7 +213,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
       const savedName = name.trim();
       setType('public');
       setName(''); setAddress(''); setZone(''); setMapsUrl(''); setLat(null); setLng(null);
-      setNetwork(''); setNotes(''); setAccess('public'); setConnectors([{ type: 'Type2', power_kw: null }]);
+      setNetwork(''); setNotes(''); setAccess('public'); setConnectors([{ type: 'Type2', power_kw: null }]); setAdapters(null);
       onSuccess(savedName);
     } catch (e) { setError(e instanceof Error ? e.message : 'Error al guardar'); }
     finally { setSubmitting(false); }
@@ -319,6 +331,8 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
           ))}
         </div>
       </div>
+
+      <AdaptersField value={adapters} onChange={setAdapters} stationConnectors={connectors.map(c => c.type)} />
 
       {/* Notes */}
       <div>
@@ -651,6 +665,11 @@ function PendingTab() {
                           {station.connectors.map((c, i) => (
                             <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
                               {c.type}{c.power_kw ? ` ${c.power_kw}kW` : ''}
+                            </span>
+                          ))}
+                          {station.adapters?.map(t => (
+                            <span key={`a-${t}`} className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded font-medium">
+                              Adaptador → {connectorName(t)}
                             </span>
                           ))}
                         </div>

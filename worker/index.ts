@@ -160,6 +160,7 @@ interface FullStationRow {
   network: string | null;
   access: string;
   connectors: string;
+  adapters: string | null;
   notes: string | null;
   source: string | null;
   google_maps_url: string | null;
@@ -172,6 +173,22 @@ interface FullStationRow {
 
 async function getStation(db: D1Database, stationId: string): Promise<FullStationRow | null> {
   return db.prepare('SELECT * FROM stations WHERE id = ?').bind(stationId).first<FullStationRow>();
+}
+
+// Adaptadores que presta la estación (oct 2026): lista de conectores de AUTO
+// que también pueden cargar ahí gracias a un adaptador (ej. Naves z.15 tiene
+// GB/T y CCS1 y presta adaptador para CCS2). Se guarda como JSON en
+// stations.adapters; NULL = la estación no reportó adaptadores.
+const STATION_CONNECTORS = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
+function sanitizeAdapters(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return Array.from(new Set(v.filter((c): c is string => typeof c === 'string' && STATION_CONNECTORS.includes(c))));
+}
+function adaptersToDb(list: string[]): string | null {
+  return list.length ? JSON.stringify(list) : null;
+}
+function parseAdapters(raw: string | null | undefined): string[] {
+  try { return sanitizeAdapters(JSON.parse(raw || '[]')); } catch { return []; }
 }
 
 // ─── Espejo D1 → Notion (solo lectura para humanos) ──────────────────────────
@@ -189,7 +206,7 @@ function stationToNotionProperties(s: FullStationRow): Record<string, unknown> {
     'Zona': { rich_text: [{ text: { content: s.zone ?? 'Guatemala' } }] },
     'Red': { rich_text: [{ text: { content: s.network ?? 'Desconocido' } }] },
     'Dirección': { rich_text: [{ text: { content: s.address ?? '' } }] },
-    'Conectores': { rich_text: [{ text: { content: s.connectors } }] },
+    'Conectores': { rich_text: [{ text: { content: s.adapters ? `${s.connectors} · Adaptador para: ${parseAdapters(s.adapters).join(', ')}` : s.connectors } }] },
     'Acceso': { rich_text: [{ text: { content: s.access } }] },
     'Fuente': { rich_text: [{ text: { content: s.source || 'Manual' } }] },
     'Notas': { rich_text: s.notes ? [{ text: { content: s.notes.slice(0, 1900) } }] : [] },
@@ -622,6 +639,7 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
     zone?: string; lat: number; lng: number;
     network?: string; status?: string; type?: string;
     connectors?: Array<{ type: string; power_kw: number; level: string }>;
+    adapters?: string[];
     access?: string; source?: string; notes?: string; acceptedTerms?: boolean;
   };
 
@@ -668,11 +686,12 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO stations (id, type, name, address, zone, lat, lng, status, network, access,
-         connectors, notes, source, google_maps_url, submitted_by, owner_email, approval_status, verification_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
+         connectors, adapters, notes, source, google_maps_url, submitted_by, owner_email, approval_status, verification_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
     ).bind(
       body.id, type, body.name, body.address ?? '', body.zone ?? 'Guatemala', body.lat, body.lng,
       body.network ?? 'Desconocido', access, JSON.stringify(body.connectors ?? []),
+      adaptersToDb(sanitizeAdapters(body.adapters).filter(a => !(body.connectors ?? []).some(c => c.type === a))),
       body.notes ?? null, body.source ?? 'Manual',
       `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}`,
       submittedBy || null, ownerEmail, isPending ? 'pending' : 'active',
@@ -732,6 +751,7 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
       lat: s.lat,
       lng: s.lng,
       connectors: parseConnectors(s.connectors),
+      adapters: parseAdapters(s.adapters),
       network: s.network || 'Desconocido',
       access: s.access || 'public',
       submittedBy: s.submitted_by || 'anónimo',
@@ -758,6 +778,7 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
       lat: p.lat,
       lng: p.lng,
       connectors: parseConnectors(p.connectors),
+      adapters: parseAdapters(p.adapters),
       network: p.network || 'Desconocido',
       access: p.access || 'public',
       submittedBy: p.submitted_by || 'anónimo',
@@ -775,7 +796,7 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
 }
 
 // Campos editables de una estación que una propuesta puede tocar.
-const EDITABLE_FIELDS = ['name', 'address', 'zone', 'network', 'access', 'status', 'type', 'connectors', 'lat', 'lng', 'notes'] as const;
+const EDITABLE_FIELDS = ['name', 'address', 'zone', 'network', 'access', 'status', 'type', 'connectors', 'adapters', 'lat', 'lng', 'notes'] as const;
 
 // Construye los UPDATE de estación a partir de cambios normalizados,
 // registrando old→new para el evento. Devuelve fragmentos SET y valores.
@@ -799,6 +820,15 @@ function buildStationUpdate(
       oldVal = current.connectors;
       if (newVal === oldVal) continue;
       sets.push('connectors = ?');
+      values.push(newVal);
+      diff.push({ field, old: oldVal, new: newVal });
+      continue;
+    }
+    if (field === 'adapters') {
+      newVal = adaptersToDb(sanitizeAdapters(changes.adapters));
+      oldVal = adaptersToDb(parseAdapters(current.adapters));
+      if (newVal === oldVal) continue;
+      sets.push('adapters = ?');
       values.push(newVal);
       diff.push({ field, old: oldVal, new: newVal });
       continue;
@@ -1016,6 +1046,7 @@ interface StationRow {
   lng: number;
   status: string;
   connectors: string;
+  adapters: string | null;
   network: string | null;
   access: string;
   notes: string | null;
@@ -1073,7 +1104,7 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
   }
 
   const { results } = await env.DB.prepare(
-    `SELECT s.id, s.type, s.name, s.address, s.zone, s.lat, s.lng, s.status, s.connectors, s.network, s.access,
+    `SELECT s.id, s.type, s.name, s.address, s.zone, s.lat, s.lng, s.status, s.connectors, s.adapters, s.network, s.access,
             s.notes, s.verification_status, s.google_maps_url, s.last_confirmed_at,
             s.confirm_count, s.open_reports, s.submitted_by, u.name AS submitted_by_name,
             s.status_note, s.status_updated_at, s.status_source
@@ -1096,6 +1127,7 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       const parsed = JSON.parse(r.connectors || '[]');
       if (Array.isArray(parsed)) connectors = parsed;
     } catch {}
+    const adapters = parseAdapters(r.adapters);
     // `verification` es el campo legado (pending|verified|error) que clientes
     // viejos entienden; `freshness` expone el estado real (incluye stale).
     const verification =
@@ -1117,6 +1149,7 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       statusUpdatedAt: r.status_updated_at || undefined,
       statusByOwner: r.status_source === 'owner' || undefined,
       connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
+      ...(adapters.length ? { adapters } : {}),
       network: r.network || 'Desconocido',
       access: ['public', 'semi-public', 'private'].includes(r.access) ? r.access : 'public',
       // El historial de verificación incluido en `notes` lleva el correo de
@@ -2225,6 +2258,7 @@ function normalizeStationChanges(body: Record<string, unknown>): { changes: Reco
   if (typeof body.status === 'string' && ['active', 'maintenance', 'offline'].includes(body.status)) changes.status = body.status;
   if (typeof body.type === 'string' && ['public', 'residential'].includes(body.type)) changes.type = body.type;
   if (Array.isArray(body.connectors)) changes.connectors = body.connectors;
+  if (Array.isArray(body.adapters)) changes.adapters = sanitizeAdapters(body.adapters);
   if (typeof body.lat === 'number') {
     if (body.lat < 13 || body.lat > 18) return { changes, error: 'lat fuera de rango para Guatemala' };
     changes.lat = body.lat;

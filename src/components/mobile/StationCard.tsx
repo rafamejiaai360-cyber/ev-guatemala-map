@@ -30,6 +30,7 @@ export default function StationCard({
         <span className="m-tags">
           {kw > 0 && <span className="m-tag">hasta {formatKw(kw)}</span>}
           {connectorTypes(station).slice(0, 3).map((c) => <span key={c} className="m-tag">{c}</span>)}
+          {!!station.adapters?.length && <span className="m-tag adapt">+ adaptador</span>}
         </span>
         {rating && rating.count > 0 && (
           <span className="m-rate"><span>★</span> {rating.avg.toFixed(1).replace('.', ',')}</span>
