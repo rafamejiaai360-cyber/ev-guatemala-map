@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS stations (
   network TEXT,
   access TEXT NOT NULL DEFAULT 'public',       -- public | semi-public | private
   connectors TEXT NOT NULL DEFAULT '[]',       -- JSON: [{type, power_kw, level}]
+  adapters TEXT,                               -- JSON: ["CCS2"] conectores de auto que cargan con adaptador prestado; NULL = ninguno
   notes TEXT,
   source TEXT,                                 -- Manual | Semilla verificada | OCM | etc
   google_maps_url TEXT,

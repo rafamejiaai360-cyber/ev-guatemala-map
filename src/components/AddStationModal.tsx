@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import LocationPicker from './LocationPicker';
 import TermsNotice from './TermsNotice';
 import type { ConnectorType, ChargerLevel, StationType } from '../types/index';
+import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
@@ -37,6 +38,7 @@ export default function AddStationModal() {
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
   const [connectors, setConnectors] = useState<ConnectorRow[]>([{ type: 'Type2', power_kw: null }]);
+  const [adapters, setAdapters] = useState<AdaptersValue>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -79,6 +81,8 @@ export default function AddStationModal() {
       return;
     }
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
+    const adaptersMsg = adaptersError(adapters);
+    if (adaptersMsg) { setError(adaptersMsg); return; }
     const phoneDigits = ownerPhone.replace(/[^\d]/g, '').replace(/^502/, '');
     if (needsPhone && !/^\d{8}$/.test(phoneDigits)) {
       setError('Escribe tu teléfono de 8 dígitos para que podamos contactarte por tu cargador');
@@ -109,6 +113,7 @@ export default function AddStationModal() {
             type: c.type,
             ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }),
           })),
+          adapters: cleanAdapters(adapters, connectors.map(c => c.type)),
           access,
           source: 'Manual',
           ...(notes.trim() && { notes: notes.trim() }),
@@ -141,6 +146,7 @@ export default function AddStationModal() {
     setLat(null); setLng(null);
     setNetwork(''); setNotes(''); setAccess('public');
     setConnectors([{ type: 'Type2', power_kw: null }]);
+    setAdapters(null);
     setSuccess(false); setPendingApproval(false); setError(null); setHostTerms(false);
     setLocationResetKey(k => k + 1);
   }
@@ -401,6 +407,8 @@ export default function AddStationModal() {
                   ))}
                 </div>
               </div>
+
+              <AdaptersField value={adapters} onChange={setAdapters} stationConnectors={connectors.map(c => c.type)} />
 
               {/* Notes */}
               <div>

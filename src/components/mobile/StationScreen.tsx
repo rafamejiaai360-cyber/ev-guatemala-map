@@ -25,7 +25,7 @@ interface Props {
 // - `notes` de una residencial solo llega de la API si quien pregunta es admin.
 // - quién dio de alta la estación solo se muestra a admins.
 export default function StationScreen({ station, backLabel, onBack }: Props) {
-  const { currentUser, userLocation, setAuthModalOpen, savedIds, toggleSaved, ratings, setJoinPrompt } = useStore();
+  const { currentUser, userLocation, setAuthModalOpen, savedIds, toggleSaved, ratings, setJoinPrompt, selectedVehicle } = useStore();
   const [showEdit, setShowEdit] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
   const [showRequestUse, setShowRequestUse] = useState(false);
@@ -41,6 +41,13 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
   const saved = savedIds.includes(station.id);
   const dist = distanceLabel(distanceKm(station, userLocation));
   const rating = ratings[station.id];
+  // Adaptadores que presta la estación; si el auto elegido solo carga aquí
+  // gracias a uno, se le avisa para que lo pida al llegar.
+  const adapters = station.adapters ?? [];
+  const carConnectors = selectedVehicle?.compatible_connectors ?? [];
+  const carNeedsAdapter = carConnectors.length > 0
+    && !station.connectors.some((c) => carConnectors.includes(c.type))
+    && adapters.some((a) => carConnectors.includes(a));
 
   return (
     <>
@@ -160,6 +167,19 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
               <span className={`m-pill ${station.status}`}>{STATUS_LABEL[station.status]}</span>
             </div>
           ))}
+          {adapters.length > 0 && (
+            <div className="m-conn m-adapter">
+              <div>
+                <b>Adaptador disponible</b>
+                <small>
+                  La estación presta adaptador para autos {adapters.map(connectorName).join(', ')}. Pídelo al llegar.
+                </small>
+                {carNeedsAdapter && (
+                  <small className="m-adapter-car">Tu {selectedVehicle!.brand} {selectedVehicle!.model} carga aquí con el adaptador.</small>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="m-box flush"><StationVerification station={station} /></div>

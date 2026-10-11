@@ -238,8 +238,9 @@ function computeFiltered(
   return stations.filter((s) => {
     if (filters.status !== 'all' && s.status !== filters.status) return false;
     if (filters.stationType !== 'all' && (s.type ?? 'public') !== filters.stationType) return false;
+    // Un adaptador prestado por la estación cuenta como conector disponible.
+    const stationTypes = [...s.connectors.map((c) => c.type), ...(s.adapters ?? [])];
     if (filters.connectorTypes.length > 0) {
-      const stationTypes = s.connectors.map((c) => c.type);
       if (!filters.connectorTypes.some((t) => stationTypes.includes(t))) return false;
     }
     if (filters.level !== 'all') {
@@ -248,7 +249,6 @@ function computeFiltered(
     // Sin conector confirmado para el vehículo no filtramos por compatibilidad —
     // mejor no afirmar nada a asumir un conector que todavía no se ha verificado.
     if (selectedVehicle && selectedVehicle.compatible_connectors?.length) {
-      const stationTypes = s.connectors.map((c) => c.type);
       if (!selectedVehicle.compatible_connectors.some((t) => stationTypes.includes(t))) return false;
     }
     return true;

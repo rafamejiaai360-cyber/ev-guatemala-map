@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import LocationPicker from './LocationPicker';
 import type { ChargerStation, ConnectorType, ChargerLevel, StationType } from '../types/index';
+import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
@@ -35,6 +36,7 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
   const [connectors, setConnectors] = useState<ConnectorRow[]>(
     station.connectors.map(c => ({ type: c.type as ConnectorType, power_kw: c.power_kw ?? null }))
   );
+  const [adapters, setAdapters] = useState<AdaptersValue>(station.adapters?.length ? station.adapters : null);
   const [notes, setNotes] = useState((station as unknown as Record<string, unknown>).notes as string ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
       return;
     }
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
+    const adaptersMsg = adaptersError(adapters);
+    if (adaptersMsg) { setError(adaptersMsg); return; }
 
     // Only send the fields that actually changed, so user proposals show a
     // clean diff in the admin panel instead of every field.
@@ -71,6 +75,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
     if (lat !== station.lat) payload.lat = lat;
     if (lng !== station.lng) payload.lng = lng;
     if (JSON.stringify(newConnectors) !== JSON.stringify(station.connectors)) payload.connectors = newConnectors;
+    const newAdapters = cleanAdapters(adapters, connectors.map(c => c.type));
+    if ([...newAdapters].sort().join() !== [...(station.adapters ?? [])].sort().join()) payload.adapters = newAdapters;
     const origNotes = ((station as unknown as Record<string, unknown>).notes as string ?? '').trim();
     if (notes.trim() !== origNotes) payload.notes = notes.trim();
 
@@ -266,6 +272,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
               ))}
             </div>
           </div>
+
+          <AdaptersField value={adapters} onChange={setAdapters} stationConnectors={connectors.map(c => c.type)} />
 
           {/* Notes */}
           <div>
