@@ -133,7 +133,7 @@ const STATUS_OPTIONS: { value: ChargerStatus; label: string; color: string }[] =
 ];
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
-const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
+const POWER_OPTIONS = [3.7, 7.4, 11, 22, 28, 50, 100, 150, 350];
 
 interface ConnectorRow { type: ConnectorType; power_kw: number | null; }
 function levelFromKw(kw: number | null): ChargerLevel | null { if (kw == null) return null; return kw > 22 ? 'DC' : kw >= 11 ? 'L2' : 'L1'; }
