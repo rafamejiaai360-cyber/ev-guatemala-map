@@ -5,7 +5,7 @@ import type { ChargerStation, ConnectorType, ChargerLevel, StationType } from '.
 import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
-const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
+const POWER_OPTIONS = [3.7, 7.4, 11, 22, 28, 50, 100, 150, 350];
 
 interface ConnectorRow { type: ConnectorType; power_kw: number | null; }
 function levelFromKw(kw: number | null): ChargerLevel | null { if (kw == null) return null; return kw > 22 ? 'DC' : kw >= 11 ? 'L2' : 'L1'; }
@@ -36,6 +36,9 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
   const [connectors, setConnectors] = useState<ConnectorRow[]>(
     station.connectors.map(c => ({ type: c.type as ConnectorType, power_kw: c.power_kw ?? null }))
   );
+  // Potencias que ya tiene la estación aunque no estén en la lista (ej. 120 kW):
+  // sin esto el selector quedaba en "— kW" y al guardar se borraba la potencia.
+  const powerOptions = Array.from(new Set([...POWER_OPTIONS, ...station.connectors.map(c => c.power_kw).filter((kw): kw is number => typeof kw === 'number' && kw > 0)])).sort((a, b) => a - b);
   const [adapters, setAdapters] = useState<AdaptersValue>(station.adapters?.length ? station.adapters : null);
   const [notes, setNotes] = useState((station as unknown as Record<string, unknown>).notes as string ?? '');
   const [submitting, setSubmitting] = useState(false);
@@ -258,7 +261,7 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
                   <select value={c.power_kw ?? ''} onChange={e => updateConnector(i, 'power_kw', e.target.value)}
                     className="w-24 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-green-400">
                     <option value="">— kW</option>
-                    {POWER_OPTIONS.map(p => <option key={p} value={p}>{p} kW</option>)}
+                    {powerOptions.map(p => <option key={p} value={p}>{p} kW</option>)}
                   </select>
                   <span className="text-xs text-gray-400 w-7 text-center flex-shrink-0">{levelFromKw(c.power_kw) ?? '—'}</span>
                   {connectors.length > 1 && (

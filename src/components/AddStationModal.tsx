@@ -6,7 +6,7 @@ import type { ConnectorType, ChargerLevel, StationType } from '../types/index';
 import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
-const POWER_OPTIONS = [3.7, 7.4, 11, 22, 50, 100, 150, 350];
+const POWER_OPTIONS = [3.7, 7.4, 11, 22, 28, 50, 100, 150, 350];
 
 interface ConnectorRow {
   type: ConnectorType;
