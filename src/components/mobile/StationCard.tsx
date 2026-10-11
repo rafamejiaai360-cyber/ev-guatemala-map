@@ -31,6 +31,9 @@ export default function StationCard({
           {kw > 0 && <span className="m-tag">hasta {formatKw(kw)}</span>}
           {connectorTypes(station).slice(0, 3).map((c) => <span key={c} className="m-tag">{c}</span>)}
           {!!station.adapters?.length && <span className="m-tag adapt">+ adaptador</span>}
+          {station.pricePerKwh != null && (
+            <span className="m-tag">{station.pricePerKwh === 0 ? 'Gratis' : `Q${station.pricePerKwh.toFixed(2)}/kWh`}</span>
+          )}
         </span>
         {rating && rating.count > 0 && (
           <span className="m-rate"><span>★</span> {rating.avg.toFixed(1).replace('.', ',')}</span>

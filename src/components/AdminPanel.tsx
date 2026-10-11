@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import type { ChargerStatus, ConnectorType, ChargerLevel, StationType } from '../types';
 import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
+import PriceField from './PriceField';
+import { formatPrice, parsePriceInput, PRICE_ERROR } from '../utils/price';
 import { connectorName } from './mobile/shared';
 import type { ChargerStation } from '../types';
 import EditStationModal from './EditStationModal';
@@ -62,6 +64,7 @@ interface PendingStation {
   submittedBy: string;
   createdAt: string;
   notes?: string;
+  pricePerKwh?: number | null;
   kind: 'new' | 'correction';
   proposedLat?: number | null;
   proposedLng?: number | null;
@@ -82,6 +85,7 @@ const CHANGE_LABELS: Record<string, string> = {
   connectors: 'Conectores',
   adapters: 'Adaptadores',
   notes: 'Notas',
+  pricePerKwh: 'Precio por kWh',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -92,6 +96,7 @@ const TYPE_LABELS: Record<string, string> = {
 function formatChangeValue(value: unknown, key?: string): string {
   if (value == null || value === '') return '—';
   if (key === 'type' && typeof value === 'string') return TYPE_LABELS[value] ?? value;
+  if (key === 'pricePerKwh' && typeof value === 'number') return formatPrice(value);
   if (key === 'adapters' && Array.isArray(value)) {
     return value.length ? value.map(t => connectorName(String(t))).join(', ') : 'Ninguno';
   }
@@ -120,6 +125,7 @@ function currentChangeValue(station: PendingStation, key: string): unknown {
     case 'connectors': return station.connectors;
     case 'adapters': return station.adapters ?? [];
     case 'notes': return station.notes;
+    case 'pricePerKwh': return station.pricePerKwh;
     default: return undefined;
   }
 }
@@ -161,6 +167,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
   const [network, setNetwork] = useState('');
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
+  const [price, setPrice] = useState('');
   const [connectors, setConnectors] = useState<ConnectorRow[]>([{ type: 'Type2', power_kw: null }]);
   const [adapters, setAdapters] = useState<AdaptersValue>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -193,6 +200,8 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
     const adaptersMsg = adaptersError(adapters);
     if (adaptersMsg) { setError(adaptersMsg); return; }
+    const pricePerKwh = parsePriceInput(price);
+    if (pricePerKwh === undefined) { setError(PRICE_ERROR); return; }
 
     setSubmitting(true);
     try {
@@ -206,6 +215,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
           connectors: connectors.map(c => ({ type: c.type, ...(c.power_kw != null && { power_kw: c.power_kw, level: levelFromKw(c.power_kw) }) })),
           adapters: cleanAdapters(adapters, connectors.map(c => c.type)),
           access, source: 'Manual', ...(notes.trim() && { notes: notes.trim() }),
+          ...(pricePerKwh != null && { pricePerKwh }),
         }),
       });
       if (!res.ok) { const e = await res.json() as { error?: string }; throw new Error(e.error ?? `Error ${res.status}`); }
@@ -213,7 +223,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
       const savedName = name.trim();
       setType('public');
       setName(''); setAddress(''); setZone(''); setMapsUrl(''); setLat(null); setLng(null);
-      setNetwork(''); setNotes(''); setAccess('public'); setConnectors([{ type: 'Type2', power_kw: null }]); setAdapters(null);
+      setNetwork(''); setNotes(''); setPrice(''); setAccess('public'); setConnectors([{ type: 'Type2', power_kw: null }]); setAdapters(null);
       onSuccess(savedName);
     } catch (e) { setError(e instanceof Error ? e.message : 'Error al guardar'); }
     finally { setSubmitting(false); }
@@ -334,12 +344,14 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
 
       <AdaptersField value={adapters} onChange={setAdapters} stationConnectors={connectors.map(c => c.type)} />
 
+      <PriceField value={price} onChange={setPrice} />
+
       {/* Notes */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Notas (opcional)</label>
-        <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
+        <label className="block text-xs font-medium text-gray-700 mb-1">Notas (opcional, visibles para todos)</label>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} maxLength={1000}
           placeholder="ej. Clientes individuales · Horario 6am–10pm"
-          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400" />
+          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400 resize-none" />
       </div>
 
       {error && <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}

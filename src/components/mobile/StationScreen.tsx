@@ -13,6 +13,7 @@ import {
   connectorName, distanceKm, distanceLabel, formatKw, googleMapsUrl, levelName, stationType, wazeUrl,
 } from './shared';
 import { timeAgo } from './ownerStatus';
+import { formatPrice } from '../../utils/price';
 
 interface Props {
   station: ChargerStation;
@@ -22,7 +23,8 @@ interface Props {
 
 // Ficha completa de una estación en celular. Misma información y mismas
 // reglas de privacidad que StationDetail.tsx (la vista de computadora):
-// - `notes` de una residencial solo llega de la API si quien pregunta es admin.
+// - `notes` son notas para usuarios (visibles para todos, oct 2026); el
+//   historial de verificación (`verificationLog`, con correos) solo llega al admin.
 // - quién dio de alta la estación solo se muestra a admins.
 export default function StationScreen({ station, backLabel, onBack }: Props) {
   const { currentUser, userLocation, setAuthModalOpen, savedIds, toggleSaved, ratings, setJoinPrompt, selectedVehicle } = useStore();
@@ -180,18 +182,27 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
               </div>
             </div>
           )}
+          {station.pricePerKwh != null && (
+            <div className="m-conn m-price">
+              <div>
+                <b>Precio</b>
+                <small>Reportado al registrar la estación; puede cambiar.</small>
+              </div>
+              <strong>{formatPrice(station.pricePerKwh)}</strong>
+            </div>
+          )}
         </div>
+
+        {station.notes && (
+          <div className="m-box"><div className="k">Notas</div><p className="m-note m-notes">{station.notes}</p></div>
+        )}
 
         <div className="m-box flush"><StationVerification station={station} /></div>
         <div className="m-box flush"><StationPhotos stationId={station.id} stationName={station.name} /></div>
         <div className="m-box flush"><StationReviews stationId={station.id} stationName={station.name} /></div>
 
-        {station.notes && (
-          isResidential ? (
-            <div className="m-admin"><b>Solo admin · historial de verificación:</b> {station.notes}</div>
-          ) : (
-            <div className="m-box"><div className="k">Notas</div><p className="m-note" style={{ margin: 0 }}>{station.notes}</p></div>
-          )
+        {currentUser?.role === 'admin' && station.verificationLog && (
+          <div className="m-admin"><b>Solo admin · historial de verificación:</b> {station.verificationLog}</div>
         )}
 
         {currentUser?.role === 'admin' && (station.createdByName || station.createdByEmail) && (
