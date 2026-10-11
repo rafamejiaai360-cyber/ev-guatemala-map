@@ -624,8 +624,8 @@ manual**: `docs/migracion-adaptadores.sql` — aplicada a
 (sin la columna, `/api/stations` falla y el mapa cae a la semilla). La
 estación de prueba `prueba-adaptador-claude` de staging quedó `rejected`.
 
-**Precio por kWh + notas visibles para usuarios (11 oct 2026, rama
-`precio-y-notas`, en staging, pendiente de visto bueno de Rafa)**: Rafa pidió
+**Precio por kWh + notas visibles para usuarios (11 oct 2026, publicado en
+prod con visto bueno de Rafa)**: Rafa pidió
 "precio por kW"; se implementó como **precio por kWh** (lo que de verdad se
 cobra: energía, no potencia) en quetzales — `stations.price_per_kwh` (REAL,
 NULL = no informado, 0 = gratis), opcional. Campo `PriceField.tsx` (casilla
@@ -644,9 +644,8 @@ ni tu teléfono"). Filas viejas: `splitNotes()` en el Worker separa los "[...]"
 al leer y `buildStationUpdate` los mueve a `verification_log` cuando se editan
 las notas (nada se pierde). Los corchetes que escriba un usuario se cambian a
 paréntesis. **Migración manual**: `docs/migracion-precio-notas.sql` — aplicada
-a `ev-guatemala-db-staging` (11 oct 2026, vía MCP); **falta `ev-guatemala-db`
-(prod) antes del merge** (sin las columnas, `/api/stations` falla y el mapa
-cae a la semilla). Datos a limpiar tras publicar (vía panel, con su evento): 3
+a `ev-guatemala-db-staging` y `ev-guatemala-db` (11 oct 2026, vía MCP) — no
+repetir (sin las columnas, `/api/stations` falla y el mapa cae a la semilla). Datos a limpiar tras publicar (vía panel, con su evento): 3
 estaciones tienen el precio escrito en notas (`quet-restaurante-tertulia`,
 `guat-navez-zona-15`, `reta-hotel-y-restaurante-`) y 6 de la semilla tienen
 notas internas tipo "NO MODIFICAR sin nueva confirmación" que ya veía el
