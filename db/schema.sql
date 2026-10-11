@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS stations (
   access TEXT NOT NULL DEFAULT 'public',       -- public | semi-public | private
   connectors TEXT NOT NULL DEFAULT '[]',       -- JSON: [{type, power_kw, level}]
   adapters TEXT,                               -- JSON: ["CCS2"] conectores de auto que cargan con adaptador prestado; NULL = ninguno
-  notes TEXT,
+  notes TEXT,                                  -- notas para usuarios (visibles para todos)
+  verification_log TEXT,                       -- historial "[Verificado por: correo, fecha] · ..." (solo admin)
+  price_per_kwh REAL,                          -- precio en Q por kWh; NULL = no informado, 0 = gratis
   source TEXT,                                 -- Manual | Semilla verificada | OCM | etc
   google_maps_url TEXT,
   owner_email TEXT REFERENCES users(email),    -- dueño (residenciales, futuro)

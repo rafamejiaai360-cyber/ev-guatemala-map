@@ -624,6 +624,34 @@ manual**: `docs/migracion-adaptadores.sql` — aplicada a
 (sin la columna, `/api/stations` falla y el mapa cae a la semilla). La
 estación de prueba `prueba-adaptador-claude` de staging quedó `rejected`.
 
+**Precio por kWh + notas visibles para usuarios (11 oct 2026, rama
+`precio-y-notas`, en staging, pendiente de visto bueno de Rafa)**: Rafa pidió
+"precio por kW"; se implementó como **precio por kWh** (lo que de verdad se
+cobra: energía, no potencia) en quetzales — `stations.price_per_kwh` (REAL,
+NULL = no informado, 0 = gratis), opcional. Campo `PriceField.tsx` (casilla
+"Gratis") en AddStationModal, EditStationModal y el alta del AdminPanel;
+helpers en `src/utils/price.ts`. Va por el mismo camino que `connectors`
+(`pricePerKwh` en EDITABLE_FIELDS; correcciones de usuarios pasan por
+moderación; etiqueta "Precio por kWh" en el diff del panel). La ficha muestra
+"Precio · Q3.50 por kWh" y la tarjeta de la lista una etiqueta `Q3.50/kWh`.
+**Notas**: antes el historial de verificación ("[Verificado en sitio por:
+correo, fecha]") se pegaba dentro de `stations.notes`, por eso las notas de
+residenciales se ocultaban y las de públicas exponían correos. Ahora ese
+historial va a la columna nueva `stations.verification_log` (solo admin, sale
+como `verificationLog` en la API) y `notes` es texto para usuarios, visible
+para todos (también residenciales; el formulario avisa "no pongas tu dirección
+ni tu teléfono"). Filas viejas: `splitNotes()` en el Worker separa los "[...]"
+al leer y `buildStationUpdate` los mueve a `verification_log` cuando se editan
+las notas (nada se pierde). Los corchetes que escriba un usuario se cambian a
+paréntesis. **Migración manual**: `docs/migracion-precio-notas.sql` — aplicada
+a `ev-guatemala-db-staging` (11 oct 2026, vía MCP); **falta `ev-guatemala-db`
+(prod) antes del merge** (sin las columnas, `/api/stations` falla y el mapa
+cae a la semilla). Datos a limpiar tras publicar (vía panel, con su evento): 3
+estaciones tienen el precio escrito en notas (`quet-restaurante-tertulia`,
+`guat-navez-zona-15`, `reta-hotel-y-restaurante-`) y 6 de la semilla tienen
+notas internas tipo "NO MODIFICAR sin nueva confirmación" que ya veía el
+público.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

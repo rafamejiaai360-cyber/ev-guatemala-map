@@ -270,6 +270,8 @@
 .m-adapter-car { margin-top: 4px; font-weight: 600; color: var(--ink) !important; }
 .m-tag.adapt { color: var(--green); background: var(--green-soft); }
 .m-note { font-size: 12px; line-height: 1.5; color: var(--ink2); }
+.m-notes { margin: 0; font-size: 13px; color: var(--ink); white-space: pre-line; }
+.m-price strong { font-size: 15px; font-weight: 700; color: var(--green); white-space: nowrap; }
 .m-admin { font-size: 12px; line-height: 1.5; color: #92400e; background: #fffbeb; border-radius: 12px; padding: 10px 12px; }
 .m-admin b { font-weight: 600; }
 .m-linkbtn { border: 0; background: transparent; color: var(--green) !important; font-size: 14px; font-weight: 500; padding: 4px 0; cursor: pointer; text-align: left; }

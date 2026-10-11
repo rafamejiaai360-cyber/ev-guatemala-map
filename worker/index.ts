@@ -162,6 +162,8 @@ interface FullStationRow {
   connectors: string;
   adapters: string | null;
   notes: string | null;
+  verification_log: string | null;
+  price_per_kwh: number | null;
   source: string | null;
   google_maps_url: string | null;
   submitted_by: string | null;
@@ -191,6 +193,39 @@ function parseAdapters(raw: string | null | undefined): string[] {
   try { return sanitizeAdapters(JSON.parse(raw || '[]')); } catch { return []; }
 }
 
+// Notas para usuarios vs. historial de verificación (oct 2026). Antes el
+// historial ("[Verificado en sitio por: correo, fecha]") se pegaba al final
+// de `notes`, así que las notas no se podían mostrar sin exponer correos.
+// Ahora el historial va a `verification_log` (solo admin) y `notes` queda
+// como texto para usuarios. Las filas viejas aún traen los "[...]" dentro de
+// `notes`: splitNotes() los separa al leer, y al editar las notas se mueven
+// a verification_log (ver buildStationUpdate) — nada se pierde.
+const HISTORY_RE = /\[[^\]]*\]/g;
+function splitNotes(raw: string | null | undefined): { text: string; history: string[] } {
+  const s = raw ?? '';
+  const history = s.match(HISTORY_RE) ?? [];
+  const text = s.replace(HISTORY_RE, ' ')
+    .split('·').map((p) => p.trim()).filter(Boolean).join(' · ');
+  return { text, history };
+}
+function joinHistory(...parts: (string | null | undefined | string[])[]): string {
+  return parts.flat().map((p) => (p ?? '').trim()).filter(Boolean).join(' · ');
+}
+// Texto que escribe un usuario: sin corchetes (se reservan al historial) y
+// con tope de largo.
+function cleanNotesInput(v: string): string {
+  return v.replace(/\[/g, '(').replace(/\]/g, ')').trim().slice(0, 1000);
+}
+
+// Precio por kWh en quetzales (oct 2026). Opcional: null = no informado,
+// 0 = gratis. Devuelve undefined si el valor no es válido.
+function parsePrice(v: unknown): number | null | undefined {
+  if (v === null || v === '') return null;
+  const n = typeof v === 'string' ? Number(v.replace(',', '.')) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 100) return undefined;
+  return Math.round(n * 100) / 100;
+}
+
 // ─── Espejo D1 → Notion (solo lectura para humanos) ──────────────────────────
 
 function stationToNotionProperties(s: FullStationRow): Record<string, unknown> {
@@ -209,7 +244,14 @@ function stationToNotionProperties(s: FullStationRow): Record<string, unknown> {
     'Conectores': { rich_text: [{ text: { content: s.adapters ? `${s.connectors} · Adaptador para: ${parseAdapters(s.adapters).join(', ')}` : s.connectors } }] },
     'Acceso': { rich_text: [{ text: { content: s.access } }] },
     'Fuente': { rich_text: [{ text: { content: s.source || 'Manual' } }] },
-    'Notas': { rich_text: s.notes ? [{ text: { content: s.notes.slice(0, 1900) } }] : [] },
+    'Notas': (() => {
+      const content = joinHistory(
+        s.notes,
+        s.price_per_kwh != null ? (s.price_per_kwh === 0 ? 'Precio: gratis' : `Precio: Q${s.price_per_kwh}/kWh`) : null,
+        s.verification_log,
+      );
+      return { rich_text: content ? [{ text: { content: content.slice(0, 1900) } }] : [] };
+    })(),
     'Google Maps': { url: s.google_maps_url || `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` },
     'Estado': { select: { name: estado } },
     'Verificacion': { select: { name: verificacion } },
@@ -640,7 +682,7 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
     network?: string; status?: string; type?: string;
     connectors?: Array<{ type: string; power_kw: number; level: string }>;
     adapters?: string[];
-    access?: string; source?: string; notes?: string; acceptedTerms?: boolean;
+    access?: string; source?: string; notes?: string; pricePerKwh?: number | string | null; acceptedTerms?: boolean;
   };
 
   if (!body.id || !body.name || body.lat == null || body.lng == null) {
@@ -680,19 +722,22 @@ async function handlePostStation(request: Request, env: Env, ctx: ExecutionConte
   const isPending = !isAdmin && !!submittedBy;
   const access = ['public', 'semi-public', 'private'].includes(body.access ?? '') ? body.access! : 'public';
   const ownerEmail = type === 'residential' ? requester!.email : null;
+  const price = parsePrice(body.pricePerKwh ?? null);
+  if (price === undefined) return apiError('Precio por kWh no válido (entre 0 y 100 quetzales)');
+  const notes = typeof body.notes === 'string' ? cleanNotesInput(body.notes) : '';
 
   if (type === 'residential' && !isAdmin) await recordTermsAcceptance(env, requester!.email, 'host_station', body.id);
 
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO stations (id, type, name, address, zone, lat, lng, status, network, access,
-         connectors, adapters, notes, source, google_maps_url, submitted_by, owner_email, approval_status, verification_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
+         connectors, adapters, notes, price_per_kwh, source, google_maps_url, submitted_by, owner_email, approval_status, verification_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
     ).bind(
       body.id, type, body.name, body.address ?? '', body.zone ?? 'Guatemala', body.lat, body.lng,
       body.network ?? 'Desconocido', access, JSON.stringify(body.connectors ?? []),
       adaptersToDb(sanitizeAdapters(body.adapters).filter(a => !(body.connectors ?? []).some(c => c.type === a))),
-      body.notes ?? null, body.source ?? 'Manual',
+      notes || null, price, body.source ?? 'Manual',
       `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}`,
       submittedBy || null, ownerEmail, isPending ? 'pending' : 'active',
     ),
@@ -757,7 +802,8 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
       submittedBy: s.submitted_by || 'anónimo',
       createdAt: s.created_at,
       kind: 'new',
-      notes: s.notes ?? '',
+      notes: splitNotes(s.notes).text,
+      pricePerKwh: s.price_per_kwh ?? null,
     });
   }
 
@@ -784,7 +830,8 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
       submittedBy: p.submitted_by || 'anónimo',
       createdAt: p.proposal_created_at,
       kind: 'correction',
-      notes: p.notes ?? '',
+      notes: splitNotes(p.notes).text,
+      pricePerKwh: p.price_per_kwh ?? null,
       proposedLat: propLat ?? null,
       proposedLng: propLng ?? null,
       proposedVerification: verification === 'verified' ? 'verified' : verification === 'error' ? 'error' : 'pending',
@@ -796,20 +843,23 @@ async function handleGetPendingStations(request: Request, env: Env): Promise<Res
 }
 
 // Campos editables de una estación que una propuesta puede tocar.
-const EDITABLE_FIELDS = ['name', 'address', 'zone', 'network', 'access', 'status', 'type', 'connectors', 'adapters', 'lat', 'lng', 'notes'] as const;
+const EDITABLE_FIELDS = ['name', 'address', 'zone', 'network', 'access', 'status', 'type', 'connectors', 'adapters', 'lat', 'lng', 'notes', 'pricePerKwh'] as const;
 
 // Construye los UPDATE de estación a partir de cambios normalizados,
 // registrando old→new para el evento. Devuelve fragmentos SET y valores.
 function buildStationUpdate(
   current: FullStationRow,
   changes: Record<string, unknown>,
-): { sets: string[]; values: unknown[]; diff: { field: string; old: unknown; new: unknown }[] } {
+  appendLog?: string,
+): { sets: string[]; values: unknown[]; diff: { field: string; old: unknown; new: unknown }[]; next: FullStationRow } {
+  const next: FullStationRow = { ...current };
+  let log = current.verification_log ?? '';
   const sets: string[] = [];
   const values: unknown[] = [];
   const diff: { field: string; old: unknown; new: unknown }[] = [];
   const columnFor: Record<string, string> = {
     name: 'name', address: 'address', zone: 'zone', network: 'network', type: 'type',
-    access: 'access', status: 'status', lat: 'lat', lng: 'lng', notes: 'notes',
+    access: 'access', status: 'status', lat: 'lat', lng: 'lng', pricePerKwh: 'price_per_kwh',
   };
   for (const field of EDITABLE_FIELDS) {
     if (!(field in changes)) continue;
@@ -833,10 +883,33 @@ function buildStationUpdate(
       diff.push({ field, old: oldVal, new: newVal });
       continue;
     }
+    if (field === 'notes') {
+      // Se compara y guarda solo el texto para usuarios; si la fila aún trae
+      // historial viejo dentro de `notes`, pasa a verification_log.
+      const old = splitNotes(current.notes);
+      newVal = cleanNotesInput(String(changes.notes ?? ''));
+      if (newVal === old.text) continue;
+      sets.push('notes = ?');
+      values.push(newVal || null);
+      next.notes = (newVal as string) || null;
+      if (old.history.length) log = joinHistory(old.history, log);
+      diff.push({ field, old: old.text, new: newVal });
+      continue;
+    }
+    if (field === 'pricePerKwh') oldVal = current.price_per_kwh ?? null;
     if (newVal === oldVal) continue;
     sets.push(`${columnFor[field]} = ?`);
     values.push(newVal as string | number | null);
+    (next as unknown as Record<string, unknown>)[columnFor[field]] = newVal;
     diff.push({ field, old: oldVal, new: newVal });
+  }
+  if (diff.some((d) => d.field === 'connectors')) next.connectors = JSON.stringify(changes.connectors);
+  if (diff.some((d) => d.field === 'adapters')) next.adapters = adaptersToDb(sanitizeAdapters(changes.adapters));
+  if (appendLog) log = joinHistory(log, appendLog);
+  if (log !== (current.verification_log ?? '')) {
+    sets.push('verification_log = ?');
+    values.push(log || null);
+    next.verification_log = log || null;
   }
   // Cambio de estado hecho por el admin (edición directa o propuesta
   // aprobada): queda registrado como suyo y borra la nota del dueño.
@@ -847,7 +920,7 @@ function buildStationUpdate(
     sets.push('google_maps_url = ?');
     values.push(`https://www.google.com/maps/search/?api=1&query=${changes.lat},${changes.lng}`);
   }
-  return { sets, values, diff };
+  return { sets, values, diff, next };
 }
 
 async function handleStationApprove(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -895,10 +968,8 @@ async function handleStationApprove(stationId: string, request: Request, env: En
     const attribution = verification === 'error'
       ? `[Ubicación reportada errónea por: ${p.submitted_by}, aprobado ${today}]`
       : `[${action} — propuesto por: ${p.submitted_by}]`;
-    const baseNotes = typeof fieldChanges.notes === 'string' ? fieldChanges.notes : (current.notes ?? '');
-    fieldChanges.notes = [baseNotes, attribution].filter(Boolean).join(' · ');
 
-    const { sets, values, diff } = buildStationUpdate(current, fieldChanges);
+    const { sets, values, diff, next } = buildStationUpdate(current, fieldChanges, attribution);
     if (verification === 'verified') {
       sets.push("verification_status = 'verified'", "last_confirmed_at = datetime('now')", 'confirm_count = confirm_count + 1', 'open_reports = 0');
     } else if (verification === 'error') {
@@ -918,7 +989,7 @@ async function handleStationApprove(stationId: string, request: Request, env: En
     if (verification === 'error') stmts.push(eventStmt(env.DB, stationId, 'reported_issue', requester, { via_proposal: p.id, on_behalf_of: p.submitted_by }));
 
     // Refrescar la vista local de la estación para la siguiente propuesta
-    current = { ...current, ...Object.fromEntries(diff.map(d => [d.field, d.new])) } as FullStationRow;
+    current = next;
   }
 
   await env.DB.batch(stmts);
@@ -1014,7 +1085,8 @@ async function handleGetDynamicStations(env: Env): Promise<Response> {
         connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
         network: richText(page.properties['Red']) || 'Desconocido',
         access: ['public', 'semi-public', 'private'].includes(access) ? access : 'public',
-        notes: richText(page.properties['Notas']) || undefined,
+        // Sin el historial "[...]" (lleva correos de quien verificó).
+        notes: splitNotes(richText(page.properties['Notas'])).text || undefined,
         verification: verificationFromSelect(page.properties['Verificacion']?.select?.name),
         googleMapsUrl: page.properties['Google Maps']?.url ?? undefined,
       });
@@ -1050,6 +1122,8 @@ interface StationRow {
   network: string | null;
   access: string;
   notes: string | null;
+  verification_log: string | null;
+  price_per_kwh: number | null;
   verification_status: string;
   google_maps_url: string | null;
   submitted_by: string | null;
@@ -1105,7 +1179,7 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
 
   const { results } = await env.DB.prepare(
     `SELECT s.id, s.type, s.name, s.address, s.zone, s.lat, s.lng, s.status, s.connectors, s.adapters, s.network, s.access,
-            s.notes, s.verification_status, s.google_maps_url, s.last_confirmed_at,
+            s.notes, s.verification_log, s.price_per_kwh, s.verification_status, s.google_maps_url, s.last_confirmed_at,
             s.confirm_count, s.open_reports, s.submitted_by, u.name AS submitted_by_name,
             s.status_note, s.status_updated_at, s.status_source
        FROM stations s
@@ -1128,6 +1202,9 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       if (Array.isArray(parsed)) connectors = parsed;
     } catch {}
     const adapters = parseAdapters(r.adapters);
+    const split = splitNotes(r.notes);
+    const notesText = split.text;
+    const history = joinHistory(split.history, r.verification_log);
     // `verification` es el campo legado (pending|verified|error) que clientes
     // viejos entienden; `freshness` expone el estado real (incluye stale).
     const verification =
@@ -1152,11 +1229,13 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       ...(adapters.length ? { adapters } : {}),
       network: r.network || 'Desconocido',
       access: ['public', 'semi-public', 'private'].includes(r.access) ? r.access : 'public',
-      // El historial de verificación incluido en `notes` lleva el correo de
-      // quien confirmó/reportó/corrigió — en una residencial eso puede
-      // identificar al dueño de la casa, así que solo el admin lo ve.
-      // Las públicas lo mantienen visible para cualquiera (como siempre).
-      notes: (isAdmin || r.type !== 'residential') ? (r.notes || undefined) : undefined,
+      // Notas para usuarios: visibles para todos (también en residenciales,
+      // oct 2026). El historial de verificación lleva el correo de quien
+      // confirmó/reportó/corrigió, así que solo lo recibe el admin.
+      notes: notesText || undefined,
+      ...(isAdmin && history ? { verificationLog: history } : {}),
+      // Precio por kWh en quetzales; 0 = gratis, ausente = no informado.
+      ...(r.price_per_kwh != null ? { pricePerKwh: r.price_per_kwh } : {}),
       verification,
       freshness: r.verification_status,
       lastConfirmedAt: r.last_confirmed_at || undefined,
@@ -2267,7 +2346,12 @@ function normalizeStationChanges(body: Record<string, unknown>): { changes: Reco
     if (body.lng < -93 || body.lng > -88) return { changes, error: 'lng fuera de rango para Guatemala' };
     changes.lng = body.lng;
   }
-  if (typeof body.notes === 'string') changes.notes = body.notes.trim();
+  if (typeof body.notes === 'string') changes.notes = cleanNotesInput(body.notes);
+  if ('pricePerKwh' in body) {
+    const price = parsePrice(body.pricePerKwh);
+    if (price === undefined) return { changes, error: 'Precio por kWh no válido (entre 0 y 100 quetzales)' };
+    changes.pricePerKwh = price;
+  }
   return { changes };
 }
 
@@ -2345,10 +2429,10 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
       ? (body.lat != null ? 'Ubicación corregida y verificada' : 'Verificado en sitio')
       : 'Reportado con ubicación errónea';
     const attribution = `[${action} por: ${user.email}, ${today}]`;
-    const notes = [station.notes ?? '', attribution].filter(Boolean).join(' · ');
+    const log = joinHistory(station.verification_log, attribution);
 
-    const sets: string[] = ['notes = ?', "updated_at = datetime('now')"];
-    const values: unknown[] = [notes];
+    const sets: string[] = ['verification_log = ?', "updated_at = datetime('now')"];
+    const values: unknown[] = [log];
     if (body.status === 'verified') {
       sets.push("verification_status = 'verified'", "last_confirmed_at = datetime('now')", 'confirm_count = confirm_count + 1', 'open_reports = 0');
       if (body.lat != null && body.lng != null) {

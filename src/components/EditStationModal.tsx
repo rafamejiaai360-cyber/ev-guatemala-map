@@ -3,6 +3,8 @@ import { useStore } from '../store/useStore';
 import LocationPicker from './LocationPicker';
 import type { ChargerStation, ConnectorType, ChargerLevel, StationType } from '../types/index';
 import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
+import PriceField from './PriceField';
+import { parsePriceInput, priceToInput, PRICE_ERROR } from '../utils/price';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 28, 50, 100, 150, 350];
@@ -40,7 +42,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
   // sin esto el selector quedaba en "— kW" y al guardar se borraba la potencia.
   const powerOptions = Array.from(new Set([...POWER_OPTIONS, ...station.connectors.map(c => c.power_kw).filter((kw): kw is number => typeof kw === 'number' && kw > 0)])).sort((a, b) => a - b);
   const [adapters, setAdapters] = useState<AdaptersValue>(station.adapters?.length ? station.adapters : null);
-  const [notes, setNotes] = useState((station as unknown as Record<string, unknown>).notes as string ?? '');
+  const [notes, setNotes] = useState(station.notes ?? '');
+  const [price, setPrice] = useState(priceToInput(station.pricePerKwh));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -63,6 +66,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
     const adaptersMsg = adaptersError(adapters);
     if (adaptersMsg) { setError(adaptersMsg); return; }
+    const pricePerKwh = parsePriceInput(price);
+    if (pricePerKwh === undefined) { setError(PRICE_ERROR); return; }
 
     // Only send the fields that actually changed, so user proposals show a
     // clean diff in the admin panel instead of every field.
@@ -80,8 +85,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
     if (JSON.stringify(newConnectors) !== JSON.stringify(station.connectors)) payload.connectors = newConnectors;
     const newAdapters = cleanAdapters(adapters, connectors.map(c => c.type));
     if ([...newAdapters].sort().join() !== [...(station.adapters ?? [])].sort().join()) payload.adapters = newAdapters;
-    const origNotes = ((station as unknown as Record<string, unknown>).notes as string ?? '').trim();
-    if (notes.trim() !== origNotes) payload.notes = notes.trim();
+    if (notes.trim() !== (station.notes ?? '').trim()) payload.notes = notes.trim();
+    if (pricePerKwh !== (station.pricePerKwh ?? null)) payload.pricePerKwh = pricePerKwh;
 
     if (Object.keys(payload).length === 0) {
       setError('No hay ningún cambio que enviar');
@@ -278,12 +283,19 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
 
           <AdaptersField value={adapters} onChange={setAdapters} stationConnectors={connectors.map(c => c.type)} />
 
+          <PriceField value={price} onChange={setPrice} />
+
           {/* Notes */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Notas (opcional)</label>
-            <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} maxLength={1000}
               placeholder="ej. Horario 6am–10pm · solo clientes"
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400" />
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-400 resize-none" />
+            <p className="text-[11px] text-gray-400 mt-1">
+              {type === 'residential'
+                ? 'Las verán todos los usuarios en la ficha. No pongas tu dirección ni tu teléfono.'
+                : 'Las verán todos los usuarios en la ficha de la estación.'}
+            </p>
           </div>
 
           {error && <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}

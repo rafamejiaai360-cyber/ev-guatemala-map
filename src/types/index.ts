@@ -35,7 +35,12 @@ export interface ChargerStation {
   adapters?: ConnectorType[];
   network: string;
   access: 'public' | 'semi-public' | 'private';
+  /** Notas para usuarios (visibles para todos). */
   notes?: string;
+  /** Historial de verificación con correos — solo llega al admin. */
+  verificationLog?: string;
+  /** Precio en quetzales por kWh; 0 = gratis, ausente = no informado. */
+  pricePerKwh?: number;
   image_url?: string;
   verification?: VerificationStatus;
   freshness?: FreshnessStatus;

@@ -4,6 +4,8 @@ import LocationPicker from './LocationPicker';
 import TermsNotice from './TermsNotice';
 import type { ConnectorType, ChargerLevel, StationType } from '../types/index';
 import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
+import PriceField from './PriceField';
+import { parsePriceInput, PRICE_ERROR } from '../utils/price';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 28, 50, 100, 150, 350];
@@ -37,6 +39,7 @@ export default function AddStationModal() {
   const [network, setNetwork] = useState('');
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>('public');
   const [notes, setNotes] = useState('');
+  const [price, setPrice] = useState('');
   const [connectors, setConnectors] = useState<ConnectorRow[]>([{ type: 'Type2', power_kw: null }]);
   const [adapters, setAdapters] = useState<AdaptersValue>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -83,6 +86,8 @@ export default function AddStationModal() {
     if (connectors.length === 0) { setError('Agrega al menos un conector'); return; }
     const adaptersMsg = adaptersError(adapters);
     if (adaptersMsg) { setError(adaptersMsg); return; }
+    const pricePerKwh = parsePriceInput(price);
+    if (pricePerKwh === undefined) { setError(PRICE_ERROR); return; }
     const phoneDigits = ownerPhone.replace(/[^\d]/g, '').replace(/^502/, '');
     if (needsPhone && !/^\d{8}$/.test(phoneDigits)) {
       setError('Escribe tu teléfono de 8 dígitos para que podamos contactarte por tu cargador');
@@ -117,6 +122,7 @@ export default function AddStationModal() {
           access,
           source: 'Manual',
           ...(notes.trim() && { notes: notes.trim() }),
+          ...(pricePerKwh != null && { pricePerKwh }),
           ...(needsHostTerms && { acceptedTerms: hostTerms }),
         }),
       });
@@ -410,16 +416,24 @@ export default function AddStationModal() {
 
               <AdaptersField value={adapters} onChange={setAdapters} stationConnectors={connectors.map(c => c.type)} />
 
+              <PriceField value={price} onChange={setPrice} />
+
               {/* Notes */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Notas (opcional)</label>
-                <input
-                  type="text"
+                <textarea
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  maxLength={1000}
                   placeholder="ej. Solo clientes · Horario 6am–10pm"
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-400 resize-none"
                 />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {type === 'residential'
+                    ? 'Las verán todos los usuarios en la ficha. No pongas tu dirección ni tu teléfono.'
+                    : 'Las verán todos los usuarios en la ficha de la estación.'}
+                </p>
               </div>
 
               {needsHostTerms && <TermsNotice variant="host" accepted={hostTerms} onChange={setHostTerms} />}
