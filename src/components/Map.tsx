@@ -47,13 +47,16 @@ function makeStationIcon(type: string, status: string, selected: boolean) {
   return icon;
 }
 
-function makeClusterIcon(count: number, hasResidential: boolean) {
-  const key = `cluster-${count}-${hasResidential}`;
+// Círculo de grupo: franja alrededor repartida en verde (públicas) y azul
+// (residenciales) según cuántas hay de cada una.
+function makeClusterIcon(count: number, residential: number) {
+  const key = `cluster-${count}-${residential}`;
   if (iconCache.has(key)) return iconCache.get(key)!;
-  const size = count >= 10 ? 40 : 34;
+  const size = (count >= 10 ? 40 : 34) + 6; // + franja de 3 px por lado
+  const pub = Math.round(((count - residential) / count) * 100);
   const icon = L.divIcon({
     className: 'ev-pin-wrap',
-    html: `<div class="ev-cluster${hasResidential ? ' mix' : ''}" style="min-width:${size}px;height:${size}px">${count}</div>`,
+    html: `<div class="ev-cluster" style="--pub:${pub}%;min-width:${size}px;height:${size}px"><span>${count}</span></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
@@ -281,12 +284,12 @@ function StationMarkers({ stations }: { stations: ChargerStation[] }) {
     <>
       {items.map((it) => {
         if (it.kind === 'cluster') {
-          const hasResidential = it.members.some((m) => (m.type ?? 'public') === 'residential');
+          const residential = it.members.filter((m) => (m.type ?? 'public') === 'residential').length;
           return (
             <Marker
               key={`c-${it.key}`}
               position={[it.lat, it.lng]}
-              icon={makeClusterIcon(it.members.length, hasResidential)}
+              icon={makeClusterIcon(it.members.length, residential)}
               eventHandlers={{
                 click: () => {
                   const bounds = L.latLngBounds(it.members.map((m) => [m.lat, m.lng] as [number, number]));
