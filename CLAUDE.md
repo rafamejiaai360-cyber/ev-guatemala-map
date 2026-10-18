@@ -324,8 +324,8 @@ la tarea en segundo plano necesita el cuerpo de la petición, hay que leerlo
 antes de devolver la respuesta al cliente — nunca dentro de la tarea
 diferida.
 
-**Rediseño de navegación (oct 2026, en staging, pendiente de visto bueno de
-Rafa)**: basado en la estructura de la app Electron Power, adaptada al
+**Rediseño de navegación (oct 2026, publicado en producción el 6 oct 2026
+tras visto bueno de Rafa en staging, PR #20)**: basado en la estructura de la app Electron Power, adaptada al
 estilo minimalista que pidió Rafa. `App.tsx` monta siempre
 `src/components/mobile/MobileShell.tsx` (Header.tsx y Sidebar.tsx quedaron sin
 uso); a pedido de Rafa la computadora usa la MISMA lógica y pantallas que el
@@ -358,8 +358,8 @@ ocultan en vez de atenuarse. "Guardadas" (`savedIds` en el store) vive solo en
 `localStorage` del navegador, sin cuenta ni servidor por ahora. Prototipo
 navegable de referencia: https://claude.ai/artifact/MecCx1MFcjX339tVkjGPZN
 
-**Catálogo de vehículos y propuestas de usuarios (oct 2026, rama
-`vehiculos-propuestas`, en prueba)**: la lista base sigue en
+**Catálogo de vehículos y propuestas de usuarios (publicado en producción
+el 6 oct 2026, PR #21 dentro de #20)**: la lista base sigue en
 `src/data/vehicles.ts`; la tabla D1 `vehicles` la sobreescribe o amplía por
 `id` (`status='hidden'` la oculta) y el frontend las combina en
 `vehicleCatalog` (`loadVehicles()` en el store, `GET /api/vehicles`). Los
@@ -385,8 +385,8 @@ luego en prod: `npx wrangler d1 execute ev-guatemala-db-staging --remote
 --file=db/schema.sql` (y `ev-guatemala-db` al publicar) — seguro de re-correr
 por `IF NOT EXISTS`. Sin las tablas, `GET /api/vehicles` falla y la app usa
 la lista base sin romperse. **Estado**: aplicada a `ev-guatemala-db-staging`
-(6 oct 2026, vía conector MCP de Cloudflare); falta `ev-guatemala-db` (prod)
-al publicar. SQL listo para pegar: `docs/migracion-vehiculos.sql`.
+y a `ev-guatemala-db` (prod), ambas el 6 oct 2026 vía conector MCP de
+Cloudflare. SQL listo para pegar: `docs/migracion-vehiculos.sql`.
 
 **Rastro de avisos a Telegram (6 oct 2026)**: `notifyAdmin()` antes fallaba
 en silencio (fetch no lanza error ante 401/400 de Telegram). Ahora cada
@@ -397,8 +397,8 @@ nombres de usuarios). Para comprobar: `SELECT * FROM ops_log WHERE
 op='notify_telegram' ORDER BY id DESC LIMIT 5`.
 Staging **no tiene** `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (confirmado 6 oct
 2026 con ese registro: "sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID"); a pedido de
-Rafa no se agregan — el aviso de propuestas de vehículos se comprueba en prod
-al publicar (proponer uno de prueba y revisar `ops_log` en `ev-guatemala-db`).
+Rafa no se agregan. En prod sí están: comprobado el 6 oct 2026 — Rafa propuso
+un vehículo de prueba en la app real y le llegó el aviso a Telegram.
 
 **Acceso directo como app en el celular (6 oct 2026)**: Rafa vio en su
 iPhone (acceso directo en el dock) la parte de arriba difuminada: el sitio no
