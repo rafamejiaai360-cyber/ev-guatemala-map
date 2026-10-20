@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { chargerStations } from '../data/chargers';
 import { fetchGTStations, findClosestLocal, ocmToLocalStatus, ocmConnTypeName } from '../utils/ocm';
-import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType, MyStation } from '../types';
+import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, Vehicle, RatingInfo, StationType, StationKind, MyStation } from '../types';
+import { stationKind } from '../utils/stationKind';
 import { getAllRatings } from '../utils/reviewsApi';
 import { vehicles as baseVehicles } from '../data/vehicles';
 import type { IdentityStatus } from '../utils/identityApi';
@@ -102,7 +103,7 @@ export interface Filters {
   status: ChargerStatus | 'all';
   connectorTypes: ConnectorType[];
   level: ChargerLevel | 'all';
-  stationType: StationType | 'all';
+  stationType: StationKind | 'all';
 }
 
 interface AppState {
@@ -237,7 +238,7 @@ function computeFiltered(
 ): ChargerStation[] {
   return stations.filter((s) => {
     if (filters.status !== 'all' && s.status !== filters.status) return false;
-    if (filters.stationType !== 'all' && (s.type ?? 'public') !== filters.stationType) return false;
+    if (filters.stationType !== 'all' && stationKind(s) !== filters.stationType) return false;
     // Un adaptador prestado por la estación cuenta como conector disponible.
     const stationTypes = [...s.connectors.map((c) => c.type), ...(s.adapters ?? [])];
     if (filters.connectorTypes.length > 0) {

@@ -5,6 +5,7 @@ import type { ChargerStation, ConnectorType, ChargerLevel, StationType } from '.
 import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
 import PriceField from './PriceField';
 import { parsePriceInput, priceToInput, PRICE_ERROR } from '../utils/price';
+import StationKindPicker from './StationKindPicker';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 28, 50, 100, 150, 350];
@@ -163,30 +164,7 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
           {/* Type */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Tipo de estación</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setType('public')}
-                className={`flex items-center justify-center gap-1.5 text-sm py-2 rounded-lg border font-medium transition-colors ${
-                  type === 'public'
-                    ? 'border-green-400 bg-green-50 text-green-700'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                🔌 Pública
-              </button>
-              <button
-                type="button"
-                onClick={() => setType('residential')}
-                className={`flex items-center justify-center gap-1.5 text-sm py-2 rounded-lg border font-medium transition-colors ${
-                  type === 'residential'
-                    ? 'border-blue-400 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                🏠 Residencial
-              </button>
-            </div>
+            <StationKindPicker type={type} access={access} setType={setType} setAccess={setAccess} />
           </div>
 
           {/* Name */}

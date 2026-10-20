@@ -125,6 +125,21 @@ Codificación de color acordada — **dos señales independientes, no una sola**
   del pin (2×3 = 6 combinaciones) rompería la legibilidad del mapa.
 - Filtro "🔌 Públicas / 🏠 Residenciales" en `FilterBar.tsx`; selector en
   `AddStationModal.tsx`, `EditStationModal.tsx` y `AdminPanel.tsx`.
+- **Cambio de criterio (20 oct 2026, a pedido de Rafa)**: se agregó un
+  **tercer color, naranja = semi-pública** (negocio con acceso restringido:
+  solo clientes, huéspedes o socios — hoteles, agencias, bancos, clubes). No
+  es un valor nuevo de `type` ni requiere migración: es una categoría
+  derivada, `stationKind()` en `src/utils/stationKind.ts` → residencial si
+  `type='residential'`; si no, semi-pública si `access` ≠ `public`
+  (incluye `private`, p. ej. clubes de socios); si no, pública. Una
+  residencial sigue azul aunque su acceso sea semi-público. Se usa en el pin
+  (`.ev-pin.semi-public`), la franja de los círculos de grupo (3 colores,
+  `--pub`/`--semi`), el chip "Semi-públicas" (filtro `stationType` ahora es
+  `StationKind`), las tarjetas, la ficha y el modo ruta. Los formularios
+  usan `StationKindPicker.tsx` (Pública / Semi-pública / Residencial), que
+  ajusta `type` y `access` a la vez; el desplegable "Acceso" sigue ahí.
+  Al hacer el cambio había 21 estaciones activas que pasaron a naranja
+  (19 `semi-public` + 2 clubes `private`).
 
 **Privacidad del historial de verificación en residenciales (31 jul 2026)**:
 el campo `stations.notes` acumula automáticamente el historial de

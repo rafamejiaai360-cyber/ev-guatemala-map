@@ -14,6 +14,12 @@ export type VerificationStatus = 'pending' | 'verified' | 'error';
 
 export type StationType = 'public' | 'residential';
 
+/** Categoría que se ve en el mapa (color del pin y filtro rápido). No es un
+ *  campo guardado: sale de `type` + `access` (ver utils/stationKind.ts).
+ *  verde = pública, naranja = semi-pública (clientes, huéspedes, socios),
+ *  azul = residencial. Oct 2026. */
+export type StationKind = 'public' | 'semi-public' | 'residential';
+
 // Estado real de frescura que expone la API desde D1:
 // verified = confirmada hace <90 dias y sin reportes abiertos
 // stale    = la ultima confirmacion ya envejecio
