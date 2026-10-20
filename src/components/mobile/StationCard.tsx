@@ -19,7 +19,7 @@ export default function StationCard({
   const kw = maxKw(station);
   return (
     <button type="button" className={`m-card${selected ? ' sel' : ''}`} onClick={() => onOpen(station.id)}>
-      <span className={`av${t === 'residential' ? ' r' : ''}`}>{t === 'residential' ? Icon.house : Icon.pin}</span>
+      <span className={`av${t === 'residential' ? ' r' : t === 'semi-public' ? ' s' : ''}`}>{t === 'residential' ? Icon.house : Icon.pin}</span>
       <h4>{station.name}</h4>
       <span className={`m-pill ${station.status}`}>{STATUS_LABEL[station.status]}</span>
       <p className="m-addr">

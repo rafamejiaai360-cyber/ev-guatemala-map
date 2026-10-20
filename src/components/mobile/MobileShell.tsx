@@ -143,7 +143,7 @@ export default function MobileShell() {
     (selectedVehicle ? 1 : 0);
   // Sin filtro rápido por estado (oct 2026, a pedido de Rafa): no se conoce el
   // estado real de cada cargador en tiempo real, así que la app no ofrece
-  // "Activas" ni cuenta "activas"; el verde/azul de los chips es el tipo.
+  // "Activas" ni cuenta "activas"; el verde/naranja/azul de los chips es el tipo.
   const allPressed = filters.stationType === 'all';
 
   const chipButtons = (
@@ -153,6 +153,10 @@ export default function MobileShell() {
       <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'public'}
         onClick={() => setFilters({ stationType: filters.stationType === 'public' ? 'all' : 'public' })}>
         <i style={{ background: '#22c55e' }} />Públicas
+      </button>
+      <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'semi-public'}
+        onClick={() => setFilters({ stationType: filters.stationType === 'semi-public' ? 'all' : 'semi-public' })}>
+        <i style={{ background: '#f97316' }} />Semi-públicas
       </button>
       <button type="button" className="m-chip m-glass" aria-pressed={filters.stationType === 'residential'}
         onClick={() => setFilters({ stationType: filters.stationType === 'residential' ? 'all' : 'residential' })}>

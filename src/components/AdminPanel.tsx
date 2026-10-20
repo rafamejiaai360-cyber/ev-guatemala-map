@@ -10,6 +10,8 @@ import EditStationModal from './EditStationModal';
 import VehiclesTab from './admin/VehiclesTab';
 import IdentityTab from './admin/IdentityTab';
 import VerifiedBadge from './VerifiedBadge';
+import StationKindPicker from './StationKindPicker';
+import { stationKind } from '../utils/stationKind';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,6 +94,9 @@ const TYPE_LABELS: Record<string, string> = {
   public: '🔌 Pública',
   residential: '🏠 Residencial',
 };
+
+const KIND_EMOJI: Record<string, string> = { public: '🔌', 'semi-public': '🏨', residential: '🏠' };
+const KIND_DOT: Record<string, string> = { public: 'bg-green-500', 'semi-public': 'bg-orange-500', residential: 'bg-blue-500' };
 
 function formatChangeValue(value: unknown, key?: string): string {
   if (value == null || value === '') return '—';
@@ -234,18 +239,7 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
       {/* Type */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1">Tipo de estación</label>
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => setType('public')}
-            className={`text-sm py-2 rounded-lg border font-medium transition-colors ${
-              type === 'public' ? 'border-green-400 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-            🔌 Pública
-          </button>
-          <button type="button" onClick={() => setType('residential')}
-            className={`text-sm py-2 rounded-lg border font-medium transition-colors ${
-              type === 'residential' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-            🏠 Residencial
-          </button>
-        </div>
+        <StationKindPicker type={type} access={access} setType={setType} setAccess={setAccess} />
       </div>
 
       {/* Name */}
@@ -414,12 +408,12 @@ function StationsTab() {
           <div className="flex items-center gap-3 px-4 py-3">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
               station.status === 'active'
-                ? ((station.type ?? 'public') === 'residential' ? 'bg-blue-500' : 'bg-green-500')
+                ? KIND_DOT[stationKind(station)]
                 : station.status === 'maintenance' ? 'bg-amber-400' : 'bg-red-500'}`} />
 
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-gray-900 truncate">
-                {(station.type ?? 'public') === 'residential' ? '🏠' : '🔌'} {station.name}
+                {KIND_EMOJI[stationKind(station)]} {station.name}
               </div>
               <div className="text-xs text-gray-400">{station.zone} · {station.id}</div>
             </div>
@@ -635,7 +629,7 @@ function PendingTab() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900">
-                      {(station.type ?? 'public') === 'residential' ? '🏠' : '🔌'} {station.name}
+                      {KIND_EMOJI[stationKind(station)]} {station.name}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {[station.address, station.zone].filter(Boolean).join(' · ')}

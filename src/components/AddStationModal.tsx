@@ -6,6 +6,8 @@ import type { ConnectorType, ChargerLevel, StationType } from '../types/index';
 import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
 import PriceField from './PriceField';
 import { parsePriceInput, PRICE_ERROR } from '../utils/price';
+import StationKindPicker from './StationKindPicker';
+import { KIND_HINT, stationKind } from '../utils/stationKind';
 
 const CONNECTOR_TYPES: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
 const POWER_OPTIONS = [3.7, 7.4, 11, 22, 28, 50, 100, 150, 350];
@@ -233,35 +235,8 @@ export default function AddStationModal() {
               {/* Type */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Tipo de estación</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setType('public')}
-                    className={`flex items-center justify-center gap-1.5 text-sm py-2.5 rounded-lg border font-medium transition-colors ${
-                      type === 'public'
-                        ? 'border-green-400 bg-green-50 text-green-700'
-                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                    }`}
-                  >
-                    🔌 Pública
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setType('residential')}
-                    className={`flex items-center justify-center gap-1.5 text-sm py-2.5 rounded-lg border font-medium transition-colors ${
-                      type === 'residential'
-                        ? 'border-blue-400 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                    }`}
-                  >
-                    🏠 Residencial
-                  </button>
-                </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  {type === 'public'
-                    ? 'Centro comercial, hotel, gasolinera u otro negocio.'
-                    : 'Un cargador en una casa particular que su dueño comparte con la comunidad.'}
-                </p>
+                <StationKindPicker type={type} access={access} setType={setType} setAccess={setAccess} />
+                <p className="text-[11px] text-gray-400 mt-1">{KIND_HINT[stationKind({ type, access })]}</p>
               </div>
 
               {/* Login gate: las residenciales exigen cuenta (owner_email en el backend) */}

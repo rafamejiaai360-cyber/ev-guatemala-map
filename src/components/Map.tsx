@@ -9,6 +9,8 @@ import { useStore } from '../store/useStore';
 import { primeRouteSound } from './mobile/routeEngine';
 import { requestCompass, useCompassWhenLocated } from './mobile/heading';
 import type { ChargerStation } from '../types';
+import { stationKind } from '../utils/stationKind';
+import { TYPE_LABEL } from './mobile/shared';
 
 const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
@@ -47,16 +49,17 @@ function makeStationIcon(type: string, status: string, selected: boolean) {
   return icon;
 }
 
-// Círculo de grupo: franja alrededor repartida en verde (públicas) y azul
-// (residenciales) según cuántas hay de cada una.
-function makeClusterIcon(count: number, residential: number) {
-  const key = `cluster-${count}-${residential}`;
+// Círculo de grupo: franja alrededor repartida en verde (públicas), naranja
+// (semi-públicas) y azul (residenciales) según cuántas hay de cada una.
+function makeClusterIcon(count: number, semi: number, residential: number) {
+  const key = `cluster-${count}-${semi}-${residential}`;
   if (iconCache.has(key)) return iconCache.get(key)!;
   const size = (count >= 10 ? 40 : 34) + 6; // + franja de 3 px por lado
-  const pub = Math.round(((count - residential) / count) * 100);
+  const pub = Math.round(((count - semi - residential) / count) * 100);
+  const semiEnd = Math.round(((count - residential) / count) * 100);
   const icon = L.divIcon({
     className: 'ev-pin-wrap',
-    html: `<div class="ev-cluster" style="--pub:${pub}%;min-width:${size}px;height:${size}px"><span>${count}</span></div>`,
+    html: `<div class="ev-cluster" style="--pub:${pub}%;--semi:${semiEnd}%;min-width:${size}px;height:${size}px"><span>${count}</span></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
@@ -107,7 +110,7 @@ function StationTooltipContent({ station }: { station: ChargerStation }) {
               {station.name}
             </div>
             <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-              {(station.type ?? 'public') === 'residential' ? 'Residencial' : 'Pública'} · {station.zone} · {station.network}
+              {TYPE_LABEL[stationKind(station)]} · {station.zone} · {station.network}
             </div>
           </div>
         </div>
@@ -284,12 +287,13 @@ function StationMarkers({ stations }: { stations: ChargerStation[] }) {
     <>
       {items.map((it) => {
         if (it.kind === 'cluster') {
-          const residential = it.members.filter((m) => (m.type ?? 'public') === 'residential').length;
+          const residential = it.members.filter((m) => stationKind(m) === 'residential').length;
+          const semi = it.members.filter((m) => stationKind(m) === 'semi-public').length;
           return (
             <Marker
               key={`c-${it.key}`}
               position={[it.lat, it.lng]}
-              icon={makeClusterIcon(it.members.length, residential)}
+              icon={makeClusterIcon(it.members.length, semi, residential)}
               eventHandlers={{
                 click: () => {
                   const bounds = L.latLngBounds(it.members.map((m) => [m.lat, m.lng] as [number, number]));
@@ -313,7 +317,7 @@ function StationMarkers({ stations }: { stations: ChargerStation[] }) {
           )}
           <Marker
             position={[station.lat, station.lng]}
-            icon={makeStationIcon(station.type ?? 'public', station.status, station.id === selectedStationId)}
+            icon={makeStationIcon(stationKind(station), station.status, station.id === selectedStationId)}
             zIndexOffset={station.id === selectedStationId ? 1000 : 0}
             eventHandlers={{
               click: () => {

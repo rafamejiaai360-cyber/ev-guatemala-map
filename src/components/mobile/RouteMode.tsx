@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore, ROUTE_RADII } from '../../store/useStore';
 import type { RouteAlert } from './routeEngine';
-import { Icon, TYPE_LABEL, distanceKm, distanceLabel, stationType, wazeUrl } from './shared';
+import { Icon, TYPE_INK, TYPE_LABEL, distanceKm, distanceLabel, stationType, wazeUrl } from './shared';
 
 // Interfaz del modo ruta; la lógica (ubicación, sonido, avisos) vive en
 // routeEngine.ts.
@@ -39,7 +39,7 @@ export function RouteAlertCard({ alert, onDismiss, onOpen }: { alert: RouteAlert
   const km = distanceKm(st, userLocation) ?? alert.km;
   return (
     <div className="m-route-alert m-glass" role="alert">
-      <div className="m-route-alert-ic" style={{ background: stationType(st) === 'residential' ? 'var(--blue)' : 'var(--green)' }}>{Icon.bolt}</div>
+      <div className="m-route-alert-ic" style={{ background: TYPE_INK[stationType(st)] }}>{Icon.bolt}</div>
       <div className="m-route-alert-txt">
         <small>Estación {TYPE_LABEL[stationType(st)].toLowerCase()} a {st.approximate ? '≈ ' : ''}{distanceLabel(km)}</small>
         <b>{st.name}</b>

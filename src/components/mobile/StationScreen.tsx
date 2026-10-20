@@ -9,7 +9,7 @@ import StationPhotos from '../StationPhotos';
 import StationReviews from '../StationReviews';
 import StationVerification from '../StationVerification';
 import {
-  ACCESS_LABEL, Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
+  ACCESS_LABEL, Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL, TYPE_SOFT,
   connectorName, distanceKm, distanceLabel, formatKw, googleMapsUrl, levelName, stationType, wazeUrl,
 } from './shared';
 import { timeAgo } from './ownerStatus';
@@ -53,7 +53,7 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
 
   return (
     <>
-      <div className="m-hero" style={{ ['--tint' as string]: isResidential ? 'var(--blue-soft)' : 'var(--green-soft)' }}>
+      <div className="m-hero" style={{ ['--tint' as string]: TYPE_SOFT[t] }}>
         <div className="m-dbar">
           <button type="button" className="m-back" onClick={onBack}>{Icon.chevL}{backLabel}</button>
           <button

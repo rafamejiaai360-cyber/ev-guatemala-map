@@ -96,6 +96,7 @@ html, body, #root {
   transition: transform .3s cubic-bezier(.34, 1.4, .64, 1), filter .3s ease;
   animation: ev-pop .35s cubic-bezier(.32, .72, 0, 1);
 }
+.ev-pin.semi-public { --c: #f97316; }
 .ev-pin.residential { --c: #3b82f6; }
 .ev-pin.offline { --c: #a1a1aa; }
 .ev-pin-shape {
@@ -131,13 +132,14 @@ html, body, #root {
 .ev-pin.sel { transform: scale(1.2); filter: drop-shadow(0 6px 8px rgba(0,0,0,.22)); animation-name: ev-pop-sel; }
 
 /* Círculo de grupo (ver makeClusterIcon en Map.tsx): franja de 3 px verde
-   (públicas) + azul (residenciales) en proporción (--pub), con un leve
-   difuminado verde alrededor. */
+   (públicas) + naranja (semi-públicas) + azul (residenciales) en proporción
+   (--pub = fin del verde, --semi = fin del naranja), con un leve difuminado
+   verde alrededor. */
 .ev-cluster {
   display: flex;
   padding: 3px;
   border-radius: 999px;
-  background: conic-gradient(#22c55e 0 var(--pub, 100%), #3b82f6 var(--pub, 100%) 100%);
+  background: conic-gradient(#22c55e 0 var(--pub, 100%), #f97316 var(--pub, 100%) var(--semi, 100%), #3b82f6 var(--semi, 100%) 100%);
   box-shadow: 0 0 10px 1px rgba(34,197,94,.32), 0 5px 14px -4px rgba(0,0,0,.25);
   cursor: pointer;
   animation: ev-pop .35s cubic-bezier(.32, .72, 0, 1);

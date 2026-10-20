@@ -1,13 +1,17 @@
 import type { ChargerStation, Connector } from '../../types';
 import { haversineKm, formatDistance } from '../../utils/geo';
+import { stationKind } from '../../utils/stationKind';
 
 export const STATUS_LABEL: Record<string, string> = {
   active: 'Activa',
   maintenance: 'Mantenimiento',
   offline: 'Fuera de servicio',
 };
-export const TYPE_LABEL: Record<string, string> = { public: 'Pública', residential: 'Residencial' };
-export const TYPE_COLOR: Record<string, string> = { public: '#22c55e', residential: '#3b82f6' };
+export const TYPE_LABEL: Record<string, string> = { public: 'Pública', 'semi-public': 'Semi-pública', residential: 'Residencial' };
+export const TYPE_COLOR: Record<string, string> = { public: '#22c55e', 'semi-public': '#f97316', residential: '#3b82f6' };
+// Fondo suave y color de texto/ícono por categoría (variables de mobile.css).
+export const TYPE_SOFT: Record<string, string> = { public: 'var(--green-soft)', 'semi-public': 'var(--orange-soft)', residential: 'var(--blue-soft)' };
+export const TYPE_INK: Record<string, string> = { public: 'var(--green)', 'semi-public': 'var(--orange)', residential: 'var(--blue)' };
 export const ACCESS_LABEL: Record<string, string> = {
   public: 'Acceso público',
   'semi-public': 'Acceso semi-público',
@@ -23,8 +27,9 @@ const CONNECTOR_NAME: Record<string, string> = {
 };
 const LEVEL_NAME: Record<string, string> = { DC: 'Carga rápida DC', L2: 'Corriente alterna AC', L1: 'Corriente alterna AC (lenta)' };
 
+// Categoría del mapa: pública / semi-pública / residencial (utils/stationKind.ts).
 export function stationType(s: ChargerStation) {
-  return s.type ?? 'public';
+  return stationKind(s);
 }
 export function connectorName(type: string) {
   return CONNECTOR_NAME[type] ?? type;
