@@ -436,9 +436,13 @@ el mapa nunca quede detrás de la hora.
 **Modo ruta (oct 2026)**: botón con ícono de auto en los controles del mapa
 (`MobileMapTools` en `Map.tsx`), que el usuario enciende y apaga cuando quiere.
 Encendido: `navigator.geolocation.watchPosition` actualiza `userLocation` en
-vivo y el mapa lo sigue con `panTo` sin cambiar el zoom (`MapController`;
-pausa 15 s si el usuario arrastró el mapa o mientras hay una estación
-seleccionada). Al quedar a ≤ `routeRadiusKm` (1/2/5 km, por defecto 2, en
+vivo y el mapa lo sigue con `panTo` sin cambiar el zoom (`MapController`).
+El seguimiento (`routeFollow` en el store) se pausa si el usuario arrastra el
+mapa o selecciona una estación, y vuelve solo a los 15 s sin tocar el mapa
+(`FOLLOW_RESUME_MS`), o al instante con el botón "Centrar" de la barra del
+modo ruta o con "Mi ubicación". **Corregido 22 oct 2026**: antes, con una
+estación seleccionada (tocar un pin o "Ver" en el aviso) el mapa dejaba de
+seguir al usuario para siempre, sin aviso, hasta tocar una zona vacía. Al quedar a ≤ `routeRadiusKm` (1/2/5 km, por defecto 2, en
 `localStorage.ev_route_radius`) de una estación de `filteredStations`
 (respeta filtros; excluye `offline`) muestra `RouteAlertCard` (Ver / Ir en
 Waze) + sonido WebAudio (desbloqueado con el toque que enciende el modo,
