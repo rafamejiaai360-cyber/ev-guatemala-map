@@ -8,19 +8,24 @@ import { Icon, TYPE_INK, TYPE_LABEL, distanceKm, distanceLabel, stationType, waz
 
 /** Barra "Modo ruta" (distancia de aviso + apagar), arriba del mapa. */
 export function RouteModeBar() {
-  const { routeMode, setRouteMode, routeRadiusKm, setRouteRadiusKm } = useStore();
+  const { routeMode, setRouteMode, routeFollow, setRouteFollow, routeRadiusKm, setRouteRadiusKm } = useStore();
   const [hint, setHint] = useState(() => { try { return localStorage.getItem('ev_route_hint') !== '1'; } catch { return true; } });
   if (!routeMode) return null;
   return (
     <div className="m-route m-glass" role="status">
       {hint && (
         <p className="m-route-hint">
-          Te avisamos con un sonido al pasar cerca de una estación de las que ves en el mapa. El mapa gira con tu dirección; toca la brújula para poner el norte arriba. Deja la app abierta en pantalla. Tu ubicación no sale de tu teléfono.
+          Te avisamos con un sonido al pasar cerca de una estación de las que ves en el mapa. El mapa gira con tu dirección; toca la brújula para poner el norte arriba. Si mueves el mapa, vuelve a seguirte solo en 15 s o al tocar Centrar. Deja la app abierta en pantalla. Tu ubicación no sale de tu teléfono.
           <button type="button" onClick={() => { setHint(false); try { localStorage.setItem('ev_route_hint', '1'); } catch { /* */ } }}>Entendido</button>
         </p>
       )}
       <span className="m-route-dot" aria-hidden="true" />
       <span className="m-route-txt"><b>Modo ruta</b></span>
+      {/* El seguimiento se pausó (el usuario movió el mapa o abrió una
+          estación): vuelve solo a los 15 s, o ya con este botón. */}
+      {!routeFollow && (
+        <button type="button" className="m-route-center" onClick={() => setRouteFollow(true)}>Centrar</button>
+      )}
       <div className="m-route-radii" role="group" aria-label="Avisar a esta distancia" title="Avisar a esta distancia">
         {ROUTE_RADII.map((r) => (
           <button key={r} type="button" aria-pressed={routeRadiusKm === r} onClick={() => setRouteRadiusKm(r)}>{r} km</button>

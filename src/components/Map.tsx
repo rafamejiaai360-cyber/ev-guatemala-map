@@ -131,6 +131,10 @@ function StationTooltipContent({ station }: { station: ChargerStation }) {
 
 type Variant = 'desktop' | 'mobile';
 
+/** Tras mover el mapa o abrir una estación en modo ruta, el seguimiento
+ *  vuelve solo después de este tiempo sin tocar el mapa. */
+const FOLLOW_RESUME_MS = 15000;
+
 function MapController({ variant }: { variant: Variant }) {
   const { selectedStationId, stations, userLocation } = useStore();
   const map = useMap();
@@ -154,29 +158,46 @@ function MapController({ variant }: { variant: Variant }) {
     prevSelectedRef.current = selectedStationId;
   }, [selectedStationId, stations, map, variant]);
 
-  // Modo ruta: el mapa sigue al usuario sin cambiarle el zoom, salvo que esté
-  // mirando una estación o haya movido el mapa con el dedo hace menos de 15 s.
+  // Modo ruta: el mapa sigue al usuario sin cambiarle el zoom. Si mueve el
+  // mapa con el dedo o abre una estación, el seguimiento se pausa y vuelve
+  // solo a los 15 s sin tocar el mapa (o al tocar "Centrar" / "Mi ubicación").
+  // Antes, con una estación seleccionada se quedaba pausado para siempre.
   const routeMode = useStore((s) => s.routeMode);
-  const lastDragRef = useRef(0);
-  const followingRef = useRef(false);
-  useMapEvents({ dragstart: () => { lastDragRef.current = Date.now(); } });
+  const routeFollow = useStore((s) => s.routeFollow);
+  const setRouteFollow = useStore((s) => s.setRouteFollow);
+  const startedRef = useRef(false);
+  const resumeRef = useRef<number | undefined>(undefined);
+  const pauseFollow = useCallback(() => {
+    if (!useStore.getState().routeMode) return;
+    setRouteFollow(false);
+    window.clearTimeout(resumeRef.current);
+    resumeRef.current = window.setTimeout(() => setRouteFollow(true), FOLLOW_RESUME_MS);
+  }, [setRouteFollow]);
+  useEffect(() => {
+    if (!routeMode || routeFollow) window.clearTimeout(resumeRef.current);
+  }, [routeMode, routeFollow]);
+  useEffect(() => () => window.clearTimeout(resumeRef.current), []);
+  useMapEvents({ dragstart: pauseFollow, drag: pauseFollow });
+  useEffect(() => {
+    if (selectedStationId) pauseFollow();
+  }, [selectedStationId, pauseFollow]);
 
   useEffect(() => {
     if (!userLocation) return;
     const at: [number, number] = [userLocation.lat, userLocation.lng];
     if (!routeMode) {
-      followingRef.current = false;
+      startedRef.current = false;
       map.setView(at, 14, { animate: true });
       return;
     }
-    if (!followingRef.current) {
-      followingRef.current = true;
+    if (!routeFollow) return;
+    if (!startedRef.current) {
+      startedRef.current = true;
       map.setView(at, Math.max(map.getZoom(), 15), { animate: true });
       return;
     }
-    if (useStore.getState().selectedStationId || Date.now() - lastDragRef.current < 15000) return;
     map.panTo(at, { animate: true });
-  }, [userLocation, routeMode, map]);
+  }, [userLocation, routeMode, routeFollow, map]);
 
   // Modo ruta con "girar con mi dirección": lo que el usuario tiene enfrente
   // queda arriba. Fuera del modo ruta (o con "norte arriba") vuelve a 0.
@@ -461,7 +482,7 @@ function ZoomControls() {
 function MobileMapTools() {
   const map = useMap();
   const locate = useLocate();
-  const { routeMode, setRouteMode, headingUp, setHeadingUp } = useStore();
+  const { routeMode, setRouteMode, setRouteFollow, headingUp, setHeadingUp } = useStore();
   const bearing = useMapBearing();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -482,7 +503,7 @@ function MobileMapTools() {
         </button>
       </div>
       <div className="m-tgroup m-glass">
-        <button type="button" className="m-tbtn" aria-label="Mi ubicación" onClick={() => { requestCompass(); locate(); }}>
+        <button type="button" className="m-tbtn" aria-label="Mi ubicación" onClick={() => { requestCompass(); if (routeMode) setRouteFollow(true); locate(); }}>
           <svg viewBox="0 0 24 24"><path d="M20.5 3.5 3.5 10.8l7 2.7 2.7 7z" /></svg>
         </button>
         <button

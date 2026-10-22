@@ -149,6 +149,10 @@ interface AppState {
    *  de una estación. Solo en este dispositivo; la ubicación no se envía. */
   routeMode: boolean;
   setRouteMode: (on: boolean) => void;
+  /** Modo ruta: true mientras el mapa sigue al usuario. Se pausa si mueve el
+   *  mapa con el dedo o abre una estación; vuelve solo o con "Centrar". */
+  routeFollow: boolean;
+  setRouteFollow: (on: boolean) => void;
   routeRadiusKm: number;
   setRouteRadiusKm: (km: number) => void;
 
@@ -402,7 +406,9 @@ export const useStore = create<AppState>((set, get) => ({
   userLocation: null,
   setUserLocation: (loc) => set({ userLocation: loc }),
   routeMode: false,
-  setRouteMode: (on) => set({ routeMode: on }),
+  setRouteMode: (on) => set({ routeMode: on, routeFollow: true }),
+  routeFollow: true,
+  setRouteFollow: (on) => set({ routeFollow: on }),
   userHeading: null,
   setUserHeading: (deg) => set({ userHeading: deg }),
   headingUp: loadHeadingUp(),

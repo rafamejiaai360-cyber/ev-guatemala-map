@@ -118,6 +118,7 @@
 .m-route-radii { display: flex; gap: 3px; }
 .m-route-radii button { border: 0; border-radius: 10px; padding: 3px 7px; font-size: 11.5px; font-weight: 500; background: var(--ghost); cursor: pointer; }
 .m-route-radii button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.m-route-center { border: 0; border-radius: 10px; padding: 3px 9px; font-size: 11.5px; font-weight: 600; background: var(--green); color: #fff; cursor: pointer; }
 .m-route-off { margin-left: auto; border: 0; background: transparent; color: var(--danger); font-size: 12px; font-weight: 600; cursor: pointer; padding: 3px 4px; }
 .m-route-hint { flex-basis: 100%; order: 9; margin: 4px 0 2px; font-size: 11.5px; line-height: 1.35; color: var(--ink2, #3c3c43); }
 .m-route-hint button { border: 0; background: transparent; color: var(--green); font-weight: 600; font-size: 11.5px; padding: 0 0 0 6px; cursor: pointer; }
