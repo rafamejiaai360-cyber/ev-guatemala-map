@@ -292,16 +292,13 @@ function buildAllStations(
   dynamic: ChargerStation[],
   dynamicLoaded: boolean,
 ): ChargerStation[] {
-  // Notion is the source of truth for any station id it knows about: once the
-  // dynamic fetch has succeeded, a dynamic station overrides its static seed
-  // counterpart, and a static station missing from the dynamic list (deleted/
-  // archived in Notion) is dropped instead of falling back to stale seed data.
-  // Before the first successful fetch, show the static seed list so the map
-  // isn't empty on first paint.
-  const dynamicIds = new Set(dynamic.map(d => d.id));
-  const staticFallback = dynamicLoaded
-    ? chargerStations.filter(s => !dynamicIds.has(s.id))
-    : chargerStations;
+  // La API (D1) es la fuente de verdad: una vez que respondió, la semilla
+  // estática no aporta nada. Antes se agregaban las de la semilla que NO
+  // venían en la API, y así una estación eliminada (approval_status=
+  // 'rejected') seguía en el mapa para siempre (visto 13 oct 2026 con
+  // mix-mc-mixco). Antes de la primera respuesta se muestra la semilla para
+  // que el mapa no salga vacío.
+  const staticFallback = dynamicLoaded ? [] : chargerStations;
   return applyOverrides([...staticFallback, ...custom, ...dynamic], overrides);
 }
 const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all', stationType: 'all' };
