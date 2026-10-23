@@ -15,7 +15,7 @@ import { MyStationsSection, StaleStatusSheetContent } from './MyStations';
 import { findStaleStation } from './ownerStatus';
 import {
   Icon, STATUS_LABEL, TYPE_COLOR, TYPE_LABEL,
-  connectorTypes, distanceKm, distanceLabel, formatKw, googleMapsUrl, maxKw, stationType,
+  connectorName, connectorTypes, distanceKm, distanceLabel, formatKw, googleMapsUrl, maxKw, stationType,
 } from './shared';
 import './mobile.css';
 
@@ -44,7 +44,7 @@ function useIsWide() {
 // computadora tocar un pin abre la ficha directo (no hay tarjeta flotante).
 export default function MobileShell() {
   const {
-    stations, filteredStations, filters, setFilters, selectedVehicle,
+    stations, filteredStations, filters, setFilters, selectedVehicle, myAdapters,
     selectedStationId, setSelectedStationId, userLocation, ratings, savedIds,
     currentUser, isAdminAuthenticated, setAuthModalOpen, openAddStation,
     setProfileModalOpen, setContactAdminModalOpen, setScanModalOpen, logoutUser,
@@ -315,7 +315,7 @@ export default function MobileShell() {
           <button type="button" className="m-cta m-myauto" onClick={() => setSheet('filters')}>
             <span className="ic">{Icon.car}</span>
             {selectedVehicle ? (
-              <span><b>{selectedVehicle.brand} {selectedVehicle.model}</b><small>{currentUser ? 'Guardado en tu cuenta · ' : ''}El mapa te muestra dónde puede cargar</small></span>
+              <span><b>{selectedVehicle.brand} {selectedVehicle.model}</b><small>{currentUser ? 'Guardado en tu cuenta · ' : ''}{myAdapters.length ? `Con adaptador: ${myAdapters.map(connectorName).join(', ')}` : 'El mapa te muestra dónde puede cargar'}</small></span>
             ) : (
               <span><b>Elige tu auto</b><small>Y el mapa te muestra solo dónde puede cargar</small></span>
             )}

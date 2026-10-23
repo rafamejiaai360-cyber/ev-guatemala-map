@@ -9,6 +9,7 @@ import type { ChargerStation } from '../types';
 import EditStationModal from './EditStationModal';
 import VehiclesTab from './admin/VehiclesTab';
 import IdentityTab from './admin/IdentityTab';
+import ProposalReview from './admin/ProposalReview';
 import VerifiedBadge from './VerifiedBadge';
 import StationKindPicker from './StationKindPicker';
 import { stationKind } from '../utils/stationKind';
@@ -552,6 +553,10 @@ function PendingTab() {
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
+  // Revisión de ubicación en el mapa (abierta por defecto si la propuesta
+  // trae ubicación) y pin movido por el admin antes de aprobar.
+  const [reviewToggled, setReviewToggled] = useState<Record<string, boolean>>({});
+  const [adjusted, setAdjusted] = useState<Record<string, { lat: number; lng: number }>>({});
 
   useEffect(() => {
     fetch('/api/stations/pending', { headers: { Authorization: `Bearer ${authToken}` } })
@@ -562,18 +567,22 @@ function PendingTab() {
 
   async function handleAction(station: PendingStation, action: 'approve' | 'reject') {
     setProcessing(station.id);
+    const fix = action === 'approve' ? adjusted[station.id] : undefined;
     try {
       const res = await fetch(`/api/stations/${station.id}/${action}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${authToken}` },
+        headers: fix
+          ? { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' }
+          : { Authorization: `Bearer ${authToken}` },
+        ...(fix ? { body: JSON.stringify(fix) } : {}),
       });
       if (!res.ok) throw new Error('Error en la acción');
       setStations(prev => prev.filter(s => s.id !== station.id));
       await loadDynamicStations();
       if (action === 'approve') {
-        setActionMsg(station.kind === 'correction'
+        setActionMsg((station.kind === 'correction'
           ? `Corrección de "${station.name}" aplicada`
-          : `"${station.name}" aprobada y publicada en el mapa`);
+          : `"${station.name}" aprobada y publicada en el mapa`) + (fix ? ' con la ubicación que ajustaste' : ''));
       } else {
         setActionMsg(station.kind === 'correction'
           ? `Corrección de "${station.name}" descartada`
@@ -684,6 +693,38 @@ function PendingTab() {
                         </p>
                       </>
                     )}
+                    {(() => {
+                      const hasLocation = station.kind !== 'correction' || station.proposedLat != null;
+                      const open = reviewToggled[station.id] ?? hasLocation;
+                      const proposed = station.kind !== 'correction'
+                        ? { lat: station.lat, lng: station.lng }
+                        : station.proposedLat != null && station.proposedLng != null
+                          ? { lat: station.proposedLat, lng: station.proposedLng } : null;
+                      return (
+                        <>
+                          <button type="button"
+                            onClick={() => setReviewToggled(prev => ({ ...prev, [station.id]: !open }))}
+                            className="mt-2 text-xs font-medium text-blue-600 hover:underline">
+                            {open ? 'Ocultar mapa' : '🗺 Revisar ubicación en el mapa'}
+                          </button>
+                          {open && (
+                            <ProposalReview
+                              stationId={station.id}
+                              name={station.name}
+                              address={[station.address, station.zone].filter(Boolean).join(', ')}
+                              proposed={proposed}
+                              current={station.kind === 'correction' ? { lat: station.lat, lng: station.lng } : null}
+                              adjusted={adjusted[station.id] ?? null}
+                              onAdjust={p => setAdjusted(prev => {
+                                const next = { ...prev };
+                                if (p) next[station.id] = p; else delete next[station.id];
+                                return next;
+                              })}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="flex flex-col gap-2 flex-shrink-0">
                     <button

@@ -670,6 +670,39 @@ estaciones tienen el precio escrito en notas (`quet-restaurante-tertulia`,
 notas internas tipo "NO MODIFICAR sin nueva confirmación" que ya veía el
 público.
 
+**Revisión de ubicación antes de aprobar + "Mis adaptadores" (22 oct 2026,
+publicado en prod el 22 oct 2026 con visto bueno de Rafa)**:
+- **Pendientes del panel** (`admin/ProposalReview.tsx`): cada propuesta con
+  ubicación (estación nueva o corrección con lat/lng) abre un mapa con vista
+  satélite (Esri World Imagery, sin llave) o calles; pin P = propuesta, A =
+  actual y la distancia entre ambos; puntos ámbar = estaciones ya publicadas a
+  < 300 m (aviso "¿Duplicada?"); lo que OpenStreetMap/Nominatim dice que hay en
+  ese punto (consulta desde el navegador del admin); enlaces a Google Maps,
+  Street View y Waze. "Mover el pin antes de aprobar" deja arrastrar un pin
+  verde: `POST /api/stations/:id/approve` acepta ahora `{lat, lng}` opcional
+  (rango Guatemala). Nueva → se publica con esa ubicación (evento
+  `proposal_approved` con `adjusted_location`); corrección → reemplaza la
+  lat/lng propuesta, o si no traía, se aplica aparte con evento `updated`
+  (`via: 'approve_adjust'`). Queda nota en `verification_log`.
+- **Mis adaptadores** (conductor): en la hoja Filtros, debajo del auto, chips
+  de conectores de ESTACIÓN que su adaptador propio le permite usar (no se
+  ofrecen los que su auto ya tiene; "Limpiar" no los borra). Store
+  `myAdapters` (`localStorage.ev_gt_my_adapters`; con cuenta en
+  `users.my_adapters`, se suman al iniciar sesión). Lógica única en
+  `src/utils/compat.ts` (`chargeVia`: native / station-adapter / my-adapter):
+  `computeFiltered` muestra la estación si el auto carga nativo, con el
+  adaptador que presta la estación, o con el propio. Ficha: "Con tu adaptador
+  … Llévalo contigo."; tarjeta: etiqueta "con tu adaptador"; Perfil → Mi auto
+  muestra "Con adaptador: …". Sin auto elegido (o ficha sin conectores
+  confirmados) no filtra, como antes.
+- **Migración manual**: `docs/migracion-mis-adaptadores.sql` — aplicada a
+  `ev-guatemala-db-staging` y `ev-guatemala-db` (22 oct 2026, vía MCP) — no
+  repetir (sin la columna, guardar adaptadores en la cuenta da 503 y quedan
+  solo en el teléfono; nada más se rompe).
+- Datos de prueba en staging: estación `prueba-revision-claude` (pendiente,
+  a 52 m de `ant-cc-paseo` para ver el aviso de duplicado) y una propuesta de
+  ubicación sobre `ant-hotel-casasanto` (106 m), de `prueba@claude.test`.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
