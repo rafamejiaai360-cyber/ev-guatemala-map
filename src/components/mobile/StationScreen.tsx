@@ -14,6 +14,7 @@ import {
 } from './shared';
 import { timeAgo } from './ownerStatus';
 import { formatPrice } from '../../utils/price';
+import { chargeVia, myAdapterPlugs } from '../../utils/compat';
 
 interface Props {
   station: ChargerStation;
@@ -27,7 +28,7 @@ interface Props {
 //   historial de verificación (`verificationLog`, con correos) solo llega al admin.
 // - quién dio de alta la estación solo se muestra a admins.
 export default function StationScreen({ station, backLabel, onBack }: Props) {
-  const { currentUser, userLocation, setAuthModalOpen, savedIds, toggleSaved, ratings, setJoinPrompt, selectedVehicle } = useStore();
+  const { currentUser, userLocation, setAuthModalOpen, savedIds, toggleSaved, ratings, setJoinPrompt, selectedVehicle, myAdapters } = useStore();
   const [showEdit, setShowEdit] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
   const [showRequestUse, setShowRequestUse] = useState(false);
@@ -46,10 +47,10 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
   // Adaptadores que presta la estación; si el auto elegido solo carga aquí
   // gracias a uno, se le avisa para que lo pida al llegar.
   const adapters = station.adapters ?? [];
-  const carConnectors = selectedVehicle?.compatible_connectors ?? [];
-  const carNeedsAdapter = carConnectors.length > 0
-    && !station.connectors.some((c) => carConnectors.includes(c.type))
-    && adapters.some((a) => carConnectors.includes(a));
+  const via = chargeVia(station, selectedVehicle, myAdapters);
+  const carNeedsAdapter = via === 'station-adapter';
+  // Solo carga aquí con el adaptador propio del conductor ("Mis adaptadores").
+  const ownAdapterPlugs = via === 'my-adapter' ? myAdapterPlugs(station, myAdapters) : [];
 
   return (
     <>
@@ -169,6 +170,16 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
               <span className={`m-pill ${station.status}`}>{STATUS_LABEL[station.status]}</span>
             </div>
           ))}
+          {ownAdapterPlugs.length > 0 && (
+            <div className="m-conn m-adapter">
+              <div>
+                <b>Con tu adaptador</b>
+                <small className="m-adapter-car">
+                  Tu {selectedVehicle!.brand} {selectedVehicle!.model} carga aquí usando tu adaptador {ownAdapterPlugs.map(connectorName).join(' o ')}. Llévalo contigo.
+                </small>
+              </div>
+            </div>
+          )}
           {adapters.length > 0 && (
             <div className="m-conn m-adapter">
               <div>

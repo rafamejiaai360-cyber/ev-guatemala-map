@@ -15,7 +15,7 @@ const LEVELS: { value: ChargerLevel | 'all'; label: string }[] = [
 // carga, todo visible sin menús anidados. Pública/Residencial no
 // se repiten aquí porque ya están en los botones rápidos de afuera.
 export default function FiltersPanel({ onDone }: { onDone: () => void }) {
-  const { filters, setFilters, selectedVehicle, setSelectedVehicle, filteredStations, vehicleCatalog } = useStore();
+  const { filters, setFilters, selectedVehicle, setSelectedVehicle, filteredStations, vehicleCatalog, myAdapters, setMyAdapters } = useStore();
   const [query, setQuery] = useState('');
   // undefined = cerrado; null = proponer auto nuevo; Vehicle = corregir ese
   const [proposal, setProposal] = useState<Vehicle | null | undefined>(undefined);
@@ -26,6 +26,13 @@ export default function FiltersPanel({ onDone }: { onDone: () => void }) {
   function toggleConnector(t: ConnectorType) {
     const cur = filters.connectorTypes;
     setFilters({ connectorTypes: cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t] });
+  }
+  // Los adaptadores son algo que el conductor lleva, no un filtro: "Limpiar"
+  // no los borra. No se ofrecen los conectores que su auto ya tiene.
+  const carPlugs = selectedVehicle?.compatible_connectors ?? [];
+  const adapterOptions = CONNECTORS.filter((t) => !carPlugs.includes(t));
+  function toggleMyAdapter(t: ConnectorType) {
+    setMyAdapters(myAdapters.includes(t) ? myAdapters.filter((x) => x !== t) : [...myAdapters, t]);
   }
   function clearAll() {
     setFilters({ connectorTypes: [], level: 'all' });
@@ -62,6 +69,28 @@ export default function FiltersPanel({ onDone }: { onDone: () => void }) {
         </div>
       </section>
       {proposal !== undefined && <VehicleProposalModal base={proposal} onClose={() => setProposal(undefined)} />}
+
+      <section>
+        <div className="m-fp-h">Mis adaptadores</div>
+        <p className="m-fp-note">
+          ¿Llevas un adaptador en el carro? Marca a qué conectores de estación te permite conectarte y el mapa
+          también te mostrará esas estaciones.
+          {!carPlugs.length && ' Elige tu auto arriba para que se tomen en cuenta.'}
+        </p>
+        <div className="m-fp-chips" role="group" aria-label="Mis adaptadores">
+          {adapterOptions.map((t) => (
+            <button key={t} type="button" className="m-fp-chip" aria-pressed={myAdapters.includes(t)} onClick={() => toggleMyAdapter(t)}>
+              {connectorName(t)}
+            </button>
+          ))}
+        </div>
+        {carPlugs.length > 0 && myAdapters.some((t) => adapterOptions.includes(t)) && (
+          <p className="m-fp-note m-fp-adapt-sum">
+            Tu {selectedVehicle!.model} ({carPlugs.map(connectorName).join(', ')}) también podrá usar estaciones{' '}
+            {myAdapters.filter((t) => adapterOptions.includes(t)).map(connectorName).join(', ')} con tu adaptador.
+          </p>
+        )}
+      </section>
 
       <section>
         <div className="m-fp-h">Tipo de conector</div>

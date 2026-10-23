@@ -931,13 +931,31 @@ async function handleStationApprove(stationId: string, request: Request, env: En
   const station = await getStation(env.DB, stationId);
   if (!station) return apiError('Estación no encontrada', 404);
 
+  // Ubicación ajustada por el admin al revisar en el mapa (oct 2026):
+  // opcional, { lat, lng } en el cuerpo. Sin cuerpo se aprueba tal cual.
+  let adjust: { lat: number; lng: number } | null = null;
+  try {
+    const body = await request.json() as { lat?: unknown; lng?: unknown };
+    if (body && (body.lat !== undefined || body.lng !== undefined)) {
+      if (typeof body.lat !== 'number' || body.lat < 13 || body.lat > 18 ||
+          typeof body.lng !== 'number' || body.lng < -93 || body.lng > -88) {
+        return apiError('Ubicación ajustada fuera de Guatemala');
+      }
+      adjust = { lat: body.lat, lng: body.lng };
+    }
+  } catch { /* sin cuerpo: aprobar sin ajuste */ }
+  const ADJUST_NOTE = `[Ubicación ajustada por admin al aprobar: ${requester.email}]`;
+
   // Caso 1: estación nueva pendiente → publicarla
   if (station.approval_status === 'pending') {
+    const fix = adjust ? buildStationUpdate(station, adjust, ADJUST_NOTE) : null;
+    const sets = ["approval_status = 'active'", ...(fix && fix.diff.length ? fix.sets : []), "updated_at = datetime('now')"];
+    const values = fix && fix.diff.length ? fix.values : [];
     await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE stations SET approval_status = 'active', updated_at = datetime('now') WHERE id = ?"
-      ).bind(stationId),
-      eventStmt(env.DB, stationId, 'proposal_approved', requester, { kind: 'new_station' }),
+      env.DB.prepare(`UPDATE stations SET ${sets.join(', ')} WHERE id = ?`).bind(...values, stationId),
+      eventStmt(env.DB, stationId, 'proposal_approved', requester, {
+        kind: 'new_station', ...(fix && fix.diff.length ? { adjusted_location: fix.diff } : {}),
+      }),
     ]);
     invalidateStationsCache();
     ctx.waitUntil(syncStationToNotion(env, stationId));
@@ -961,6 +979,11 @@ async function handleStationApprove(stationId: string, request: Request, env: En
     let changes: Record<string, unknown> = {};
     try { changes = JSON.parse(p.changes) as Record<string, unknown>; } catch {}
     const { verification, ...fieldChanges } = changes as { verification?: string; [k: string]: unknown };
+    // El admin movió el pin propuesto antes de aprobar: manda su ubicación.
+    if (adjust && typeof fieldChanges.lat === 'number' && typeof fieldChanges.lng === 'number') {
+      fieldChanges.lat = adjust.lat;
+      fieldChanges.lng = adjust.lng;
+    }
 
     const action = Object.keys(fieldChanges).filter(k => k !== 'lat' && k !== 'lng').length > 0
       ? 'Datos corregidos (aprobado por admin)'
@@ -990,6 +1013,16 @@ async function handleStationApprove(stationId: string, request: Request, env: En
 
     // Refrescar la vista local de la estación para la siguiente propuesta
     current = next;
+  }
+
+  // Ajuste del admin sobre una propuesta que no traía ubicación nueva.
+  if (adjust) {
+    const fix = buildStationUpdate(current, adjust, ADJUST_NOTE);
+    if (fix.diff.length) {
+      fix.sets.push("updated_at = datetime('now')");
+      stmts.push(env.DB.prepare(`UPDATE stations SET ${fix.sets.join(', ')} WHERE id = ?`).bind(...fix.values, stationId));
+      stmts.push(eventStmt(env.DB, stationId, 'updated', requester, { changes: fix.diff, via: 'approve_adjust' }));
+    }
   }
 
   await env.DB.batch(stmts);
@@ -1556,6 +1589,8 @@ interface UserRecord {
   /** Preferencias sincronizadas entre dispositivos (oct 2026). */
   vehicleId?: string;
   savedIds?: string[];
+  /** Adaptadores propios del conductor: conectores de ESTACIÓN que puede usar. */
+  myAdapters?: string[];
 }
 
 type IdentityStatus = 'none' | 'pending' | 'verified' | 'rejected';
@@ -1576,6 +1611,7 @@ interface UserRow {
   identity_note?: string | null;
   vehicle_id?: string | null;          // migración oct 2026 (docs/migracion-mi-auto.sql)
   saved_station_ids?: string | null;   // JSON: ["id1","id2"]
+  my_adapters?: string | null;         // JSON: ["GBT"] (docs/migracion-mis-adaptadores.sql)
 }
 
 function rowToUser(r: UserRow): UserRecord {
@@ -1594,6 +1630,7 @@ function rowToUser(r: UserRow): UserRecord {
     identityNote: r.identity_note ?? undefined,
     vehicleId: r.vehicle_id ?? undefined,
     savedIds: parseSavedIds(r.saved_station_ids),
+    myAdapters: parseAdapters(r.my_adapters),
   };
 }
 
@@ -1732,7 +1769,7 @@ async function handleGetMe(request: Request, env: Env): Promise<Response> {
 function meResponse(user: UserRecord) {
   return {
     email: user.email, name: user.name, phone: user.phone, role: user.role, subscriptionEnd: user.subscriptionEnd,
-    vehicleId: user.vehicleId ?? null, savedIds: user.savedIds ?? [],
+    vehicleId: user.vehicleId ?? null, savedIds: user.savedIds ?? [], myAdapters: user.myAdapters ?? [],
     identityStatus: user.identityStatus,
     identityPlate: user.identityPlate ? formatPlate(user.identityPlate) : undefined,
     identityNote: user.identityNote,
@@ -1742,7 +1779,7 @@ function meResponse(user: UserRecord) {
 async function handleUpdateProfile(request: Request, env: Env): Promise<Response> {
   const user = await getUserFromToken(request, env);
   if (!user) return apiError('No autenticado', 401);
-  const body = await request.json() as { name?: string; phone?: string; vehicleId?: string | null; savedIds?: unknown };
+  const body = await request.json() as { name?: string; phone?: string; vehicleId?: string | null; savedIds?: unknown; myAdapters?: unknown };
 
   const name = body.name !== undefined ? body.name.trim() : user.name;
   if (!name) return apiError('El nombre es requerido');
@@ -1765,6 +1802,11 @@ async function handleUpdateProfile(request: Request, env: Env): Promise<Response
     }
     savedIds = Array.from(new Set(body.savedIds as string[])).slice(0, 300);
   }
+  let myAdapters = user.myAdapters ?? [];
+  if (body.myAdapters !== undefined) {
+    if (!Array.isArray(body.myAdapters)) return apiError('Lista de adaptadores inválida');
+    myAdapters = sanitizeAdapters(body.myAdapters);
+  }
 
   if (body.name !== undefined || body.phone !== undefined) await saveUser({ ...user, name, phone: phone ?? undefined }, env);
   if ((body.vehicleId !== undefined || body.savedIds !== undefined) && env.DB) {
@@ -1777,7 +1819,16 @@ async function handleUpdateProfile(request: Request, env: Env): Promise<Response
       return apiError('Preferencias no disponibles todavía', 503);
     }
   }
-  return json(meResponse({ ...user, name, phone: phone ?? undefined, vehicleId, savedIds }));
+  // Aparte de lo anterior: si falta esta columna no debe tumbar "Mi auto".
+  if (body.myAdapters !== undefined && env.DB) {
+    try {
+      await env.DB.prepare('UPDATE users SET my_adapters = ? WHERE email = ?')
+        .bind(adaptersToDb(myAdapters), user.email.toLowerCase().trim()).run();
+    } catch {
+      return apiError('Preferencias no disponibles todavía', 503);
+    }
+  }
+  return json(meResponse({ ...user, name, phone: phone ?? undefined, vehicleId, savedIds, myAdapters }));
 }
 
 async function handleChangePassword(request: Request, env: Env): Promise<Response> {

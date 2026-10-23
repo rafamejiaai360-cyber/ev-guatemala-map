@@ -6,6 +6,7 @@ import { stationKind } from '../utils/stationKind';
 import { getAllRatings } from '../utils/reviewsApi';
 import { vehicles as baseVehicles } from '../data/vehicles';
 import type { IdentityStatus } from '../utils/identityApi';
+import { chargeVia } from '../utils/compat';
 
 // Cuenta con sesión. identityStatus: verificación de identidad (DPI + placa),
 // requisito para pedir un cargador en casa (oct 2026).
@@ -60,7 +61,25 @@ function loadVehicleId(): string | null {
 function storeVehicleId(id: string | null) {
   try { if (id) localStorage.setItem(VEHICLE_KEY, id); else localStorage.removeItem(VEHICLE_KEY); } catch { /* sin almacenamiento */ }
 }
-type AccountUser = CurrentUser & { vehicleId?: string | null; savedIds?: string[] };
+// "Mis adaptadores" (oct 2026): conectores de ESTACIÓN que el conductor puede
+// usar con adaptadores propios (ej. GB/T → CCS2). Igual que "Mi auto": en el
+// teléfono y, con cuenta, también en users.my_adapters.
+const MY_ADAPTERS_KEY = 'ev_gt_my_adapters';
+const ALL_CONNECTORS: ConnectorType[] = ['CCS2', 'CCS1', 'CHAdeMO', 'Type2', 'J1772', 'GBT'];
+function cleanConnectorList(v: unknown): ConnectorType[] {
+  if (!Array.isArray(v)) return [];
+  return Array.from(new Set(v.filter((x): x is ConnectorType => ALL_CONNECTORS.includes(x as ConnectorType))));
+}
+function loadMyAdapters(): ConnectorType[] {
+  try { return cleanConnectorList(JSON.parse(localStorage.getItem(MY_ADAPTERS_KEY) || '[]')); } catch { return []; }
+}
+function storeMyAdapters(list: ConnectorType[]) {
+  try {
+    if (list.length) localStorage.setItem(MY_ADAPTERS_KEY, JSON.stringify(list));
+    else localStorage.removeItem(MY_ADAPTERS_KEY);
+  } catch { /* sin almacenamiento */ }
+}
+type AccountUser = CurrentUser & { vehicleId?: string | null; savedIds?: string[]; myAdapters?: string[] };
 
 const CUSTOM_KEY = 'ev_gt_custom_stations';
 
@@ -136,6 +155,8 @@ interface AppState {
 
   // Vehicle selector
   selectedVehicle: Vehicle | null;
+  myAdapters: ConnectorType[];
+  setMyAdapters: (list: ConnectorType[]) => void;
   setSelectedVehicle: (vehicle: Vehicle | null) => void;
 
   // Map / sidebar interaction
@@ -239,6 +260,7 @@ function computeFiltered(
   stations: ChargerStation[],
   filters: Filters,
   selectedVehicle: Vehicle | null,
+  myAdapters: ConnectorType[],
 ): ChargerStation[] {
   return stations.filter((s) => {
     if (filters.status !== 'all' && s.status !== filters.status) return false;
@@ -253,9 +275,9 @@ function computeFiltered(
     }
     // Sin conector confirmado para el vehículo no filtramos por compatibilidad —
     // mejor no afirmar nada a asumir un conector que todavía no se ha verificado.
-    if (selectedVehicle && selectedVehicle.compatible_connectors?.length) {
-      if (!selectedVehicle.compatible_connectors.some((t) => stationTypes.includes(t))) return false;
-    }
+    // Cuentan el conector del auto, el adaptador que presta la estación y los
+    // adaptadores propios del conductor.
+    if (chargeVia(s, selectedVehicle, myAdapters) === null) return false;
     return true;
   });
 }
@@ -289,7 +311,7 @@ const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all
 // de Rafa en sus dispositivos no se cuentan aunque luego entre sin sesión.
 // Guarda "Mi auto" / "Guardadas" en la cuenta, sin bloquear la pantalla. Si
 // falla (sin conexión o sin la migración), quedan igual en el teléfono.
-function pushPrefs(token: string | null, body: { vehicleId?: string | null; savedIds?: string[] }) {
+function pushPrefs(token: string | null, body: { vehicleId?: string | null; savedIds?: string[]; myAdapters?: string[] }) {
   if (!token) return;
   fetch('/api/auth/me', {
     method: 'PATCH',
@@ -326,7 +348,7 @@ export const useStore = create<AppState>((set, get) => ({
     const overrides = { ...get().statusOverrides, [id]: status };
     saveOverrides(overrides);
     const stations = buildAllStations(overrides, get().customStations, get().dynamicStations, get().dynamicLoaded);
-    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
+    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle, get().myAdapters);
     set({ statusOverrides: overrides, stations, filteredStations });
   },
 
@@ -335,7 +357,7 @@ export const useStore = create<AppState>((set, get) => ({
     const custom = [...get().customStations, station];
     saveCustomStations(custom);
     const stations = buildAllStations(get().statusOverrides, custom, get().dynamicStations, get().dynamicLoaded);
-    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
+    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle, get().myAdapters);
     set({ customStations: custom, stations, filteredStations });
   },
 
@@ -344,25 +366,25 @@ export const useStore = create<AppState>((set, get) => ({
   addDynamicStation: (station) => {
     const dynamic = [...get().dynamicStations.filter(d => d.id !== station.id), station];
     const stations = buildAllStations(get().statusOverrides, get().customStations, dynamic, get().dynamicLoaded);
-    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
+    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle, get().myAdapters);
     set({ dynamicStations: dynamic, stations, filteredStations });
   },
   loadDynamicStations: async () => {
     const dynamic = await fetchDynamicStations();
     if (dynamic === null) return; // fetch failed — keep showing the static fallback
     const stations = buildAllStations(get().statusOverrides, get().customStations, dynamic, true);
-    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
+    const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle, get().myAdapters);
     set({ dynamicStations: dynamic, dynamicLoaded: true, stations, filteredStations });
   },
 
   filters: initialFilters,
   setFilters: (partial) => {
     const filters = { ...get().filters, ...partial };
-    const filteredStations = computeFiltered(get().stations, filters, get().selectedVehicle);
+    const filteredStations = computeFiltered(get().stations, filters, get().selectedVehicle, get().myAdapters);
     set({ filters, filteredStations });
   },
 
-  filteredStations: computeFiltered(allInitial, initialFilters, null),
+  filteredStations: computeFiltered(allInitial, initialFilters, null, []),
 
   vehicleCatalog: baseVehicles,
   loadVehicles: async () => {
@@ -385,7 +407,7 @@ export const useStore = create<AppState>((set, get) => ({
       const wanted = get().currentUser?.vehicleId ?? loadVehicleId();
       if (wanted && get().selectedVehicle?.id !== wanted) {
         const v = catalog.find((x) => x.id === wanted);
-        if (v) set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v) });
+        if (v) set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v, get().myAdapters) });
       }
     } catch {
       // sin API (desarrollo local con vite) se queda la lista base
@@ -394,10 +416,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   selectedVehicle: baseVehicles.find((v) => v.id === loadVehicleId()) ?? null,
   setSelectedVehicle: (vehicle) => {
-    const filteredStations = computeFiltered(get().stations, get().filters, vehicle);
+    const filteredStations = computeFiltered(get().stations, get().filters, vehicle, get().myAdapters);
     set({ selectedVehicle: vehicle, filteredStations });
     storeVehicleId(vehicle?.id ?? null);
     if (get().currentUser) pushPrefs(get().authToken, { vehicleId: vehicle?.id ?? null });
+  },
+
+  myAdapters: loadMyAdapters(),
+  setMyAdapters: (list) => {
+    const clean = cleanConnectorList(list);
+    set({ myAdapters: clean, filteredStations: computeFiltered(get().stations, get().filters, get().selectedVehicle, clean) });
+    storeMyAdapters(clean);
+    if (get().currentUser) pushPrefs(get().authToken, { myAdapters: clean });
   },
 
   selectedStationId: null,
@@ -452,7 +482,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       saveOverrides(newOverrides);
       const stations = buildAllStations(newOverrides, get().customStations, get().dynamicStations, get().dynamicLoaded);
-      const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle);
+      const filteredStations = computeFiltered(stations, get().filters, get().selectedVehicle, get().myAdapters);
       set({
         statusOverrides: newOverrides,
         stations,
@@ -499,11 +529,19 @@ export const useStore = create<AppState>((set, get) => ({
       const v = get().vehicleCatalog.find((x) => x.id === user.vehicleId);
       storeVehicleId(user.vehicleId);
       if (v && v.id !== get().selectedVehicle?.id) {
-        set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v) });
+        set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v, get().myAdapters) });
       }
     } else if (get().selectedVehicle) {
       pushPrefs(token, { vehicleId: get().selectedVehicle!.id });
     }
+    // Mis adaptadores: se suman los del teléfono y los de la cuenta.
+    const serverAdapters = cleanConnectorList(user.myAdapters);
+    const adapters = Array.from(new Set([...serverAdapters, ...get().myAdapters]));
+    if (adapters.length !== get().myAdapters.length) {
+      storeMyAdapters(adapters);
+      set({ myAdapters: adapters, filteredStations: computeFiltered(get().stations, get().filters, get().selectedVehicle, adapters) });
+    }
+    if (adapters.length !== serverAdapters.length) pushPrefs(token, { myAdapters: adapters });
   },
 
   isAdminAuthenticated: localStorage.getItem('ev_admin_auth') === '1',
@@ -654,7 +692,7 @@ export const useStore = create<AppState>((set, get) => ({
       statusOverrides: overrides,
       dynamicStations: dynamic,
       stations,
-      filteredStations: computeFiltered(stations, get().filters, get().selectedVehicle),
+      filteredStations: computeFiltered(stations, get().filters, get().selectedVehicle, get().myAdapters),
       myStations: get().myStations?.map((m) => (m.id === id
         ? { ...m, status, statusNote: statusNote ?? null, statusUpdatedAt: now, statusByOwner: true }
         : m)) ?? null,
