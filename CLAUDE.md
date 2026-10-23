@@ -671,8 +671,7 @@ notas internas tipo "NO MODIFICAR sin nueva confirmación" que ya veía el
 público.
 
 **Revisión de ubicación antes de aprobar + "Mis adaptadores" (22 oct 2026,
-rama `revision-ubicacion-mis-adaptadores`, en staging, pendiente de visto
-bueno de Rafa)**:
+publicado en prod el 22 oct 2026 con visto bueno de Rafa)**:
 - **Pendientes del panel** (`admin/ProposalReview.tsx`): cada propuesta con
   ubicación (estación nueva o corrección con lat/lng) abre un mapa con vista
   satélite (Esri World Imagery, sin llave) o calles; pin P = propuesta, A =
@@ -697,9 +696,9 @@ bueno de Rafa)**:
   muestra "Con adaptador: …". Sin auto elegido (o ficha sin conectores
   confirmados) no filtra, como antes.
 - **Migración manual**: `docs/migracion-mis-adaptadores.sql` — aplicada a
-  `ev-guatemala-db-staging` (22 oct 2026, vía MCP); **falta `ev-guatemala-db`
-  (prod) antes del merge** (sin la columna, guardar adaptadores en la cuenta
-  da 503 y quedan solo en el teléfono; nada más se rompe).
+  `ev-guatemala-db-staging` y `ev-guatemala-db` (22 oct 2026, vía MCP) — no
+  repetir (sin la columna, guardar adaptadores en la cuenta da 503 y quedan
+  solo en el teléfono; nada más se rompe).
 - Datos de prueba en staging: estación `prueba-revision-claude` (pendiente,
   a 52 m de `ant-cc-paseo` para ver el aviso de duplicado) y una propuesta de
   ubicación sobre `ant-hotel-casasanto` (106 m), de `prueba@claude.test`.
