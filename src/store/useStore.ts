@@ -428,11 +428,14 @@ export const useStore = create<AppState>((set, get) => ({
       const catalog = Array.from(byId.values())
         .sort((a, b) => a.brand.localeCompare(b.brand) || a.model.localeCompare(b.model));
       set({ vehicleCatalog: catalog });
-      // El auto guardado puede ser uno agregado desde el panel (solo en D1).
+      // El auto guardado puede ser uno agregado desde el panel (solo en D1), o
+      // uno de la lista base que el admin corrigió: se compara el objeto, no
+      // el id, para tomar siempre la ficha actualizada (antes un S07 corregido
+      // a Tipo 2 seguía filtrando con el GB/T de la lista base, 24 oct 2026).
       const wanted = get().currentUser?.vehicleId ?? loadVehicleId();
-      if (wanted && get().selectedVehicle?.id !== wanted) {
+      if (wanted) {
         const v = catalog.find((x) => x.id === wanted);
-        if (v) set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v, get().myAdapters) });
+        if (v && v !== get().selectedVehicle) set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v, get().myAdapters) });
       }
     } catch {
       // sin API (desarrollo local con vite) se queda la lista base
@@ -559,7 +562,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (user.vehicleId) {
       const v = get().vehicleCatalog.find((x) => x.id === user.vehicleId);
       storeVehicleId(user.vehicleId);
-      if (v && v.id !== get().selectedVehicle?.id) {
+      if (v && v !== get().selectedVehicle) {
         set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v, get().myAdapters) });
       }
     } else if (get().selectedVehicle) {
