@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 // Permite girar el mapa (modo ruta: "lo que tienes enfrente, arriba").
 // Debe cargarse después de Leaflet y antes de crear el mapa.
 import 'leaflet-rotate';
-import { useStore } from '../store/useStore';
+import { useStore, vehicleFilterActive } from '../store/useStore';
 import { primeRouteSound } from './mobile/routeEngine';
 import { requestCompass, useCompassWhenLocated } from './mobile/heading';
 import type { ChargerStation } from '../types';
@@ -482,8 +482,12 @@ function ZoomControls() {
 function MobileMapTools() {
   const map = useMap();
   const locate = useLocate();
-  const { routeMode, setRouteMode, setRouteFollow, headingUp, setHeadingUp } = useStore();
+  const { routeMode, setRouteMode, setRouteFollow, headingUp, setHeadingUp, filters, setFilters, selectedVehicle, setSheetRequest } = useStore();
   const bearing = useMapBearing();
+  // Enchufe = "Filtrar por mi auto". Sin auto (o con ficha sin conectores
+  // confirmados) no hay nada que filtrar: abre "Filtros" para elegirlo.
+  const byVehicle = vehicleFilterActive(filters, selectedVehicle);
+  const vehicleReady = !!selectedVehicle?.compatible_connectors?.length;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Que tocar los botones no arrastre ni haga zoom en el mapa de fondo
@@ -515,6 +519,16 @@ function MobileMapTools() {
           onClick={() => { if (!routeMode) { primeRouteSound(); requestCompass(); } setRouteMode(!routeMode); }}
         >
           <svg viewBox="0 0 24 24"><path d="M5 17h14M6.5 17V11l1.8-4.2A2 2 0 0 1 10.1 5.5h3.8a2 2 0 0 1 1.8 1.3L17.5 11v6" /><path d="M6.5 11h11" /><circle cx="8.5" cy="17.5" r="1.5" /><circle cx="15.5" cy="17.5" r="1.5" /></svg>
+        </button>
+        <button
+          type="button"
+          className={`m-tbtn${byVehicle ? ' on' : ''}`}
+          aria-label={!vehicleReady ? 'Elegir mi auto' : byVehicle ? 'Mostrar todas las estaciones' : `Mostrar solo donde carga mi ${selectedVehicle!.model}`}
+          aria-pressed={byVehicle}
+          title={!vehicleReady ? 'Elige tu auto para ver solo dónde puede cargar' : byVehicle ? `Solo donde carga tu ${selectedVehicle!.model}. Toca para ver todas.` : `Toca para ver solo donde carga tu ${selectedVehicle!.model}`}
+          onClick={() => { if (vehicleReady) setFilters({ vehicleFilter: !byVehicle }); else setSheetRequest('filters'); }}
+        >
+          <svg viewBox="0 0 24 24"><path d="M9 3v4.5M15 3v4.5" /><path d="M6.5 7.5h11v3.5a5.5 5.5 0 0 1-11 0z" /><path d="M12 16.5V21" /></svg>
         </button>
       </div>
       {/* Brújula: en modo ruta alterna "girar con mi dirección" / "norte

@@ -73,6 +73,16 @@ function cleanConnectorList(v: unknown): ConnectorType[] {
 function loadMyAdapters(): ConnectorType[] {
   try { return cleanConnectorList(JSON.parse(localStorage.getItem(MY_ADAPTERS_KEY) || '[]')); } catch { return []; }
 }
+// Interruptor "Filtrar por mi auto" (oct 2026): el auto y los adaptadores
+// quedan guardados en el perfil; este interruptor solo decide si el mapa
+// filtra con ellos. Se recuerda en el teléfono (encendido por defecto).
+const VEHICLE_FILTER_KEY = 'ev_gt_vehicle_filter';
+function loadVehicleFilter(): boolean {
+  try { return localStorage.getItem(VEHICLE_FILTER_KEY) !== '0'; } catch { return true; }
+}
+function storeVehicleFilter(on: boolean) {
+  try { localStorage.setItem(VEHICLE_FILTER_KEY, on ? '1' : '0'); } catch { /* sin almacenamiento */ }
+}
 function storeMyAdapters(list: ConnectorType[]) {
   try {
     if (list.length) localStorage.setItem(MY_ADAPTERS_KEY, JSON.stringify(list));
@@ -123,6 +133,16 @@ export interface Filters {
   connectorTypes: ConnectorType[];
   level: ChargerLevel | 'all';
   stationType: StationKind | 'all';
+  /** "Filtrar por mi auto": encendido + auto con conectores confirmados =
+   *  el mapa muestra solo donde ese auto carga (ver vehicleFilterActive). */
+  vehicleFilter: boolean;
+}
+
+/** El filtro por auto aplica solo si está encendido y la ficha del auto tiene
+ *  conectores confirmados. Mientras aplica, "Tipo de conector" no se usa: el
+ *  auto y los adaptadores ya dicen qué conectores sirven. */
+export function vehicleFilterActive(filters: Filters, vehicle: Vehicle | null): boolean {
+  return filters.vehicleFilter && !!vehicle?.compatible_connectors?.length;
 }
 
 interface AppState {
@@ -158,6 +178,10 @@ interface AppState {
   myAdapters: ConnectorType[];
   setMyAdapters: (list: ConnectorType[]) => void;
   setSelectedVehicle: (vehicle: Vehicle | null) => void;
+  /** Pide a MobileShell abrir una hoja (p. ej. el botón de enchufe del mapa
+   *  sin auto elegido abre "Filtros"). MobileShell la abre y la limpia. */
+  sheetRequest: 'filters' | null;
+  setSheetRequest: (sheet: 'filters' | null) => void;
 
   // Map / sidebar interaction
   selectedStationId: string | null;
@@ -265,19 +289,22 @@ function computeFiltered(
   return stations.filter((s) => {
     if (filters.status !== 'all' && s.status !== filters.status) return false;
     if (filters.stationType !== 'all' && stationKind(s) !== filters.stationType) return false;
-    // Un adaptador prestado por la estación cuenta como conector disponible.
+    if (filters.level !== 'all') {
+      if (!s.connectors.some((c) => c.level === filters.level)) return false;
+    }
+    if (vehicleFilterActive(filters, selectedVehicle)) {
+      // Cuentan el conector del auto, el adaptador que presta la estación y los
+      // adaptadores propios del conductor. "Tipo de conector" no se suma aquí:
+      // antes recortaba lo que el auto + adaptador ya permitían (oct 2026).
+      return chargeVia(s, selectedVehicle, myAdapters) !== null;
+    }
+    // Sin filtro por auto (apagado, sin auto, o ficha sin conectores
+    // confirmados): filtro manual por tipo de conector. Un adaptador prestado
+    // por la estación cuenta como conector disponible.
     const stationTypes = [...s.connectors.map((c) => c.type), ...(s.adapters ?? [])];
     if (filters.connectorTypes.length > 0) {
       if (!filters.connectorTypes.some((t) => stationTypes.includes(t))) return false;
     }
-    if (filters.level !== 'all') {
-      if (!s.connectors.some((c) => c.level === filters.level)) return false;
-    }
-    // Sin conector confirmado para el vehículo no filtramos por compatibilidad —
-    // mejor no afirmar nada a asumir un conector que todavía no se ha verificado.
-    // Cuentan el conector del auto, el adaptador que presta la estación y los
-    // adaptadores propios del conductor.
-    if (chargeVia(s, selectedVehicle, myAdapters) === null) return false;
     return true;
   });
 }
@@ -301,7 +328,7 @@ function buildAllStations(
   const staticFallback = dynamicLoaded ? [] : chargerStations;
   return applyOverrides([...staticFallback, ...custom, ...dynamic], overrides);
 }
-const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all', stationType: 'all' };
+const initialFilters: Filters = { status: 'all', connectorTypes: [], level: 'all', stationType: 'all', vehicleFilter: loadVehicleFilter() };
 
 // Marca este navegador como "del admin" para el contador de visitas. A
 // diferencia de ev_admin_auth, NO se borra al cerrar sesión: así las visitas
@@ -377,6 +404,7 @@ export const useStore = create<AppState>((set, get) => ({
   filters: initialFilters,
   setFilters: (partial) => {
     const filters = { ...get().filters, ...partial };
+    if (partial.vehicleFilter !== undefined) storeVehicleFilter(partial.vehicleFilter);
     const filteredStations = computeFiltered(get().stations, filters, get().selectedVehicle, get().myAdapters);
     set({ filters, filteredStations });
   },
@@ -400,11 +428,14 @@ export const useStore = create<AppState>((set, get) => ({
       const catalog = Array.from(byId.values())
         .sort((a, b) => a.brand.localeCompare(b.brand) || a.model.localeCompare(b.model));
       set({ vehicleCatalog: catalog });
-      // El auto guardado puede ser uno agregado desde el panel (solo en D1).
+      // El auto guardado puede ser uno agregado desde el panel (solo en D1), o
+      // uno de la lista base que el admin corrigió: se compara el objeto, no
+      // el id, para tomar siempre la ficha actualizada (antes un S07 corregido
+      // a Tipo 2 seguía filtrando con el GB/T de la lista base, 24 oct 2026).
       const wanted = get().currentUser?.vehicleId ?? loadVehicleId();
-      if (wanted && get().selectedVehicle?.id !== wanted) {
+      if (wanted) {
         const v = catalog.find((x) => x.id === wanted);
-        if (v) set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v, get().myAdapters) });
+        if (v && v !== get().selectedVehicle) set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v, get().myAdapters) });
       }
     } catch {
       // sin API (desarrollo local con vite) se queda la lista base
@@ -413,11 +444,17 @@ export const useStore = create<AppState>((set, get) => ({
 
   selectedVehicle: baseVehicles.find((v) => v.id === loadVehicleId()) ?? null,
   setSelectedVehicle: (vehicle) => {
-    const filteredStations = computeFiltered(get().stations, get().filters, vehicle, get().myAdapters);
-    set({ selectedVehicle: vehicle, filteredStations });
+    // Elegir un auto enciende el filtro: es lo que el conductor espera ver.
+    const filters = vehicle ? { ...get().filters, vehicleFilter: true } : get().filters;
+    if (vehicle) storeVehicleFilter(true);
+    const filteredStations = computeFiltered(get().stations, filters, vehicle, get().myAdapters);
+    set({ selectedVehicle: vehicle, filters, filteredStations });
     storeVehicleId(vehicle?.id ?? null);
     if (get().currentUser) pushPrefs(get().authToken, { vehicleId: vehicle?.id ?? null });
   },
+
+  sheetRequest: null,
+  setSheetRequest: (sheet) => set({ sheetRequest: sheet }),
 
   myAdapters: loadMyAdapters(),
   setMyAdapters: (list) => {
@@ -525,7 +562,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (user.vehicleId) {
       const v = get().vehicleCatalog.find((x) => x.id === user.vehicleId);
       storeVehicleId(user.vehicleId);
-      if (v && v.id !== get().selectedVehicle?.id) {
+      if (v && v !== get().selectedVehicle) {
         set({ selectedVehicle: v, filteredStations: computeFiltered(get().stations, get().filters, v, get().myAdapters) });
       }
     } else if (get().selectedVehicle) {
