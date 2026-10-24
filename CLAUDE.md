@@ -722,6 +722,17 @@ guardado salía de la lista base y `loadVehicles`/`syncAccountPrefs` no lo
 reemplazaban por la ficha de D1 si el id era el mismo — un auto corregido por
 el admin (S07 GB/T → Tipo 2) seguía filtrando con los conectores viejos.
 
+**Videos de la app (oct 2026)**: carpeta `videos/` (Remotion; fuera de `src/`,
+no se compila ni publica con la app; ignorada por ESLint). Ver
+`videos/README.md`. Estilo acordado con Rafa: motion graphics que **no suene a
+anuncio**, pantallas reales de la app, frases cortas palabra por palabra con
+lo clave en verde, sin voz, efectos/música sintetizados en `sfx.py` (sin
+derechos de terceros), cierre con `www.movilidadelectricagt.com`. Usar solo
+datos reales (lectura de D1 prod) y estaciones verificadas como ejemplo; no
+mostrar al usuario tocando el teléfono mientras maneja. "Encuentra tu
+cargador" (11 oct) se perdió por no guardarse — guardar siempre el proyecto en
+una rama al terminar. "Modo ruta" (24 oct) en la rama `video-modo-ruta`.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
