@@ -704,7 +704,7 @@ publicado en prod el 22 oct 2026 con visto bueno de Rafa)**:
   ubicación sobre `ant-hotel-casasanto` (106 m), de `prueba@claude.test`.
 
 **Filtrar por mi auto: interruptor + botón de enchufe (24 oct 2026, rama
-`filtro-mi-auto`, en staging, pendiente de visto bueno de Rafa)**: Rafa notó
+`filtro-mi-auto`, publicado en prod el 24 oct 2026 con visto bueno de Rafa)**: Rafa notó
 que "Tipo de conector" recortaba lo que el auto + "Mis adaptadores" ya
 permitían (S07 Tipo 2 + adaptador J1772 = 106; marcar "Tipo 2" bajaba a 59) y
 que "Limpiar" borraba el auto también de la cuenta. Ahora el auto y los
@@ -717,6 +717,10 @@ auto con conectores confirmados; mientras aplica, `computeFiltered` ignora
 `MobileMapTools` (verde = activo); sin auto abre la hoja Filtros vía
 `sheetRequest` del store. "Limpiar" apaga el interruptor sin borrar el auto.
 El contador de filtros cuenta el del auto como uno. Sin migración.
+De paso se corrigió (afectaba también a prod): al abrir la app el auto
+guardado salía de la lista base y `loadVehicles`/`syncAccountPrefs` no lo
+reemplazaban por la ficha de D1 si el id era el mismo — un auto corregido por
+el admin (S07 GB/T → Tipo 2) seguía filtrando con los conectores viejos.
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
