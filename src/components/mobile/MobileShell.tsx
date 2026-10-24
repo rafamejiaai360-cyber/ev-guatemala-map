@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useStore } from '../../store/useStore';
+import { useStore, vehicleFilterActive } from '../../store/useStore';
 import type { ChargerStation, StationType } from '../../types';
 import { getMyContributionStationIds } from '../../utils/myContributions';
 import FiltersPanel from './FiltersPanel';
@@ -57,6 +57,12 @@ export default function MobileShell() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailFrom, setDetailFrom] = useState<string>('Mapa');
   const [sheet, setSheet] = useState<'none' | 'aportar' | 'filters' | 'host'>('none');
+  // Hojas pedidas desde fuera (p. ej. el botón de enchufe del mapa).
+  useEffect(() => useStore.subscribe((st) => {
+    if (!st.sheetRequest) return;
+    setSheet(st.sheetRequest);
+    st.setSheetRequest(null);
+  }), []);
   // La invitación a crear cuenta (JoinSheet) se muestra cuando algo la pide
   // (guardar, aportar sin cuenta, 3.ª ficha) y tiene prioridad sobre las demás.
   // Recordatorio al dueño: "¿Tu cargador ya está activo?" si lleva 2+ semanas
@@ -136,11 +142,13 @@ export default function MobileShell() {
 
   // Filtros rápidos (chips). Los avanzados (conector, nivel, vehículo) viven
   // en la hoja "Filtros", que reutiliza FilterBar y VehicleSelector.
+  // El filtro por auto (auto + adaptadores) cuenta como uno solo, y mientras
+  // está activo "Tipo de conector" no se usa, así que tampoco cuenta.
+  const byVehicle = vehicleFilterActive(filters, selectedVehicle);
   const advancedCount =
-    filters.connectorTypes.length +
+    (byVehicle ? 1 : filters.connectorTypes.length) +
     (filters.level !== 'all' ? 1 : 0) +
-    (filters.status !== 'all' && filters.status !== 'active' ? 1 : 0) +
-    (selectedVehicle ? 1 : 0);
+    (filters.status !== 'all' && filters.status !== 'active' ? 1 : 0);
   // Sin filtro rápido por estado (oct 2026, a pedido de Rafa): no se conoce el
   // estado real de cada cargador en tiempo real, así que la app no ofrece
   // "Activas" ni cuenta "activas"; el verde/naranja/azul de los chips es el tipo.

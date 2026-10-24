@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useStore } from '../../store/useStore';
+import { useStore, vehicleFilterActive } from '../../store/useStore';
 import VehicleProposalModal from '../VehicleProposalModal';
 import type { ChargerLevel, ConnectorType, Vehicle } from '../../types';
 import { Icon, connectorName } from './shared';
@@ -14,6 +14,10 @@ const LEVELS: { value: ChargerLevel | 'all'; label: string }[] = [
 // Contenido de la hoja "Filtros": vehículo, tipo de conector y velocidad de
 // carga, todo visible sin menús anidados. Pública/Residencial no
 // se repiten aquí porque ya están en los botones rápidos de afuera.
+// El auto y los adaptadores quedan guardados; "Filtrar por mi auto" (el mismo
+// interruptor que el botón de enchufe del mapa) decide si se usan. Mientras
+// está encendido, "Tipo de conector" se reemplaza por un resumen: el auto y
+// los adaptadores ya dicen qué conectores sirven.
 export default function FiltersPanel({ onDone }: { onDone: () => void }) {
   const { filters, setFilters, selectedVehicle, setSelectedVehicle, filteredStations, vehicleCatalog, myAdapters, setMyAdapters } = useStore();
   const [query, setQuery] = useState('');
@@ -34,18 +38,27 @@ export default function FiltersPanel({ onDone }: { onDone: () => void }) {
   function toggleMyAdapter(t: ConnectorType) {
     setMyAdapters(myAdapters.includes(t) ? myAdapters.filter((x) => x !== t) : [...myAdapters, t]);
   }
+  const byVehicle = vehicleFilterActive(filters, selectedVehicle);
+  const usableAdapters = myAdapters.filter((t) => adapterOptions.includes(t));
+  // "Limpiar" apaga los filtros pero no borra el auto ni los adaptadores del
+  // perfil (antes borraba el auto, también de la cuenta).
   function clearAll() {
-    setFilters({ connectorTypes: [], level: 'all' });
-    setSelectedVehicle(null);
+    setFilters({ connectorTypes: [], level: 'all', vehicleFilter: false });
     setQuery('');
   }
-  const hasAny = filters.connectorTypes.length > 0 || filters.level !== 'all' || !!selectedVehicle;
+  const hasAny = byVehicle || filters.connectorTypes.length > 0 || filters.level !== 'all';
 
   return (
     <div className="m-fp">
       <section>
         <div className="m-fp-h">Mi vehículo</div>
-        <p className="m-fp-note">Muestra solo las estaciones con un conector compatible con tu auto.</p>
+        <p className="m-fp-note">Tu auto queda guardado en tu perfil. Con el filtro encendido, el mapa muestra solo las estaciones donde puede cargar.</p>
+        {carPlugs.length > 0 && (
+          <label className="m-fp-switch">
+            <span>Filtrar por mi {selectedVehicle!.model}</span>
+            <input type="checkbox" role="switch" checked={filters.vehicleFilter} onChange={(e) => setFilters({ vehicleFilter: e.target.checked })} />
+          </label>
+        )}
         <label className="m-search m-fp-search">
           {Icon.search}
           <input id="m-vehicle-search" type="search" placeholder="Buscar marca o modelo" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -84,23 +97,40 @@ export default function FiltersPanel({ onDone }: { onDone: () => void }) {
             </button>
           ))}
         </div>
-        {carPlugs.length > 0 && myAdapters.some((t) => adapterOptions.includes(t)) && (
+        {carPlugs.length > 0 && usableAdapters.length > 0 && (
           <p className="m-fp-note m-fp-adapt-sum">
             Tu {selectedVehicle!.model} ({carPlugs.map(connectorName).join(', ')}) también podrá usar estaciones{' '}
-            {myAdapters.filter((t) => adapterOptions.includes(t)).map(connectorName).join(', ')} con tu adaptador.
+            {usableAdapters.map(connectorName).join(', ')} con tu adaptador.
           </p>
         )}
       </section>
 
       <section>
         <div className="m-fp-h">Tipo de conector</div>
-        <div className="m-fp-chips">
-          {CONNECTORS.map((t) => (
-            <button key={t} type="button" className="m-fp-chip" aria-pressed={filters.connectorTypes.includes(t)} onClick={() => toggleConnector(t)}>
-              {connectorName(t)}
-            </button>
-          ))}
-        </div>
+        {byVehicle ? (
+          <>
+            <p className="m-fp-note">Lo decide tu {selectedVehicle!.model}: el mapa muestra las estaciones con estos conectores.</p>
+            <div className="m-fp-chips">
+              {carPlugs.map((t) => (
+                <span key={t} className="m-fp-tag">{connectorName(t)} <small>tu auto</small></span>
+              ))}
+              {usableAdapters.map((t) => (
+                <span key={t} className="m-fp-tag">{connectorName(t)} <small>tu adaptador</small></span>
+              ))}
+            </div>
+            <p className="m-fp-note m-fp-after">
+              También las que prestan un adaptador para tu auto. Para elegir otro conector, apaga «Filtrar por mi {selectedVehicle!.model}».
+            </p>
+          </>
+        ) : (
+          <div className="m-fp-chips">
+            {CONNECTORS.map((t) => (
+              <button key={t} type="button" className="m-fp-chip" aria-pressed={filters.connectorTypes.includes(t)} onClick={() => toggleConnector(t)}>
+                {connectorName(t)}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>
