@@ -407,7 +407,7 @@ function StationsTab() {
         )}
         {filtered.map((station, idx) => (
           <div key={station.id} className={idx < filtered.length - 1 ? 'border-b border-gray-100' : ''}>
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
               station.status === 'active'
                 ? KIND_DOT[stationKind(station)]
@@ -420,10 +420,11 @@ function StationsTab() {
               <div className="text-xs text-gray-400">{station.zone} · {station.id}</div>
             </div>
 
-            {/* Estado (oct 2026: 6 estados, en lista desplegable) */}
+            {/* Estado (oct 2026: 6 estados, en lista desplegable). En celular
+                baja a su propia línea para no tapar el nombre de la estación. */}
             <select value={station.status} onChange={e => changeStatus(station, e.target.value as ChargerStatus)}
               aria-label={`Estado de ${station.name}`}
-              className="text-xs border border-gray-200 rounded-lg px-1.5 py-1 w-[180px] max-w-[45%] flex-shrink-0">
+              className="order-last ml-5 basis-[calc(100%-1.25rem)] sm:order-none sm:ml-0 sm:basis-auto sm:w-[180px] text-xs border border-gray-200 rounded-lg px-1.5 py-1 flex-shrink-0">
               {ADMIN_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label.replace(' (quitar del mapa)', '')}</option>)}
             </select>
 
