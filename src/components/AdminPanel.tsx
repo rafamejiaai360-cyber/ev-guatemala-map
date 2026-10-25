@@ -360,6 +360,38 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
   );
 }
 
+// Etiqueta de estado de la lista de Estaciones (oct 2026, opción "A" que
+// eligió Rafa): pequeña y de color, bajo el nombre. Encima lleva la lista
+// real del teléfono, invisible (16 px para que iOS no haga zoom al tocarla).
+const STATUS_PILL: Record<string, { bg: string; fg: string; dot?: string }> = {
+  active: { bg: 'rgba(52,199,89,.14)', fg: '#1f8a3b' },
+  partial: { bg: 'rgba(255,159,10,.15)', fg: '#a15c00', dot: 'linear-gradient(90deg,#ff9f0a 50%,#fff 50%)' },
+  maintenance: { bg: 'rgba(255,159,10,.15)', fg: '#a15c00', dot: '#ff9f0a' },
+  closed: { bg: 'rgba(255,69,58,.13)', fg: '#c4281d', dot: '#ff453a' },
+  offline: { bg: 'rgba(255,69,58,.13)', fg: '#c4281d', dot: '#ff453a' },
+  gone: { bg: 'rgba(120,120,128,.14)', fg: '#6b6b73', dot: '#aeaeb2' },
+};
+
+function StatusPicker({ station, onChange }: { station: ChargerStation; onChange: (s: ChargerStatus) => void }) {
+  const look = STATUS_PILL[station.status] ?? STATUS_PILL.active;
+  const label = ADMIN_STATUS_OPTIONS.find(o => o.value === station.status)?.label.replace(' (quitar del mapa)', '') ?? station.status;
+  return (
+    <label className="relative mt-1 inline-flex items-center gap-1 rounded-full pl-2 pr-1.5 py-0.5 text-[11.5px] font-medium cursor-pointer focus-within:ring-2 focus-within:ring-green-500"
+      style={{ background: look.bg, color: look.fg }}>
+      {look.dot && <span className="w-1.5 h-1.5 rounded-full" style={{ background: look.dot }} />}
+      {label}
+      <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true" style={{ opacity: .6 }}>
+        <path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+      <select value={station.status} onChange={e => onChange(e.target.value as ChargerStatus)}
+        aria-label={`Estado de ${station.name}`}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" style={{ fontSize: 16 }}>
+        {ADMIN_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
 // ─── Stations Tab ─────────────────────────────────────────────────────────────
 
 function StationsTab() {
@@ -407,7 +439,7 @@ function StationsTab() {
         )}
         {filtered.map((station, idx) => (
           <div key={station.id} className={idx < filtered.length - 1 ? 'border-b border-gray-100' : ''}>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+          <div className="flex items-center gap-3 px-4 py-3">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
               station.status === 'active'
                 ? KIND_DOT[stationKind(station)]
@@ -417,16 +449,9 @@ function StationsTab() {
               <div className="text-sm font-medium text-gray-900 truncate">
                 {KIND_EMOJI[stationKind(station)]} {station.name}
               </div>
-              <div className="text-xs text-gray-400">{station.zone} · {station.id}</div>
+              <div className="text-xs text-gray-400 truncate">{station.zone} · {station.id}</div>
+              <StatusPicker station={station} onChange={status => changeStatus(station, status)} />
             </div>
-
-            {/* Estado (oct 2026: 6 estados, en lista desplegable). En celular
-                baja a su propia línea para no tapar el nombre de la estación. */}
-            <select value={station.status} onChange={e => changeStatus(station, e.target.value as ChargerStatus)}
-              aria-label={`Estado de ${station.name}`}
-              className="order-last ml-5 basis-[calc(100%-1.25rem)] sm:order-none sm:ml-0 sm:basis-auto sm:w-[180px] text-xs border border-gray-200 rounded-lg px-1.5 py-1 flex-shrink-0">
-              {ADMIN_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label.replace(' (quitar del mapa)', '')}</option>)}
-            </select>
 
             {/* Edit button */}
             {currentUser?.role === 'admin' && (

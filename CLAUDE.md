@@ -723,8 +723,9 @@ reemplazaban por la ficha de D1 si el id era el mismo — un auto corregido por
 el admin (S07 GB/T → Tipo 2) seguía filtrando con los conectores viejos.
 
 **Reportes de un toque + estados que decide el admin (25 oct 2026, rama
-`reportes-estado`, en staging, pendiente de visto bueno de Rafa)**: maqueta
-aprobada por Rafa: https://claude.ai/artifact/3iGUn1wG5SaMqZd5dQLA7t
+`reportes-estado`, probado por Rafa en staging y publicado en prod el 25 oct
+2026 a su pedido)**: maqueta aprobada por Rafa:
+https://claude.ai/artifact/3iGUn1wG5SaMqZd5dQLA7t
 - **Usuarios**: en la ficha, arriba, "¿Cómo encontraste el punto de carga?"
   (`StationVerification.tsx`): Cargué bien / Funciona a medias / No funciona /
   No pude usarla / Ya no existe, **sin cuenta** (decisión de Rafa). Tras el
@@ -763,7 +764,11 @@ aprobada por Rafa: https://claude.ai/artifact/3iGUn1wG5SaMqZd5dQLA7t
   + punto rojo), `gone` (ya no existe: sale del mapa; la API solo la entrega
   al admin, que la ve en Estaciones y puede cambiarle el estado). El dueño
   puede usar todos menos `gone` (su pantalla sigue mostrando 3). En la lista
-  de Estaciones del panel el estado es un desplegable. El modo ruta no avisa
+  de Estaciones del panel el estado es una etiqueta pequeña de color bajo el
+  nombre (`StatusPicker` en AdminPanel; opción "A" que eligió Rafa entre 3,
+  https://claude.ai/artifact/3YYzRvSaCu6cDFw7KnqUCh) con la lista real del
+  teléfono invisible encima (16 px para que iOS no haga zoom). Esta etiqueta
+  se publicó sin pasar por staging, a pedido explícito de Rafa. El modo ruta no avisa
   de `closed`/`offline`/`gone`.
 - Sin migración de base de datos (columnas existentes; valores nuevos en
   `status`).
