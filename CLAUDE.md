@@ -773,6 +773,13 @@ https://claude.ai/artifact/3iGUn1wG5SaMqZd5dQLA7t
 - Sin migración de base de datos (columnas existentes; valores nuevos en
   `status`).
 
+**Aviso a Telegram de reseñas y fotos (25 oct 2026, rama
+`avisos-resenas-fotos`, a pedido de Rafa)**: `handlePostReview` y
+`handlePostPhoto` llaman a `notifyAdmin` (vía `ctx.waitUntil`) en cada reseña
+o foto nueva, de cualquier estación: estrellas + autor/correo + comentario
+(máx. 500) en la reseña; quién la subió + enlace `/api/photo/<id>` en la foto.
+Staging no tiene Telegram (queda en `ops_log`). Sin migración.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
