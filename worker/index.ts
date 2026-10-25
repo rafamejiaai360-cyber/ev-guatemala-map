@@ -1367,7 +1367,7 @@ async function handleGetRatings(env: Env): Promise<Response> {
   return json(result);
 }
 
-async function handlePostReview(request: Request, env: Env): Promise<Response> {
+async function handlePostReview(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const body = await request.json() as {
     stationId: string; stationName: string;
     rating: number; text?: string; author?: string;
@@ -1389,6 +1389,12 @@ async function handlePostReview(request: Request, env: Env): Promise<Response> {
     ).bind(id, stationId, author, requester?.email ?? null, rating, text),
     recalcRatingStmt(env.DB, stationId),
   ]);
+
+  // Aviso al admin de cada reseña nueva (oct 2026, a pedido de Rafa).
+  const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+  const who = requester ? `${requester.name} (${requester.email})` : `${author || 'Anónimo'} · sin cuenta`;
+  ctx.waitUntil(notifyAdmin(env, `Nueva reseña: ${station.name}`,
+    `${stars} · ${who}${text.trim() ? `\n"${text.trim().slice(0, 500)}"` : ''}`));
 
   return json({ id, ok: true }, 201);
 }
@@ -1481,7 +1487,7 @@ async function handleGetPhoto(photoId: string, env: Env): Promise<Response> {
   });
 }
 
-async function handlePostPhoto(request: Request, env: Env): Promise<Response> {
+async function handlePostPhoto(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!env.PHOTOS) {
     return apiError('Almacenamiento de fotos no configurado.', 503);
   }
@@ -1505,6 +1511,11 @@ async function handlePostPhoto(request: Request, env: Env): Promise<Response> {
   await env.DB.prepare(
     'INSERT INTO photos (id, station_id, kv_key, uploaded_by) VALUES (?, ?, ?, ?)'
   ).bind(photoId, stationId, photoId, requester?.email ?? null).run();
+
+  // Aviso al admin de cada foto nueva, con enlace para verla (oct 2026).
+  const who = requester ? `${requester.name} (${requester.email})` : 'Visitante sin cuenta';
+  ctx.waitUntil(notifyAdmin(env, `Nueva foto: ${station.name}`,
+    `${who}\nVer: ${new URL(request.url).origin}/api/photo/${encodeURIComponent(photoId)}`));
 
   return json({ photoId, url: `/api/photo/${photoId}` }, 201);
 }
@@ -3572,7 +3583,7 @@ export default {
           const sid = url.searchParams.get('stationId');
           return sid ? handleGetReviews(sid, env) : apiError('stationId requerido');
         }
-        if (request.method === 'POST') return handlePostReview(request, env);
+        if (request.method === 'POST') return handlePostReview(request, env, ctx);
       }
 
       // Individual review edit/delete: /api/reviews/:id
@@ -3591,7 +3602,7 @@ export default {
           const sid = url.searchParams.get('stationId');
           return sid ? handleGetPhotos(sid, env) : apiError('stationId requerido');
         }
-        if (request.method === 'POST') return handlePostPhoto(request, env);
+        if (request.method === 'POST') return handlePostPhoto(request, env, ctx);
         if (request.method === 'DELETE') return handleDeletePhoto(url, env);
       }
 
