@@ -57,8 +57,9 @@ CREATE TABLE IF NOT EXISTS station_events (
     -- created | updated | confirmed_ok | reported_issue | reported_closed
     -- report_resolved | proposal_submitted | proposal_approved
     -- proposal_rejected | status_changed | archived | restored | owner_assigned
+    -- report_detail (detalle opcional de un reporte de un toque, oct 2026)
   actor_email TEXT,                    -- quién lo hizo (NULL = sistema)
-  actor_role TEXT,                     -- user | admin | system (rol AL MOMENTO del evento)
+  actor_role TEXT,                     -- user | admin | system | anonymous (rol AL MOMENTO del evento)
   payload TEXT NOT NULL DEFAULT '{}',  -- JSON con el detalle del evento
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

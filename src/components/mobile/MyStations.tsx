@@ -163,7 +163,9 @@ export function StaleStatusSheetContent({ station, onDone }: { station: MyStatio
       setBusy(false);
     }
   }
-  const label = station.status === 'maintenance' ? 'en mantenimiento' : 'fuera de servicio';
+  const label = ({
+    partial: 'funcionando parcialmente', maintenance: 'en mantenimiento', closed: 'cerrada temporalmente',
+  } as Record<string, string>)[station.status] ?? 'fuera de servicio';
   return (
     <>
       <div className="m-join-mark">{Icon.bolt}</div>

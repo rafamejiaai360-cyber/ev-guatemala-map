@@ -83,7 +83,7 @@ export function useRouteMode(): [RouteAlert | null, () => void] {
         pushGpsHeading(pos.coords);
         let best: RouteAlert | null = null;
         for (const s of stationsRef.current) {
-          if (s.status === 'offline' || alerted.current.has(s.id)) continue;
+          if (s.status === 'offline' || s.status === 'closed' || s.status === 'gone' || alerted.current.has(s.id)) continue;
           const km = distanceKm(s, loc);
           if (km != null && km <= radiusRef.current && (!best || km < best.km)) best = { station: s, km };
         }

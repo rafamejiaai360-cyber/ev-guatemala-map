@@ -147,7 +147,8 @@
 .m-pill { flex: none; font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
 .m-pill.active { background: rgba(52, 199, 89, .14); color: #1f8a3b; }
 .m-pill.maintenance { background: rgba(255, 159, 10, .15); color: #a15c00; }
-.m-pill.offline { background: rgba(255, 69, 58, .13); color: #c4281d; }
+.m-pill.offline, .m-pill.closed, .m-pill.gone { background: rgba(255, 69, 58, .13); color: #c4281d; }
+.m-pill.partial { background: rgba(255, 159, 10, .15); color: #a15c00; }
 .m-pill.soft { background: var(--ghost); color: var(--ink); font-weight: 500; }
 .m-meta { display: flex; gap: 6px 14px; margin-top: 10px; font-size: 12.5px; color: var(--ink2); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
 .m-meta b { color: var(--ink); font-weight: 600; }
@@ -472,7 +473,8 @@
 .m-status { display: flex; gap: 12px; align-items: flex-start; }
 .m-status > i { flex: none; width: 14px; height: 14px; border-radius: 50%; margin-top: 3px; background: #34c759; box-shadow: 0 0 0 5px rgba(52, 199, 89, .18); }
 .m-status.maintenance > i { background: #ff9f0a; box-shadow: 0 0 0 5px rgba(255, 159, 10, .2); }
-.m-status.offline > i { background: #ff453a; box-shadow: 0 0 0 5px rgba(255, 69, 58, .18); }
+.m-status.offline > i, .m-status.closed > i, .m-status.gone > i { background: #ff453a; box-shadow: 0 0 0 5px rgba(255, 69, 58, .18); }
+.m-status.partial > i { background: linear-gradient(90deg, #ff9f0a 50%, #fff 50%); box-shadow: 0 0 0 1.5px #ff9f0a inset, 0 0 0 5px rgba(255, 159, 10, .2); }
 .m-status b { display: block; font-size: 15px; font-weight: 600; }
 .m-status small { display: block; font-size: 12.5px; color: var(--ink2); margin-top: 2px; }
 .m-status q { display: block; font-size: 13.5px; color: var(--ink); margin-top: 6px; quotes: "“" "”"; }
@@ -488,3 +490,24 @@
 .m-compass .s { fill: #8e8e93; }
 .m-compass.on { background: var(--green); }
 .m-compass.on .s { fill: rgba(255, 255, 255, .7); }
+
+/* "¿Cómo encontraste el punto de carga?" (StationVerification.tsx, oct 2026) */
+.m-report { padding: 14px; display: grid; gap: 10px; }
+.m-report-note { background: var(--blue-soft); color: var(--blue); border-radius: 12px; padding: 9px 12px; display: grid; gap: 1px; }
+.m-report-note b { font-size: 13.5px; font-weight: 600; }
+.m-report-note small { font-size: 12.5px; }
+.m-report-q { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.m-report-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.m-report-opts button { font: inherit; font-size: 13.5px; text-align: left; border: 0; cursor: pointer; padding: 10px 11px; border-radius: 12px; background: var(--ghost); color: var(--ink); transition: transform .2s var(--ease); }
+.m-report-opts button:last-child { grid-column: 1 / -1; }
+.m-report-opts button:active { transform: scale(.97); }
+.m-report-opts button:disabled { opacity: .55; cursor: default; }
+.m-report-done { display: grid; gap: 8px; }
+.m-report-done p { margin: 0; font-size: 13.5px; color: var(--green); }
+.m-report-done textarea { font: inherit; font-size: 14px; border: 0; border-radius: 12px; padding: 9px 11px; background: var(--ghost); color: var(--ink); resize: vertical; }
+.m-report-done .m-btn { justify-self: start; }
+.m-report-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; font-size: 12px; color: var(--ink2); }
+.m-report-foot .ok { color: var(--green); font-weight: 500; }
+.m-report-foot button { font: inherit; font-size: 12px; border: 0; background: none; color: var(--blue); cursor: pointer; padding: 0; }
+.m-report-msg { margin: 0; font-size: 12.5px; color: var(--green); }
+.m-report-msg.err { color: var(--danger); }

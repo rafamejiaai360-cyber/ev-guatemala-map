@@ -287,6 +287,8 @@ function computeFiltered(
   myAdapters: ConnectorType[],
 ): ChargerStation[] {
   return stations.filter((s) => {
+    // "Ya no existe": solo el admin la recibe (para restaurarla); nunca va al mapa.
+    if (s.status === 'gone') return false;
     if (filters.status !== 'all' && s.status !== filters.status) return false;
     if (filters.stationType !== 'all' && stationKind(s) !== filters.stationType) return false;
     if (filters.level !== 'all') {

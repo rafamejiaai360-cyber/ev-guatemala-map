@@ -4,8 +4,11 @@ import { stationKind } from '../../utils/stationKind';
 
 export const STATUS_LABEL: Record<string, string> = {
   active: 'Activa',
+  partial: 'Funciona parcialmente',
   maintenance: 'Mantenimiento',
+  closed: 'Cerrada temporalmente',
   offline: 'Fuera de servicio',
+  gone: 'Ya no existe',
 };
 export const TYPE_LABEL: Record<string, string> = { public: 'Pública', 'semi-public': 'Semi-pública', residential: 'Residencial' };
 export const TYPE_COLOR: Record<string, string> = { public: '#22c55e', 'semi-public': '#f97316', residential: '#3b82f6' };

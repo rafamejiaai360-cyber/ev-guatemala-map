@@ -106,20 +106,22 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
       </div>
 
       <div className="m-dbody">
-        {(station.statusByOwner || station.status !== 'active') && (
+        {(station.statusByOwner || station.statusByAdmin || station.status !== 'active') && (
           <div className="m-box">
             <div className={`m-status ${station.status}`}>
               <i aria-hidden="true" />
               <div>
                 <b>{STATUS_LABEL[station.status]}</b>
                 {station.statusUpdatedAt && (
-                  <small>{station.statusByOwner ? 'Actualizado por el dueño' : 'Actualizado'} {timeAgo(station.statusUpdatedAt)}</small>
+                  <small>{station.statusByOwner ? 'Actualizado por el dueño' : station.statusByAdmin ? 'Actualizado por el administrador' : 'Actualizado'} {timeAgo(station.statusUpdatedAt)}</small>
                 )}
                 {station.statusNote && station.status !== 'active' && <q>{station.statusNote}</q>}
               </div>
             </div>
           </div>
         )}
+        {/* Reporte de un toque, arriba y visible (oct 2026) */}
+        <div className="m-box flush"><StationVerification station={station} /></div>
         {isResidential && (
           <div className="m-box">
             <div className="k">Estación en una casa</div>
@@ -208,7 +210,6 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
           <div className="m-box"><div className="k">Notas</div><p className="m-note m-notes">{station.notes}</p></div>
         )}
 
-        <div className="m-box flush"><StationVerification station={station} /></div>
         <div className="m-box flush"><StationPhotos stationId={station.id} stationName={station.name} /></div>
         <div className="m-box flush"><StationReviews stationId={station.id} stationName={station.name} /></div>
 
