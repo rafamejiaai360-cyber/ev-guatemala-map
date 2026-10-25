@@ -774,7 +774,8 @@ https://claude.ai/artifact/3iGUn1wG5SaMqZd5dQLA7t
   `status`).
 
 **Aviso a Telegram de reseñas y fotos (25 oct 2026, rama
-`avisos-resenas-fotos`, a pedido de Rafa)**: `handlePostReview` y
+`avisos-resenas-fotos`, publicado directo en prod el 25 oct 2026 sin pasar
+por staging, a pedido explícito de Rafa — staging no tiene Telegram)**: `handlePostReview` y
 `handlePostPhoto` llaman a `notifyAdmin` (vía `ctx.waitUntil`) en cada reseña
 o foto nueva, de cualquier estación: estrellas + autor/correo + comentario
 (máx. 500) en la reseña; quién la subió + enlace `/api/photo/<id>` en la foto.
