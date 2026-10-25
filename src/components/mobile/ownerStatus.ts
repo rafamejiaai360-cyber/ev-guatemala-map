@@ -28,6 +28,6 @@ export const STALE_STATUS_DAYS = 14;
 
 /** Estación propia que lleva demasiado tiempo en mantenimiento/fuera de servicio. */
 export function findStaleStation(list: MyStation[] | null): MyStation | null {
-  return list?.find((s) => s.approval === 'active' && s.status !== 'active'
+  return list?.find((s) => s.approval === 'active' && s.status !== 'active' && s.status !== 'gone'
     && daysSince(s.statusUpdatedAt) >= STALE_STATUS_DAYS) ?? null;
 }

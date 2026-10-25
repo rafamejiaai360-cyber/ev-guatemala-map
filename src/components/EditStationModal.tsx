@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import LocationPicker from './LocationPicker';
-import type { ChargerStation, ConnectorType, ChargerLevel, StationType } from '../types/index';
+import type { ChargerStation, ChargerStatus, ConnectorType, ChargerLevel, StationType } from '../types/index';
 import AdaptersField, { adaptersError, cleanAdapters, type AdaptersValue } from './AdaptersField';
 import PriceField from './PriceField';
 import { parsePriceInput, priceToInput, PRICE_ERROR } from '../utils/price';
@@ -31,8 +31,8 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
   const [access, setAccess] = useState<'public' | 'semi-public' | 'private'>(
     (station.access as 'public' | 'semi-public' | 'private') ?? 'public'
   );
-  const [status, setStatus] = useState<'active' | 'maintenance' | 'offline'>(
-    (station.status as 'active' | 'maintenance' | 'offline') ?? 'active'
+  const [status, setStatus] = useState<ChargerStatus>(
+    station.status ?? 'active'
   );
   const [lat, setLat] = useState<number | null>(station.lat);
   const [lng, setLng] = useState<number | null>(station.lng);
@@ -222,8 +222,11 @@ export default function EditStationModal({ station, onClose, onSaved }: Props) {
               <select value={status} onChange={e => setStatus(e.target.value as typeof status)}
                 className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-green-400">
                 <option value="active">Activo</option>
+                <option value="partial">Funciona parcialmente</option>
                 <option value="maintenance">Mantenimiento</option>
-                <option value="offline">Inactivo</option>
+                <option value="closed">Cerrada temporalmente</option>
+                <option value="offline">Fuera de servicio</option>
+                {isAdmin && <option value="gone">Ya no existe (quitar del mapa)</option>}
               </select>
             </div>
           </div>

@@ -1,10 +1,23 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
-import type { ChargerStation, FreshnessStatus } from '../types';
+import type { ChargerStation } from '../types';
 
 interface Props {
   station: ChargerStation;
 }
+
+// "¿Cómo encontraste el punto de carga?" (oct 2026, a pedido de Rafa).
+// Reportar es de un toque y no exige cuenta. Un reporte NUNCA cambia el estado
+// de la estación: llega al admin (Telegram + pestaña "Reportes" del panel),
+// que investiga y decide. Mientras haya reportes sin revisar la ficha muestra
+// una nota discreta; antes, 2 reportes la marcaban en rojo sola (ya no).
+const OPTIONS: { kind: string; label: string }[] = [
+  { kind: 'ok', label: '✅ Cargué bien' },
+  { kind: 'partial', label: '⚠️ Funciona a medias' },
+  { kind: 'broken', label: '❌ No funciona' },
+  { kind: 'blocked', label: '🚫 No pude usarla' },
+  { kind: 'gone', label: '🗑️ Ya no existe' },
+];
 
 // "hace 3 días", "hace 2 meses" — a partir del timestamp UTC de D1
 function timeAgo(sqlUtc: string): string {
@@ -18,130 +31,164 @@ function timeAgo(sqlUtc: string): string {
   return `hace ${months} meses`;
 }
 
-function badgeFor(station: ChargerStation): { label: string; className: string } {
-  // freshness viene de D1; si falta (semilla estática), derivar del campo legado
-  const freshness: FreshnessStatus = station.freshness
-    ?? (station.verification === 'verified' ? 'verified'
-      : station.verification === 'error' ? 'flagged' : 'pending');
-
-  switch (freshness) {
-    case 'verified': {
-      const ago = station.lastConfirmedAt ? ` ${timeAgo(station.lastConfirmedAt)}` : '';
-      const count = (station.confirmCount ?? 0) > 1 ? ` · ${station.confirmCount} confirmaciones` : '';
-      return { label: `✓ Confirmada${ago}${count}`, className: 'bg-green-100 text-green-700' };
-    }
-    case 'stale':
-      return { label: '⏳ Sin confirmar recientemente', className: 'bg-amber-100 text-amber-700' };
-    case 'flagged':
-      return { label: '⚠ Reportada con problemas por la comunidad', className: 'bg-red-100 text-red-700' };
-    default:
-      return { label: 'Sin verificar', className: 'bg-gray-100 text-gray-500' };
-  }
+function confirmedLabel(station: ChargerStation): string | null {
+  if (!station.lastConfirmedAt) return null;
+  const count = (station.confirmCount ?? 0) > 1 ? ` · ${station.confirmCount} confirmaciones` : '';
+  return `✓ Confirmada ${timeAgo(station.lastConfirmedAt)}${count}`;
 }
 
 export default function StationVerification({ station }: Props) {
-  const stationId = station.id;
   const { authToken, currentUser, loadDynamicStations } = useStore();
-  const [submitting, setSubmitting] = useState<'confirm' | 'gps' | 'error' | null>(null);
+  const [sending, setSending] = useState<string | null>(null);
+  const [sent, setSent] = useState<{ kind: string; reportId: number; token: string } | null>(null);
+  const [detail, setDetail] = useState('');
+  const [detailSent, setDetailSent] = useState(false);
+  const [gpsBusy, setGpsBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const badge = badgeFor(station);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
 
-  async function submit(body: { status: 'verified' | 'error'; lat?: number; lng?: number }, kind: 'confirm' | 'gps' | 'error') {
-    setSubmitting(kind);
-    setErrorMsg(null);
-    setMessage(null);
+  async function report(kind: string) {
+    setSending(kind); setErrorMsg(null);
     try {
-      const res = await fetch(`/api/stations/${stationId}/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify(body),
+      const res = await fetch(`/api/stations/${encodeURIComponent(station.id)}/report`, {
+        method: 'POST', headers, body: JSON.stringify({ kind }),
       });
-      if (!res.ok) {
-        const err = await res.json() as { error?: string };
-        throw new Error(err.error ?? `Error ${res.status}`);
-      }
-      const data = await res.json() as { applied?: boolean };
-      setMessage(data.applied
-        ? (body.status === 'verified'
-          ? '¡Gracias! Tu confirmación ya está en el mapa.'
-          : 'Gracias por el reporte — quedó registrado para la comunidad.')
-        : 'Gracias — tu corrección fue enviada y un administrador la revisará antes de publicarla.');
-      await loadDynamicStations();
+      const data = await res.json().catch(() => ({})) as { error?: string; reportId?: number; token?: string };
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      setSent({ kind, reportId: data.reportId!, token: data.token! });
+      void loadDynamicStations();
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Error al enviar');
+      setErrorMsg(e instanceof Error ? e.message : 'No se pudo enviar');
     } finally {
-      setSubmitting(null);
+      setSending(null);
     }
   }
 
-  function handleGpsCorrect() {
-    if (!navigator.geolocation) {
-      setErrorMsg('Tu dispositivo no soporta geolocalización');
-      return;
+  async function sendDetail() {
+    if (!sent || !detail.trim()) return;
+    setSending('detail'); setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/stations/${encodeURIComponent(station.id)}/report`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ reportId: sent.reportId, token: sent.token, comment: detail.trim() }),
+      });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      setDetailSent(true);
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'No se pudo enviar');
+    } finally {
+      setSending(null);
     }
-    setSubmitting('gps');
-    setErrorMsg(null);
+  }
+
+  // Corrección de ubicación con GPS (solo con cuenta): sigue pasando por
+  // moderación como siempre (POST /verify con lat/lng).
+  function handleGpsCorrect() {
+    if (!navigator.geolocation) { setErrorMsg('Tu dispositivo no soporta geolocalización'); return; }
+    setGpsBusy(true); setErrorMsg(null); setMessage(null);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude, longitude } = pos.coords;
         if (latitude < 13 || latitude > 18 || longitude < -93 || longitude > -88) {
           setErrorMsg('Ubicación fuera de Guatemala. Verifica que el GPS esté activo.');
-          setSubmitting(null);
+          setGpsBusy(false);
           return;
         }
-        submit({ status: 'verified', lat: latitude, lng: longitude }, 'gps');
+        try {
+          const res = await fetch(`/api/stations/${encodeURIComponent(station.id)}/verify`, {
+            method: 'POST', headers, body: JSON.stringify({ status: 'verified', lat: latitude, lng: longitude }),
+          });
+          const data = await res.json().catch(() => ({})) as { error?: string; applied?: boolean };
+          if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+          setMessage(data.applied
+            ? 'Ubicación corregida.'
+            : 'Gracias. Tu corrección de ubicación la revisará un administrador antes de publicarla.');
+          if (data.applied) void loadDynamicStations();
+        } catch (e) {
+          setErrorMsg(e instanceof Error ? e.message : 'Error al enviar');
+        } finally {
+          setGpsBusy(false);
+        }
       },
       (err) => {
         setErrorMsg(err.code === 1
           ? 'Permiso de ubicación denegado. Actívalo en la configuración del navegador.'
           : 'No se pudo obtener tu ubicación GPS.');
-        setSubmitting(null);
+        setGpsBusy(false);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }
 
-  return (
-    <div className="px-4 py-3 border-b border-gray-100 space-y-2">
-      <span className={`inline-block text-[10px] px-2 py-1 rounded-full font-medium ${badge.className}`}>
-        {badge.label}
-      </span>
+  const confirmed = confirmedLabel(station);
+  const stale = station.freshness === 'stale';
 
-      {currentUser ? (
-        <div className="flex flex-col gap-1.5 pt-1">
-          <p className="text-[10px] text-gray-400">¿Estás físicamente en esta estación?</p>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => submit({ status: 'verified' }, 'confirm')}
-              disabled={submitting !== null}
-              className="text-[11px] px-2.5 py-1.5 rounded-lg bg-green-50 text-green-700 font-medium hover:bg-green-100 disabled:opacity-50 transition-colors"
-            >
-              {submitting === 'confirm' ? 'Enviando…' : '✓ Confirmar que está bien'}
-            </button>
-            <button
-              onClick={handleGpsCorrect}
-              disabled={submitting !== null}
-              className="text-[11px] px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-medium hover:bg-blue-100 disabled:opacity-50 transition-colors"
-            >
-              {submitting === 'gps' ? 'Obteniendo GPS…' : '📍 Corregir con mi GPS'}
-            </button>
-            <button
-              onClick={() => submit({ status: 'error' }, 'error')}
-              disabled={submitting !== null}
-              className="text-[11px] px-2.5 py-1.5 rounded-lg bg-red-50 text-red-700 font-medium hover:bg-red-100 disabled:opacity-50 transition-colors"
-            >
-              {submitting === 'error' ? 'Enviando…' : '⚠ Reportar error'}
-            </button>
-          </div>
+  return (
+    <div className="m-report">
+      {(station.openReports ?? 0) > 0 && (
+        <div className="m-report-note">
+          <b>Hay reportes recientes</b>
+          <small>Estamos verificando el estado de esta estación.</small>
         </div>
-      ) : (
-        <p className="text-[10px] text-gray-400">Inicia sesión para confirmar o corregir la ubicación.</p>
       )}
 
-      {message && <p className="text-[10px] text-green-600">{message}</p>}
-      {errorMsg && <p className="text-[10px] text-red-600">{errorMsg}</p>}
+      <p className="m-report-q">¿Cómo encontraste el punto de carga?</p>
+
+      {!sent ? (
+        <div className="m-report-opts">
+          {OPTIONS.map((o) => (
+            <button
+              key={o.kind}
+              type="button"
+              disabled={sending !== null}
+              onClick={() => report(o.kind)}
+            >
+              {sending === o.kind ? 'Enviando…' : o.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="m-report-done">
+          <p>
+            {sent.kind === 'ok'
+              ? '¡Gracias! Ayudas a que otros conductores sepan que funciona.'
+              : 'Gracias. Tu reporte le llegó al administrador, que lo va a revisar.'}
+          </p>
+          {sent.kind !== 'ok' && !detailSent && (
+            <>
+              <textarea
+                id={`report-detail-${station.id}`}
+                rows={2}
+                maxLength={280}
+                value={detail}
+                onChange={(e) => setDetail(e.target.value)}
+                placeholder='¿Quieres agregar un detalle? Opcional. Ej.: "el conector CCS2 está quebrado"'
+              />
+              <button type="button" className="m-btn ghost" disabled={!detail.trim() || sending !== null} onClick={sendDetail}>
+                {sending === 'detail' ? 'Enviando…' : 'Enviar detalle'}
+              </button>
+            </>
+          )}
+          {detailSent && <p>Detalle enviado.</p>}
+        </div>
+      )}
+
+      <div className="m-report-foot">
+        {confirmed && <span className="ok">{confirmed}</span>}
+        {!confirmed && <span>{stale ? 'Sin confirmar recientemente' : 'Nadie la ha confirmado todavía'}</span>}
+        {currentUser && (
+          <button type="button" onClick={handleGpsCorrect} disabled={gpsBusy}>
+            {gpsBusy ? 'Obteniendo GPS…' : '📍 Corregir ubicación con mi GPS'}
+          </button>
+        )}
+      </div>
+
+      {message && <p className="m-report-msg">{message}</p>}
+      {errorMsg && <p className="m-report-msg err">{errorMsg}</p>}
     </div>
   );
 }

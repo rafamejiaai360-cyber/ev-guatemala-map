@@ -722,6 +722,52 @@ guardado salía de la lista base y `loadVehicles`/`syncAccountPrefs` no lo
 reemplazaban por la ficha de D1 si el id era el mismo — un auto corregido por
 el admin (S07 GB/T → Tipo 2) seguía filtrando con los conectores viejos.
 
+**Reportes de un toque + estados que decide el admin (25 oct 2026, rama
+`reportes-estado`, en staging, pendiente de visto bueno de Rafa)**: maqueta
+aprobada por Rafa: https://claude.ai/artifact/3iGUn1wG5SaMqZd5dQLA7t
+- **Usuarios**: en la ficha, arriba, "¿Cómo encontraste el punto de carga?"
+  (`StationVerification.tsx`): Cargué bien / Funciona a medias / No funciona /
+  No pude usarla / Ya no existe, **sin cuenta** (decisión de Rafa). Tras el
+  toque, detalle opcional (máx. 280). `POST /api/stations/:id/report`
+  (`handlePostStationReport`): "ok" = evento `confirmed_ok` (actualiza
+  `last_confirmed_at`); el resto = `reported_issue` con `{kind, comment,
+  anon}`. Visitante sin cuenta = `actor_role='anonymous'`. El detalle va como
+  evento `report_detail` (`{reportId, token}`, token = HMAC del id con
+  `JWT_SECRET`, así se valida sin cuenta). Límite: 1 reporte por persona y
+  estación cada 6 h (con cuenta: historial; sin cuenta: marca en KV
+  `private/rl/report/<HMAC(IP|estación)>` que vence sola — la IP nunca se
+  guarda).
+- **Un reporte NUNCA cambia la estación** (pedido de Rafa: él investiga
+  llamando o yendo al lugar). Se quitó el `flagged` automático (2+ reportes →
+  "Reportada con problemas" en rojo) del Worker, también en `/verify` y en la
+  aprobación de propuestas. Una confirmación ya no borra los reportes.
+  "Sin revisar" = `reported_issue` posteriores al último `report_resolved` de
+  la estación (`OPEN_REPORTS_SQL`); `stations.open_reports` guarda ese conteo
+  y la ficha muestra la nota azul "Hay reportes recientes · Estamos
+  verificando…" mientras sea > 0. El pin no cambia.
+- **Aviso a Telegram** por cada reporte negativo (y por cada detalle):
+  estación, tipo, quién (o "Visitante sin cuenta"), reportes sin revisar,
+  última carga confirmada y enlace a `/admin`. Staging no tiene Telegram (queda
+  en `ops_log` como `notify_telegram` ok=0); se prueba en prod al publicar.
+- **Admin**: pestaña "Reportes" (`admin/ReportsTab.tsx`, `GET /api/reports`)
+  con los reportes sin revisar por estación (quién, cuándo, comentario); elige
+  estado + nota visible para usuarios (máx. 140) y "Guardar estado y marcar
+  como revisado" → `POST /api/stations/:id/reports/resolve`
+  (`status_changed` + `report_resolved`, `open_reports=0`,
+  `last_confirmed_at=now`). La ficha dice "Actualizado por el administrador
+  hace X" (`statusByAdmin`).
+- **Estados** (`STATION_STATUSES` en el Worker, `ChargerStatus` en el front,
+  opciones en `utils/stationStatus.ts`): `active`, `partial` (funciona
+  parcialmente: medio punto ámbar), `maintenance` (punto ámbar), `closed`
+  (cerrada temporalmente: punto rojo, conserva el color), `offline` (pin gris
+  + punto rojo), `gone` (ya no existe: sale del mapa; la API solo la entrega
+  al admin, que la ve en Estaciones y puede cambiarle el estado). El dueño
+  puede usar todos menos `gone` (su pantalla sigue mostrando 3). En la lista
+  de Estaciones del panel el estado es un desplegable. El modo ruta no avisa
+  de `closed`/`offline`/`gone`.
+- Sin migración de base de datos (columnas existentes; valores nuevos en
+  `status`).
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

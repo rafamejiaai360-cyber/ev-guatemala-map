@@ -1,6 +1,9 @@
 export type ConnectorType = 'CCS2' | 'CHAdeMO' | 'Type2' | 'J1772' | 'GBT' | 'CCS1';
 
-export type ChargerStatus = 'active' | 'maintenance' | 'offline';
+/** Estado operativo que pone el admin (o el dueño). Oct 2026: + partial
+ *  (funciona parcialmente), closed (cerrada temporalmente) y gone (ya no
+ *  existe: sale del mapa; solo el admin la sigue viendo para restaurarla). */
+export type ChargerStatus = 'active' | 'partial' | 'maintenance' | 'closed' | 'offline' | 'gone';
 
 export type ChargerLevel = 'L1' | 'L2' | 'DC';
 
@@ -23,7 +26,7 @@ export type StationKind = 'public' | 'semi-public' | 'residential';
 // Estado real de frescura que expone la API desde D1:
 // verified = confirmada hace <90 dias y sin reportes abiertos
 // stale    = la ultima confirmacion ya envejecio
-// flagged  = 2+ usuarios distintos reportaron un problema
+// flagged  = legado: antes 2+ reportes la marcaban sola (ya no, oct 2026)
 export type FreshnessStatus = 'pending' | 'verified' | 'stale' | 'flagged';
 
 export interface ChargerStation {
@@ -61,6 +64,8 @@ export interface ChargerStation {
   statusNote?: string;
   statusUpdatedAt?: string;
   statusByOwner?: boolean;
+  /** El último estado lo puso el admin (tras revisar reportes, oct 2026). */
+  statusByAdmin?: boolean;
   /** Quién dio de alta la estación. Solo viene poblado cuando la API lo
    *  entrega a un admin (ver worker/index.ts handleGetStationsFromD1) —
    *  protege a quien registró una estación residencial. */

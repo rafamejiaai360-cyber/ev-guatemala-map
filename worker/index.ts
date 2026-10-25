@@ -134,7 +134,8 @@ function pageToReview(page: NotionPage) {
 type EventType =
   | 'created' | 'updated' | 'confirmed_ok' | 'reported_issue' | 'reported_closed'
   | 'report_resolved' | 'proposal_submitted' | 'proposal_approved'
-  | 'proposal_rejected' | 'status_changed' | 'archived' | 'restored' | 'owner_assigned';
+  | 'proposal_rejected' | 'status_changed' | 'archived' | 'restored' | 'owner_assigned'
+  | 'report_detail';
 
 function eventStmt(
   db: D1Database,
@@ -142,10 +143,11 @@ function eventStmt(
   type: EventType,
   actor: UserRecord | null,
   payload: Record<string, unknown> = {},
+  anonRole = 'system', // sin actor: 'system', o 'anonymous' para un visitante sin cuenta
 ): D1PreparedStatement {
   return db.prepare(
     'INSERT INTO station_events (station_id, event_type, actor_email, actor_role, payload) VALUES (?, ?, ?, ?, ?)'
-  ).bind(stationId, type, actor?.email ?? null, actor ? actor.role : 'system', JSON.stringify(payload));
+  ).bind(stationId, type, actor?.email ?? null, actor ? actor.role : anonRole, JSON.stringify(payload));
 }
 
 interface FullStationRow {
@@ -171,6 +173,8 @@ interface FullStationRow {
   approval_status: string;
   verification_status: string;
   notion_page_id: string | null;
+  open_reports?: number;
+  last_confirmed_at?: string | null;
 }
 
 async function getStation(db: D1Database, stationId: string): Promise<FullStationRow | null> {
@@ -994,9 +998,10 @@ async function handleStationApprove(stationId: string, request: Request, env: En
 
     const { sets, values, diff, next } = buildStationUpdate(current, fieldChanges, attribution);
     if (verification === 'verified') {
-      sets.push("verification_status = 'verified'", "last_confirmed_at = datetime('now')", 'confirm_count = confirm_count + 1', 'open_reports = 0');
+      sets.push("verification_status = 'verified'", "last_confirmed_at = datetime('now')", 'confirm_count = confirm_count + 1');
     } else if (verification === 'error') {
-      sets.push("verification_status = 'flagged'", 'open_reports = open_reports + 1');
+      // Oct 2026: un reporte ya no marca la estación sola; el admin decide.
+      sets.push('open_reports = open_reports + 1');
     }
     if (sets.length > 0) {
       sets.push("updated_at = datetime('now')");
@@ -1217,7 +1222,7 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
             s.status_note, s.status_updated_at, s.status_source
        FROM stations s
        LEFT JOIN users u ON u.email = s.submitted_by
-      WHERE s.approval_status = 'active' AND s.status IN ('active', 'maintenance', 'offline')
+      WHERE s.approval_status = 'active' AND s.status IN (${(isAdmin ? STATION_STATUSES : PUBLIC_STATUSES).map((x) => `'${x}'`).join(', ')})
       ORDER BY s.id`
   ).all<StationRow & {
     last_confirmed_at: string | null; confirm_count: number; open_reports: number;
@@ -1258,6 +1263,7 @@ async function handleGetStationsFromD1(request: Request, env: Env): Promise<Resp
       statusNote: r.status_note || undefined,
       statusUpdatedAt: r.status_updated_at || undefined,
       statusByOwner: r.status_source === 'owner' || undefined,
+      statusByAdmin: r.status_source === 'admin' || undefined,
       connectors: connectors.length > 0 ? connectors : [{ type: 'Type2', power_kw: 7.4, level: 'L2' }],
       ...(adapters.length ? { adapters } : {}),
       network: r.network || 'Desconocido',
@@ -2385,7 +2391,7 @@ function normalizeStationChanges(body: Record<string, unknown>): { changes: Reco
   if (typeof body.zone === 'string' && body.zone.trim()) changes.zone = body.zone.trim();
   if (typeof body.network === 'string') changes.network = body.network.trim();
   if (typeof body.access === 'string' && ['public', 'semi-public', 'private'].includes(body.access)) changes.access = body.access;
-  if (typeof body.status === 'string' && ['active', 'maintenance', 'offline'].includes(body.status)) changes.status = body.status;
+  if (typeof body.status === 'string' && STATION_STATUSES.includes(body.status)) changes.status = body.status;
   if (typeof body.type === 'string' && ['public', 'residential'].includes(body.type)) changes.type = body.type;
   if (Array.isArray(body.connectors)) changes.connectors = body.connectors;
   if (Array.isArray(body.adapters)) changes.adapters = sanitizeAdapters(body.adapters);
@@ -2485,13 +2491,15 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
     const sets: string[] = ['verification_log = ?', "updated_at = datetime('now')"];
     const values: unknown[] = [log];
     if (body.status === 'verified') {
-      sets.push("verification_status = 'verified'", "last_confirmed_at = datetime('now')", 'confirm_count = confirm_count + 1', 'open_reports = 0');
+      sets.push("verification_status = 'verified'", "last_confirmed_at = datetime('now')", 'confirm_count = confirm_count + 1');
       if (body.lat != null && body.lng != null) {
         sets.push('lat = ?', 'lng = ?', 'google_maps_url = ?');
         values.push(body.lat, body.lng, `https://www.google.com/maps/search/?api=1&query=${body.lat},${body.lng}`);
       }
     } else {
-      sets.push("verification_status = 'flagged'", 'open_reports = open_reports + 1');
+      // Oct 2026: los reportes ya no cambian el estado solos; solo suman a la
+      // cola de la pestaña "Reportes" del panel, donde el admin decide.
+      sets.push('open_reports = open_reports + 1');
     }
 
     await env.DB.batch([
@@ -2526,7 +2534,7 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
       env.DB.prepare(
         `UPDATE stations SET verification_status = 'verified',
            last_confirmed_at = datetime('now'), confirm_count = confirm_count + 1,
-           open_reports = 0, updated_at = datetime('now') WHERE id = ?`
+           updated_at = datetime('now') WHERE id = ?`
       ).bind(stationId),
       eventStmt(env.DB, stationId, 'confirmed_ok', user, {}),
     ]);
@@ -2535,28 +2543,224 @@ async function handleVerifyStation(stationId: string, request: Request, env: Env
     return json({ ok: true, applied: true });
   }
 
-  // Reporte de problema: cuenta reportantes DISTINTOS desde la última
-  // confirmación/resolución (derivado del historial). Con 2+ usuarios
-  // distintos la estación se marca 'flagged'; un reporte aislado solo queda
-  // registrado — así un solo usuario no puede degradar una estación.
-  await eventStmt(env.DB, stationId, 'reported_issue', user, {}).run();
-  const distinct = await env.DB.prepare(
-    `SELECT COUNT(DISTINCT actor_email) AS n FROM station_events
-      WHERE station_id = ?1 AND event_type = 'reported_issue'
-        AND id > COALESCE(
-          (SELECT MAX(id) FROM station_events
-            WHERE station_id = ?1 AND event_type IN ('confirmed_ok', 'report_resolved')),
-          0)`
-  ).bind(stationId).first<{ n: number }>();
-  const openReporters = distinct?.n ?? 1;
-  await env.DB.prepare(
-    `UPDATE stations SET open_reports = ?,
-       verification_status = CASE WHEN ? >= 2 THEN 'flagged' ELSE verification_status END,
-       updated_at = datetime('now') WHERE id = ?`
-  ).bind(openReporters, openReporters, stationId).run();
+  // Reporte de problema: queda en la cola del admin (pestaña "Reportes").
+  // Oct 2026, a pedido de Rafa: ya no se marca 'flagged' sola — el admin
+  // investiga (llama o va al lugar) y decide el estado.
+  await eventStmt(env.DB, stationId, 'reported_issue', user, { kind: 'broken', via: 'verify' }).run();
+  const open = await refreshOpenReports(env.DB, stationId);
   invalidateStationsCache();
   ctx.waitUntil(syncStationToNotion(env, stationId));
-  return json({ ok: true, applied: true, openReports: openReporters });
+  return json({ ok: true, applied: true, openReports: open });
+}
+
+// ─── Reportes de un toque: "¿Cómo encontraste el punto de carga?" ────────────
+// Oct 2026. Cualquiera puede reportar, con o sin cuenta. Un reporte NUNCA
+// cambia el estado de la estación: llega al admin (Telegram + pestaña
+// "Reportes"), que investiga y decide con /api/stations/:id/reports/resolve.
+// Los reportes son eventos 'reported_issue' (inmutables); "sin revisar" =
+// posteriores al último 'report_resolved' de esa estación.
+const REPORT_KINDS: Record<string, string> = {
+  ok: 'Cargué bien',
+  partial: 'Funciona a medias',
+  broken: 'No funciona',
+  blocked: 'No pude usarla',
+  gone: 'Ya no existe',
+};
+const REPORT_WINDOW_S = 6 * 3600; // un reporte por persona y estación cada 6 h
+const REPORT_COMMENT_MAX = 280;
+
+const OPEN_REPORTS_SQL = `event_type = 'reported_issue' AND id > COALESCE(
+  (SELECT MAX(r.id) FROM station_events r WHERE r.station_id = station_events.station_id AND r.event_type = 'report_resolved'), 0)`;
+
+async function refreshOpenReports(db: D1Database, stationId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS n FROM station_events WHERE station_id = ? AND ${OPEN_REPORTS_SQL}`
+  ).bind(stationId).first<{ n: number }>();
+  const n = row?.n ?? 0;
+  await db.prepare("UPDATE stations SET open_reports = ?, updated_at = datetime('now') WHERE id = ?").bind(n, stationId).run();
+  return n;
+}
+
+async function hmacHex(secret: string, text: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret || 'ev-gt-report'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text)));
+  return Array.from(mac.slice(0, 16), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function cleanComment(v: unknown): string {
+  return typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, REPORT_COMMENT_MAX) : '';
+}
+
+function daysAgoLabel(sqlUtc: string | null): string {
+  if (!sqlUtc) return 'nunca';
+  const days = Math.floor((Date.now() - Date.parse(sqlUtc.replace(' ', 'T') + 'Z')) / 86_400_000);
+  return days <= 0 ? 'hoy' : days === 1 ? 'hace 1 día' : `hace ${days} días`;
+}
+
+async function handlePostStationReport(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const user = await getUserFromToken(request, env);
+  const body = await request.json().catch(() => ({})) as { kind?: unknown; comment?: unknown; reportId?: unknown; token?: unknown };
+  const station = await getStation(env.DB, stationId);
+  if (!station || station.approval_status !== 'active' || station.status === 'gone') return apiError('Estación no encontrada', 404);
+  const secret = env.JWT_SECRET ?? '';
+
+  // Detalle opcional después del toque: { reportId, token, comment }. El
+  // token (HMAC del id) prueba que lo manda quien hizo el reporte, aunque no
+  // tenga cuenta. Un solo detalle por reporte.
+  if (body.reportId != null) {
+    const reportId = Number(body.reportId);
+    const comment = cleanComment(body.comment);
+    if (!Number.isInteger(reportId) || !comment) return apiError('Falta el detalle');
+    if (body.token !== await hmacHex(secret, `report:${reportId}`)) return apiError('No se pudo validar el reporte', 403);
+    const report = await env.DB.prepare(
+      "SELECT payload FROM station_events WHERE id = ? AND station_id = ? AND event_type IN ('reported_issue', 'confirmed_ok')"
+    ).bind(reportId, stationId).first<{ payload: string }>();
+    if (!report) return apiError('Reporte no encontrado', 404);
+    const dup = await env.DB.prepare(
+      "SELECT 1 FROM station_events WHERE station_id = ? AND event_type = 'report_detail' AND json_extract(payload, '$.report_id') = ?"
+    ).bind(stationId, reportId).first();
+    if (dup) return apiError('Ya agregaste un detalle a este reporte', 409);
+    await eventStmt(env.DB, stationId, 'report_detail', user, { report_id: reportId, comment, anon: !user }, 'anonymous').run();
+    const kind = (JSON.parse(report.payload || '{}') as { kind?: string }).kind ?? 'broken';
+    if (kind !== 'ok') ctx.waitUntil(notifyAdmin(env, `Detalle del reporte: ${station.name}`, `"${comment}"`));
+    return json({ ok: true });
+  }
+
+  const kind = typeof body.kind === 'string' && body.kind in REPORT_KINDS ? body.kind : null;
+  if (!kind) return apiError('Tipo de reporte no válido');
+  const comment = cleanComment(body.comment);
+
+  // Límite: un reporte por persona y estación cada 6 h. Con cuenta se mira el
+  // historial; sin cuenta, una marca temporal en KV con un HMAC de la IP (la
+  // IP nunca se guarda) que vence sola.
+  if (user) {
+    const recent = await env.DB.prepare(
+      `SELECT 1 FROM station_events WHERE station_id = ? AND actor_email = ?
+         AND event_type IN ('reported_issue', 'confirmed_ok') AND created_at >= datetime('now', ?)`
+    ).bind(stationId, user.email, `-${REPORT_WINDOW_S} seconds`).first();
+    if (recent) return apiError('Ya reportaste esta estación hace poco. ¡Gracias!', 429);
+  } else if (env.PHOTOS) {
+    const ip = request.headers.get('CF-Connecting-IP') ?? '';
+    const rlKey = `private/rl/report/${await hmacHex(secret, `${ip}|${stationId}`)}`;
+    if (await env.PHOTOS.get(rlKey)) return apiError('Ya reportaste esta estación hace poco. ¡Gracias!', 429);
+    await env.PHOTOS.put(rlKey, '1', { expirationTtl: REPORT_WINDOW_S });
+  }
+
+  const payload = { kind, ...(comment ? { comment } : {}), anon: !user };
+  let reportId: number;
+  if (kind === 'ok') {
+    const [, ev] = await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE stations SET verification_status = 'verified', last_confirmed_at = datetime('now'),
+           confirm_count = confirm_count + 1, updated_at = datetime('now') WHERE id = ?`
+      ).bind(stationId),
+      eventStmt(env.DB, stationId, 'confirmed_ok', user, payload, 'anonymous'),
+    ]);
+    reportId = Number(ev.meta.last_row_id);
+  } else {
+    const ev = await eventStmt(env.DB, stationId, 'reported_issue', user, payload, 'anonymous').run();
+    reportId = Number(ev.meta.last_row_id);
+    const open = await refreshOpenReports(env.DB, stationId);
+    const who = user ? `${user.name} (${user.email})` : 'Visitante sin cuenta';
+    const origin = new URL(request.url).origin;
+    ctx.waitUntil(notifyAdmin(env, `Reporte: ${station.name}`,
+      `"${REPORT_KINDS[kind]}" · ${who}` +
+      (comment ? `\nComentario: "${comment}"` : '') +
+      `\nReportes sin revisar: ${open} · Última carga confirmada: ${daysAgoLabel(station.last_confirmed_at ?? null)}` +
+      `\nRevisar: ${origin}/admin`));
+  }
+  invalidateStationsCache();
+  return json({ ok: true, reportId, token: await hmacHex(secret, `report:${reportId}`) }, 201);
+}
+
+// Cola del admin: reportes sin revisar agrupados por estación (más reciente
+// primero), con el detalle que agregó cada quien.
+async function handleListReports(request: Request, env: Env): Promise<Response> {
+  const admin = await getUserFromToken(request, env);
+  if (!admin || admin.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  type Ev = { id: number; station_id: string; actor_email: string | null; actor_name: string | null; payload: string; created_at: string };
+  const { results: evs } = await env.DB.prepare(
+    `SELECT e.id, e.station_id, e.actor_email, u.name AS actor_name, e.payload, e.created_at
+       FROM station_events e LEFT JOIN users u ON u.email = e.actor_email
+      WHERE ${OPEN_REPORTS_SQL.replace(/\bevent_type\b/, 'e.event_type').replace(/\bid >/, 'e.id >').replace('station_events.station_id', 'e.station_id')}
+      ORDER BY e.id DESC LIMIT 500`
+  ).all<Ev>();
+  if (!evs.length) return json([]);
+  const ids = Array.from(new Set(evs.map((e) => e.station_id)));
+  const marks = ids.map(() => '?').join(', ');
+  const { results: sts } = await env.DB.prepare(
+    `SELECT id, name, type, access, zone, status, status_note, status_updated_at, status_source, last_confirmed_at
+       FROM stations WHERE id IN (${marks})`
+  ).bind(...ids).all<{
+    id: string; name: string; type: string; access: string; zone: string | null; status: string; status_note: string | null;
+    status_updated_at: string | null; status_source: string | null; last_confirmed_at: string | null;
+  }>();
+  const { results: details } = await env.DB.prepare(
+    `SELECT payload FROM station_events WHERE event_type = 'report_detail' AND station_id IN (${marks})`
+  ).bind(...ids).all<{ payload: string }>();
+  const detailBy = new Map<number, string>();
+  for (const d of details) {
+    const p = JSON.parse(d.payload || '{}') as { report_id?: number; comment?: string };
+    if (p.report_id && p.comment) detailBy.set(p.report_id, p.comment);
+  }
+  const byStation = new Map(sts.map((s) => [s.id, s]));
+  const out = ids.filter((id) => byStation.has(id)).map((id) => {
+    const s = byStation.get(id)!;
+    return {
+      id: s.id, name: s.name, type: s.type, access: s.access, zone: s.zone || '', status: s.status,
+      statusNote: s.status_note, statusUpdatedAt: s.status_updated_at, statusSource: s.status_source,
+      lastConfirmedAt: s.last_confirmed_at,
+      reports: evs.filter((e) => e.station_id === id).map((e) => {
+        const p = JSON.parse(e.payload || '{}') as { kind?: string; comment?: string; anon?: boolean };
+        return {
+          id: e.id, kind: p.kind ?? 'broken', comment: p.comment ?? detailBy.get(e.id) ?? null,
+          email: e.actor_email, name: e.actor_name, anon: !e.actor_email, createdAt: e.created_at,
+        };
+      }),
+    };
+  });
+  return json(out);
+}
+
+// El admin cierra los reportes de una estación tras investigar, y de paso
+// (opcional) le pone el estado que comprobó, con nota visible para usuarios.
+async function handleResolveReports(stationId: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const admin = await getUserFromToken(request, env);
+  if (!admin || admin.role !== 'admin') return apiError('Solo administradores', 403);
+  if (!env.DB) return apiError('Base de datos no configurada', 503);
+  const station = await getStation(env.DB, stationId);
+  if (!station) return apiError('Estación no encontrada', 404);
+  const body = await request.json().catch(() => ({})) as { status?: unknown; note?: unknown };
+  const status = typeof body.status === 'string' && body.status ? body.status : null;
+  if (status && !STATION_STATUSES.includes(status)) return apiError('Estado no válido');
+  const rawNote = typeof body.note === 'string' ? body.note.trim().replace(/\s+/g, ' ') : '';
+  if (rawNote.length > 140) return apiError('La nota debe tener máximo 140 caracteres');
+  const note = !status || status === 'active' ? null : (rawNote || null);
+  const open = station.open_reports ?? 0;
+
+  const stmts: D1PreparedStatement[] = [];
+  if (status) {
+    stmts.push(
+      env.DB.prepare(
+        `UPDATE stations SET status = ?, status_note = ?, status_source = 'admin',
+           status_updated_at = datetime('now') WHERE id = ?`
+      ).bind(status, note, stationId),
+      eventStmt(env.DB, stationId, 'status_changed', admin, { from: station.status, to: status, note, by: 'admin', via: 'reports' }),
+    );
+  }
+  stmts.push(
+    env.DB.prepare(
+      `UPDATE stations SET open_reports = 0, verification_status = 'verified',
+         last_confirmed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`
+    ).bind(stationId),
+    eventStmt(env.DB, stationId, 'report_resolved', admin, { reports: open, status: status ?? station.status, note }),
+  );
+  await env.DB.batch(stmts);
+  invalidateStationsCache();
+  ctx.waitUntil(syncStationToNotion(env, stationId));
+  return json({ ok: true, status: status ?? station.status, statusNote: note });
 }
 
 // Solicitud de uso de una estación residencial (fase piloto): no toca datos
@@ -2607,7 +2811,15 @@ async function handlePostStationRequest(stationId: string, request: Request, env
 // quien registró una residencial. Quien propuso una estación pública NO es
 // su dueño: no puede cambiarle el estado.
 const OWNER_SQL = "(s.owner_email = ?1 OR (s.type = 'residential' AND s.submitted_by = ?1))";
-const OWNER_STATUSES = ['active', 'maintenance', 'offline'];
+// Estados de una estación (oct 2026: + partial, closed, gone). 'gone' = ya no
+// existe: sale del mapa pero se conserva (solo el admin la ve y la restaura).
+const STATION_STATUSES = ['active', 'partial', 'maintenance', 'closed', 'offline', 'gone'];
+const PUBLIC_STATUSES = STATION_STATUSES.filter((x) => x !== 'gone');
+const OWNER_STATUSES = PUBLIC_STATUSES;
+const STATUS_NAME: Record<string, string> = {
+  active: 'Activa', partial: 'Funciona parcialmente', maintenance: 'En mantenimiento',
+  closed: 'Cerrada temporalmente', offline: 'Fuera de servicio', gone: 'Ya no existe',
+};
 
 function isOwner(station: FullStationRow, email: string): boolean {
   return station.owner_email === email || (station.type === 'residential' && station.submitted_by === email);
@@ -2666,7 +2878,7 @@ async function handleSetStationStatus(stationId: string, request: Request, env: 
 
   const body = await request.json().catch(() => ({})) as { status?: unknown; note?: unknown };
   const status = typeof body.status === 'string' ? body.status : '';
-  if (!OWNER_STATUSES.includes(status)) return apiError('Estado no válido');
+  if (!(isAdmin ? STATION_STATUSES : OWNER_STATUSES).includes(status)) return apiError('Estado no válido');
   const rawNote = typeof body.note === 'string' ? body.note.trim().replace(/\s+/g, ' ') : '';
   if (rawNote.length > 140) return apiError('La nota debe tener máximo 140 caracteres');
   const note = status === 'active' ? null : (rawNote || null);
@@ -2681,10 +2893,9 @@ async function handleSetStationStatus(stationId: string, request: Request, env: 
   ]);
   invalidateStationsCache();
   ctx.waitUntil(syncStationToNotion(env, stationId));
-  if (station.status !== status) {
-    const label: Record<string, string> = { active: 'Activa', maintenance: 'En mantenimiento', offline: 'Fuera de servicio' };
+  if (station.status !== status && source === 'owner') {
     ctx.waitUntil(notifyAdmin(env, 'Estado actualizado por el dueño',
-      `${station.name} → ${label[status]}${note ? ` (${note})` : ''}`));
+      `${station.name} → ${STATUS_NAME[status]}${note ? ` (${note})` : ''}`));
   }
   return json({ ok: true, status, statusNote: note });
 }
@@ -3314,6 +3525,16 @@ export default {
       const stationStatusMatch = path.match(/^stations\/([^/]+)\/status$/);
       if (stationStatusMatch && request.method === 'POST') {
         return handleSetStationStatus(stationStatusMatch[1], request, env, ctx);
+      }
+      // Reportes de un toque (con o sin cuenta) y cola del admin
+      const stationReportMatch = path.match(/^stations\/([^/]+)\/report$/);
+      if (stationReportMatch && request.method === 'POST') {
+        return handlePostStationReport(stationReportMatch[1], request, env, ctx);
+      }
+      if (path === 'reports' && request.method === 'GET') return handleListReports(request, env);
+      const resolveMatch = path.match(/^stations\/([^/]+)\/reports\/resolve$/);
+      if (resolveMatch && request.method === 'POST') {
+        return handleResolveReports(resolveMatch[1], request, env, ctx);
       }
       const stationOwnerMatch = path.match(/^stations\/([^/]+)\/owner$/);
       if (stationOwnerMatch && request.method === 'GET') {

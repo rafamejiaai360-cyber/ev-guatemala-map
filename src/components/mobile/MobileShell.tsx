@@ -532,6 +532,7 @@ function ActivityTab({ onAportar, onHost, onOpen }: { onAportar: () => void; onH
   // Estaciones que necesitan que alguien confirme si funcionan: sin
   // confirmación reciente, nunca verificadas o reportadas por la comunidad.
   const toVerify = useMemo(() => stations
+    .filter((s) => s.status !== 'gone')
     .filter((s) => s.freshness ? s.freshness !== 'verified' : s.verification !== 'verified')
     .map((s) => ({ s, km: distanceKm(s, userLocation) }))
     .sort((a, b) => (a.km !== null && b.km !== null ? a.km - b.km : a.s.name.localeCompare(b.s.name)))

@@ -27,7 +27,8 @@ const iconCache = new Map<string, L.DivIcon>();
 // Pin en forma de gota con un enchufe de línea fina.
 // Relleno = TIPO de estación (quién la ofrece): verde = pública, azul = residencial;
 // gris si está fuera de servicio.
-// Punto en la esquina = ESTADO cuando no está activa: ámbar = mantenimiento, rojo = fuera de servicio.
+// Punto en la esquina = ESTADO cuando no está activa: medio ámbar = funciona parcialmente,
+// ámbar = mantenimiento, rojo = cerrada temporalmente / fuera de servicio (pin gris).
 // Siguen siendo dos señales independientes, como se acordó el 14 jul 2026,
 // pero el estado ya no usa un borde grueso: solo aparece cuando hay algo que avisar.
 const PLUG_SVG = '<svg class="ev-pin-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2.5v4.5M15 2.5v4.5M6.5 7h11v3.5a5.5 5.5 0 0 1-11 0zM12 16v5.5"/></svg>';
@@ -85,7 +86,9 @@ const CONNECTOR_LEVEL_STYLE: Record<string, React.CSSProperties> = {
 
 const STATUS_COLOR: Record<string, string> = {
   active: '#22c55e',
+  partial: '#f59e0b',
   maintenance: '#f59e0b',
+  closed: '#ef4444',
   offline: '#ef4444',
 };
 
