@@ -1,91 +1,515 @@
 {
   "name": "compartir-y-reportar",
   "about": "Novedades 26 oct 2026: compartir una estación por WhatsApp y reportar cómo la encontraste. Capturas de la app en img/ (390x844 a 3x = 1170x2532).",
-  "css": ".dim{position:absolute;inset:0;width:1170px;height:2532px;background:rgba(0,0,0,.42)} .sheet{position:absolute;left:0;top:1250px;width:1170px;height:1282px;background:#f2f2f7;border-radius:70px 70px 0 0;padding:34px 52px} .grab{width:130px;height:14px;border-radius:14px;background:#c7c7cc;margin:0 auto 40px} .shh{display:flex;gap:36px;align-items:center;background:#fff;border-radius:44px;padding:34px} .appic{width:150px;height:150px;border-radius:38px;background:#16a34a;display:grid;place-items:center;flex:none} .appic svg{width:84px;height:84px} .shh b{display:block;font-size:52px;color:#111} .shh small{display:block;font-size:38px;color:#6b7280;margin-top:8px} .apps{position:absolute;left:0;top:380px;width:1170px;height:300px} .app{position:absolute;top:0;width:190px;text-align:center;font-size:36px;color:#374151} .app i{display:grid;place-items:center;width:190px;height:190px;border-radius:48px;margin-bottom:18px} .app i svg{width:104px;height:104px} .rows{position:absolute;left:52px;right:52px;top:740px;background:#fff;border-radius:44px} .rows div{padding:44px 46px;font-size:46px;color:#111;border-bottom:2px solid #e5e5ea} .rows div:last-child{border:0} .chat{position:absolute;inset:0;width:1170px;height:2532px;background:#efeae2} .chtop{height:330px;background:#1f6f5c;color:#fff;display:flex;align-items:flex-end;gap:34px;padding:0 50px 44px} .chav{width:130px;height:130px;border-radius:50%;background:#a7e3c4;display:grid;place-items:center;font-size:64px} .chtop b{display:block;font-size:56px} .chtop small{font-size:38px;opacity:.8} .bub{position:absolute;width:860px;border-radius:44px;padding:24px 30px 20px;font-size:46px;line-height:1.3;color:#111;box-shadow:0 2px 2px rgba(0,0,0,.08)} .bub.out{right:44px;background:#d9fdd3;border-top-right-radius:10px} .bub.in{left:44px;width:720px;background:#fff;border-top-left-radius:10px} .who{font-size:38px;font-weight:700;color:#c2410c;margin-bottom:4px} .tm{text-align:right;font-size:32px;color:#667781;margin-top:8px} .pv{background:#c7efc0;border-radius:28px;overflow:hidden;margin-bottom:20px} .pvi{height:290px;background:linear-gradient(135deg,#16a34a,#0f7a37);display:grid;place-items:center} .pvi svg{width:150px;height:150px} .pvt{padding:24px 28px} .pvt b{display:block;font-size:46px} .pvt small{display:block;font-size:36px;color:#4b5563} .lnk{color:#027eb5;word-break:break-all} .note{border-radius:36px;padding:30px 38px;font-size:44px;font-weight:600;line-height:1.3} .ok{background:#dcfce7;color:#166534} .bad{background:#dbeafe;color:#1e40af} .center{display:flex;flex-direction:column;align-items:center;gap:40px} .circ{width:330px;height:330px;border-radius:50%;background:rgba(17,24,20,.9);display:grid;place-items:center;box-shadow:0 0 0 14px rgba(34,197,94,.18)} .circ svg{width:150px;height:150px} .pill{padding:24px 46px;border-radius:999px;background:rgba(17,24,20,.9);color:#fff;font-size:46px;font-weight:600;white-space:nowrap}",
+  "css": ".dim{position:absolute;inset:0;width:1170px;height:2532px;background:rgba(0,0,0,.42)} .sheet{position:absolute;left:0;top:1250px;width:1170px;height:1282px;background:#f2f2f7;border-radius:70px 70px 0 0;padding:34px 52px} .grab{width:130px;height:14px;border-radius:14px;background:#c7c7cc;margin:0 auto 40px} .shh{display:flex;gap:36px;align-items:center;background:#fff;border-radius:44px;padding:34px} .appic{width:150px;height:150px;border-radius:38px;background:#16a34a;display:grid;place-items:center;flex:none} .appic svg{width:84px;height:84px} .shh b{display:block;font-size:52px;color:#111} .shh small{display:block;font-size:38px;color:#6b7280;margin-top:8px} .apps{position:absolute;left:0;top:380px;width:1170px;height:300px} .app{position:absolute;top:0;width:190px;text-align:center;font-size:36px;color:#374151} .app i{display:grid;place-items:center;width:190px;height:190px;border-radius:48px;margin-bottom:18px} .app i svg{width:104px;height:104px} .rows{position:absolute;left:52px;right:52px;top:740px;background:#fff;border-radius:44px} .rows div{padding:44px 46px;font-size:46px;color:#111;border-bottom:2px solid #e5e5ea} .rows div:last-child{border:0} .chat{position:absolute;inset:0;width:1170px;height:2532px;background:#efeae2} .chtop{height:330px;background:#1f6f5c;color:#fff;display:flex;align-items:flex-end;gap:34px;padding:0 50px 44px} .chav{width:130px;height:130px;border-radius:50%;background:#a7e3c4;display:grid;place-items:center;font-size:64px} .chtop b{display:block;font-size:56px} .chtop small{font-size:38px;opacity:.8} .bub{position:absolute;width:860px;border-radius:44px;padding:24px 30px 20px;font-size:46px;line-height:1.3;color:#111;box-shadow:0 2px 2px rgba(0,0,0,.08)} .bub.out{right:44px;background:#d9fdd3;border-top-right-radius:10px} .bub.in{left:44px;width:720px;background:#fff;border-top-left-radius:10px} .who{font-size:38px;font-weight:700;color:#c2410c;margin-bottom:4px} .tm{text-align:right;font-size:32px;color:#667781;margin-top:8px} .pv{background:#c7efc0;border-radius:28px;overflow:hidden;margin-bottom:20px} .pvi{height:290px;background:linear-gradient(135deg,#16a34a,#0f7a37);display:grid;place-items:center} .pvi svg{width:150px;height:150px} .pvt{padding:24px 28px} .pvt b{display:block;font-size:46px} .pvt small{display:block;font-size:36px;color:#4b5563} .lnk{color:#027eb5;word-break:break-all} .note{border-radius:36px;padding:30px 38px;font-size:44px;font-weight:600;line-height:1.3} .ok{background:#dcfce7;color:#166534} .bad{background:#dbeafe;color:#1e40af} .center{display:flex;flex-direction:column;align-items:center;gap:40px} .circ{width:330px;height:330px;border-radius:50%;background:rgba(17,24,20,.9);display:grid;place-items:center;box-shadow:0 0 0 14px rgba(34,197,94,.18)} .circ svg{width:150px;height:150px} .pill{padding:24px 46px;border-radius:999px;background:rgba(17,24,20,.9);color:#fff;font-size:46px;font-weight:600;white-space:nowrap} .lab{position:absolute;display:flex;align-items:center;gap:18px;padding:22px 34px;border-radius:999px;background:rgba(17,24,20,.93);color:#fff;font-size:52px;font-weight:600;white-space:nowrap;box-shadow:0 12px 30px rgba(0,0,0,.28)} .lab i{width:30px;height:30px;border-radius:50%;flex:none}",
   "scenes": [
     {
-      "type": "hook", "dur": 4.4, "car": { "battery": 0.9 },
+      "type": "hook",
+      "dur": 4.4,
+      "car": {
+        "battery": 0.9
+      },
       "title": "Cargaste bien.\n¿Cómo se lo cuentas\n*a otros conductores?*",
-      "lineDelay": 1.3, "dimLines": 1
+      "lineDelay": 1.3,
+      "dimLines": 1
     },
     {
-      "type": "phone", "dur": 4.0, "shot": "img/ficha.png",
+      "type": "phone",
+      "dur": 4.0,
+      "shot": "img/ficha.png",
       "title": "Ahora compartes\n*cualquier estación.*",
-      "cam": [ { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
-               { "t": 2.2, "s": 0.82, "fx": 0.6, "fy": 0.2, "at": [560, 760] } ],
-      "highlights": [ { "t0": 1.7, "x": 598, "y": 567, "w": 516, "h": 126, "r": 40 } ],
-      "taps": [ { "t": 2.9, "x": 856, "y": 630 } ]
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.62,
+          "fx": 0.5,
+          "fy": 0,
+          "at": [
+            540,
+            470
+          ]
+        },
+        {
+          "t": 2.2,
+          "s": 0.82,
+          "fx": 0.6,
+          "fy": 0.2,
+          "at": [
+            560,
+            760
+          ]
+        }
+      ],
+      "highlights": [
+        {
+          "t0": 1.7,
+          "x": 598,
+          "y": 567,
+          "w": 516,
+          "h": 126,
+          "r": 40
+        }
+      ],
+      "taps": [
+        {
+          "t": 2.9,
+          "x": 856,
+          "y": 630
+        }
+      ]
     },
     {
-      "type": "phone", "dur": 3.8, "shot": "img/ficha.png",
+      "type": "phone",
+      "dur": 3.8,
+      "shot": "img/ficha.png",
       "title": "Eliges *WhatsApp*\no la app que quieras.",
-      "cam": [ { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] } ],
-      "overlays": [
-        { "t0": 0.2, "anim": "fade", "html": "<div class='dim'></div>" },
-        { "t0": 0.3, "anim": "up", "html": "<div class='sheet'><div class='grab'></div><div class='shh'><div class='appic'><svg viewBox='0 0 24 24' fill='#fff'><path d='M13 2 4.5 13.5H11L10 22l8.5-11.5H12z'/></svg></div><div><b>Audi Guatemala</b><small>movilidadelectricagt.com/?estacion=gt-z10-audi</small></div></div><div class='apps'><div class='app' style='left:80px'><i style='background:#25d366'><svg viewBox='0 0 24 24' fill='#fff'><path d='M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z'/></svg></i>WhatsApp</div><div class='app' style='left:350px'><i style='background:#3b82f6'><svg viewBox='0 0 24 24' fill='#fff'><path d='M12 4C7 4 3 7.4 3 11.5c0 2.3 1.3 4.4 3.3 5.8L5.5 21l4-2.2c.8.2 1.6.2 2.5.2 5 0 9-3.4 9-7.5S17 4 12 4z'/></svg></i>Mensajes</div><div class='app' style='left:620px'><i style='background:#0ea5e9'><svg viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2'><rect x='3' y='5' width='18' height='14' rx='2'/><path d='m3 7 9 6 9-6'/></svg></i>Correo</div><div class='app' style='left:890px'><i style='background:#9ca3af'><svg viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2'><rect x='8' y='8' width='12' height='12' rx='2'/><path d='M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3'/></svg></i>Copiar</div></div><div class='rows'><div>Copiar enlace</div><div>Agregar a favoritos</div></div></div>" }
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.62,
+          "fx": 0.5,
+          "fy": 0,
+          "at": [
+            540,
+            470
+          ]
+        }
       ],
-      "highlights": [ { "t0": 1.5, "x": 68, "y": 1618, "w": 214, "h": 214, "r": 58 } ],
-      "taps": [ { "t": 2.6, "x": 175, "y": 1725 } ]
+      "overlays": [
+        {
+          "t0": 0.2,
+          "anim": "fade",
+          "html": "<div class='dim'></div>"
+        },
+        {
+          "t0": 0.3,
+          "anim": "up",
+          "html": "<div class='sheet'><div class='grab'></div><div class='shh'><div class='appic'><svg viewBox='0 0 24 24' fill='#fff'><path d='M13 2 4.5 13.5H11L10 22l8.5-11.5H12z'/></svg></div><div><b>Audi Guatemala</b><small>movilidadelectricagt.com/?estacion=gt-z10-audi</small></div></div><div class='apps'><div class='app' style='left:80px'><i style='background:#25d366'><svg viewBox='0 0 24 24' fill='#fff'><path d='M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z'/></svg></i>WhatsApp</div><div class='app' style='left:350px'><i style='background:#3b82f6'><svg viewBox='0 0 24 24' fill='#fff'><path d='M12 4C7 4 3 7.4 3 11.5c0 2.3 1.3 4.4 3.3 5.8L5.5 21l4-2.2c.8.2 1.6.2 2.5.2 5 0 9-3.4 9-7.5S17 4 12 4z'/></svg></i>Mensajes</div><div class='app' style='left:620px'><i style='background:#0ea5e9'><svg viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2'><rect x='3' y='5' width='18' height='14' rx='2'/><path d='m3 7 9 6 9-6'/></svg></i>Correo</div><div class='app' style='left:890px'><i style='background:#9ca3af'><svg viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2'><rect x='8' y='8' width='12' height='12' rx='2'/><path d='M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3'/></svg></i>Copiar</div></div><div class='rows'><div>Copiar enlace</div><div>Agregar a favoritos</div></div></div>"
+        }
+      ],
+      "highlights": [
+        {
+          "t0": 1.5,
+          "x": 68,
+          "y": 1618,
+          "w": 214,
+          "h": 214,
+          "r": 58
+        }
+      ],
+      "taps": [
+        {
+          "t": 2.6,
+          "x": 175,
+          "y": 1725
+        }
+      ]
     },
     {
-      "type": "phone", "dur": 4.2, "shot": "img/ficha.png",
+      "type": "phone",
+      "dur": 4.2,
+      "shot": "img/ficha.png",
       "title": "Le llega con el nombre\n*y el enlace.*",
-      "cam": [ { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] } ],
-      "overlays": [
-        { "t0": 0, "anim": "left", "html": "<div class='chat'><div class='chtop'><div class='chav'>⚡</div><div><b>Conductores EV GT</b><small>Ana, Luis, Sofía, tú</small></div></div></div>" },
-        { "t0": 0.8, "anim": "pop", "origin": "100% 0", "html": "<div class='bub out' style='top:410px'><div class='pv'><div class='pvi'><svg viewBox='0 0 24 24' fill='#fff'><path d='M13 2 4.5 13.5H11L10 22l8.5-11.5H12z'/></svg></div><div class='pvt'><b>Audi Guatemala</b><small>Estación de carga en EV Guatemala</small></div></div>Mira esta estación 👇<br><span class='lnk'>www.movilidadelectricagt.com/?estacion=gt-z10-audi</span><div class='tm'>6:57 p. m. ✓✓</div></div>" },
-        { "t0": 2.0, "anim": "pop", "origin": "0 0", "sound": "notify", "html": "<div class='bub in' style='top:1380px'><div class='who'>Ana</div>¡Gracias! Justo voy para allá ⚡<div class='tm'>6:58 p. m.</div></div>" }
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.62,
+          "fx": 0.5,
+          "fy": 0,
+          "at": [
+            540,
+            470
+          ]
+        }
       ],
-      "taps": [ { "t": 3.3, "x": 700, "y": 690 } ]
+      "overlays": [
+        {
+          "t0": 0,
+          "anim": "left",
+          "html": "<div class='chat'><div class='chtop'><div class='chav'>⚡</div><div><b>Conductores EV GT</b><small>Ana, Luis, Sofía, tú</small></div></div></div>"
+        },
+        {
+          "t0": 0.8,
+          "anim": "pop",
+          "origin": "100% 0",
+          "html": "<div class='bub out' style='top:410px'><div class='pv'><div class='pvi'><svg viewBox='0 0 24 24' fill='#fff'><path d='M13 2 4.5 13.5H11L10 22l8.5-11.5H12z'/></svg></div><div class='pvt'><b>Audi Guatemala</b><small>Estación de carga en EV Guatemala</small></div></div>Mira esta estación 👇<br><span class='lnk'>www.movilidadelectricagt.com/?estacion=gt-z10-audi</span><div class='tm'>6:57 p. m. ✓✓</div></div>"
+        },
+        {
+          "t0": 2.0,
+          "anim": "pop",
+          "origin": "0 0",
+          "sound": "notify",
+          "html": "<div class='bub in' style='top:1380px'><div class='who'>Ana</div>¡Gracias! Justo voy para allá ⚡<div class='tm'>6:58 p. m.</div></div>"
+        }
+      ],
+      "taps": [
+        {
+          "t": 3.3,
+          "x": 700,
+          "y": 690
+        }
+      ]
     },
     {
-      "type": "phone", "dur": 4.4, "shot": "img/mapa.png",
+      "type": "phone",
+      "dur": 4.4,
+      "shot": "img/mapa.png",
       "title": "Al abrirlo, el mapa va\n*justo a la estación.*",
-      "badge": { "icon": "↗", "text": "Enlace directo a la estación", "t0": 0.5 },
-      "cam": [ { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
-               { "t": 2.6, "s": 0.9, "fx": 0.5, "fy": 0.345, "at": [540, 1120] } ],
-      "pulses": [ { "t0": 1.8, "x": 585, "y": 874, "color": "#f97316" } ]
+      "badge": {
+        "icon": "↗",
+        "text": "Enlace directo a la estación",
+        "t0": 0.5
+      },
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.62,
+          "fx": 0.5,
+          "fy": 0,
+          "at": [
+            540,
+            470
+          ]
+        },
+        {
+          "t": 2.6,
+          "s": 0.9,
+          "fx": 0.5,
+          "fy": 0.345,
+          "at": [
+            540,
+            1120
+          ]
+        }
+      ],
+      "pulses": [
+        {
+          "t0": 1.8,
+          "x": 585,
+          "y": 874,
+          "color": "#f97316"
+        }
+      ]
     },
     {
-      "type": "hook", "dur": 3.6, "car": { "battery": 0.12 },
+      "type": "hook",
+      "dur": 3.6,
+      "car": {
+        "battery": 0.12
+      },
       "title": "¿Y si llegas\ny *no funciona?*",
       "stagger": 0.14
     },
     {
-      "type": "phone", "dur": 3.8, "shot": "img/ficha.png",
+      "type": "phone",
+      "dur": 3.8,
+      "shot": "img/ficha.png",
       "title": "Cuéntanos cómo\n*la encontraste.*",
-      "cam": [ { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
-               { "t": 1.8, "s": 0.78, "fx": 0.5, "fy": 0.48, "at": [540, 1180] } ],
-      "highlights": [ { "t0": 1.6, "x": 43, "y": 899, "w": 1084, "h": 661, "r": 70 } ]
-    },
-    {
-      "type": "phone", "dur": 3.8, "shot": "img/ficha.png",
-      "title": "Si cargaste bien,\n*un toque basta.*||Sin crear cuenta.",
-      "cam": [ { "t": 0, "s": 0.78, "fx": 0.5, "fy": 0.48, "at": [540, 1180] } ],
-      "highlights": [ { "t0": 0.7, "t1": 2.0, "x": 85, "y": 1041, "w": 490, "h": 115, "r": 36 } ],
-      "taps": [ { "t": 1.6, "x": 330, "y": 1098 } ],
-      "overlays": [ { "t0": 1.95, "anim": "rise", "sound": "success", "x": 85, "y": 1440, "w": 1000, "html": "<div class='note ok'>✅ ¡Gracias! Ayudas a que otros conductores sepan que funciona.</div>" } ]
-    },
-    {
-      "type": "phone", "dur": 3.8, "shot": "img/ficha.png",
-      "title": "¿Algo falla?\n*Repórtalo.*",
-      "cam": [ { "t": 0, "s": 0.78, "fx": 0.5, "fy": 0.48, "at": [540, 1180] } ],
-      "highlights": [ { "t0": 0.6, "t1": 1.9, "x": 85, "y": 1179, "w": 490, "h": 115, "r": 36 } ],
-      "taps": [ { "t": 1.5, "x": 330, "y": 1236 } ],
-      "overlays": [ { "t0": 1.85, "anim": "rise", "sound": "notify", "x": 85, "y": 1440, "w": 1000, "html": "<div class='note bad'>Gracias. Tu reporte le llegó al administrador, que lo va a revisar.</div>" } ]
-    },
-    {
-      "type": "phone", "dur": 4.2, "shot": "img/ficha.png",
-      "title": "Un administrador\n*lo verifica* primero.",
-      "cam": [ { "t": 0, "s": 0.78, "fx": 0.5, "fy": 0.48, "at": [540, 1180] },
-               { "t": 1.6, "s": 0.66, "fx": 0.5, "fy": 0.42, "at": [540, 1180] } ],
-      "overlays": [
-        { "t0": 0.4, "anim": "fade", "html": "<div class='dim' style='background:rgba(255,255,255,.55)'></div>" },
-        { "t0": 0.7, "anim": "pop", "x": 0, "y": 830, "w": 1170, "html": "<div class='center'><div class='circ'><svg viewBox='0 0 24 24' fill='none' stroke='#22c55e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z'/><path d='m9 12 2 2 4-4'/></svg></div><div class='pill'>Revisado antes de publicar</div></div>" }
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.62,
+          "fx": 0.5,
+          "fy": 0,
+          "at": [
+            540,
+            470
+          ]
+        },
+        {
+          "t": 1.8,
+          "s": 0.78,
+          "fx": 0.5,
+          "fy": 0.48,
+          "at": [
+            540,
+            1180
+          ]
+        }
+      ],
+      "highlights": [
+        {
+          "t0": 1.6,
+          "x": 43,
+          "y": 899,
+          "w": 1084,
+          "h": 661,
+          "r": 70
+        }
       ]
     },
     {
-      "type": "outro", "dur": 5.6,
+      "type": "phone",
+      "dur": 3.8,
+      "shot": "img/ficha.png",
+      "title": "Si cargaste bien,\n*un toque basta.*||Sin crear cuenta.",
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.78,
+          "fx": 0.5,
+          "fy": 0.48,
+          "at": [
+            540,
+            1180
+          ]
+        }
+      ],
+      "highlights": [
+        {
+          "t0": 0.7,
+          "t1": 2.0,
+          "x": 85,
+          "y": 1041,
+          "w": 490,
+          "h": 115,
+          "r": 36
+        }
+      ],
+      "taps": [
+        {
+          "t": 1.6,
+          "x": 330,
+          "y": 1098
+        }
+      ],
+      "overlays": [
+        {
+          "t0": 1.95,
+          "anim": "rise",
+          "sound": "success",
+          "x": 85,
+          "y": 1440,
+          "w": 1000,
+          "html": "<div class='note ok'>✅ ¡Gracias! Ayudas a que otros conductores sepan que funciona.</div>"
+        }
+      ]
+    },
+    {
+      "type": "phone",
+      "dur": 3.8,
+      "shot": "img/ficha.png",
+      "title": "¿Algo falla?\n*Repórtalo.*",
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.78,
+          "fx": 0.5,
+          "fy": 0.48,
+          "at": [
+            540,
+            1180
+          ]
+        }
+      ],
+      "highlights": [
+        {
+          "t0": 0.6,
+          "t1": 1.9,
+          "x": 85,
+          "y": 1179,
+          "w": 490,
+          "h": 115,
+          "r": 36
+        }
+      ],
+      "taps": [
+        {
+          "t": 1.5,
+          "x": 330,
+          "y": 1236
+        }
+      ],
+      "overlays": [
+        {
+          "t0": 1.85,
+          "anim": "rise",
+          "sound": "notify",
+          "x": 85,
+          "y": 1440,
+          "w": 1000,
+          "html": "<div class='note bad'>Gracias. Tu reporte le llegó al administrador, que lo va a revisar.</div>"
+        }
+      ]
+    },
+    {
+      "type": "phone",
+      "dur": 4.2,
+      "shot": "img/ficha.png",
+      "title": "Un administrador\n*lo verifica* primero.",
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.78,
+          "fx": 0.5,
+          "fy": 0.48,
+          "at": [
+            540,
+            1180
+          ]
+        },
+        {
+          "t": 1.6,
+          "s": 0.66,
+          "fx": 0.5,
+          "fy": 0.42,
+          "at": [
+            540,
+            1180
+          ]
+        }
+      ],
+      "overlays": [
+        {
+          "t0": 0.4,
+          "anim": "fade",
+          "html": "<div class='dim' style='background:rgba(255,255,255,.55)'></div>"
+        },
+        {
+          "t0": 0.7,
+          "anim": "pop",
+          "x": 0,
+          "y": 830,
+          "w": 1170,
+          "html": "<div class='center'><div class='circ'><svg viewBox='0 0 24 24' fill='none' stroke='#22c55e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z'/><path d='m9 12 2 2 4-4'/></svg></div><div class='pill'>Revisado antes de publicar</div></div>"
+        }
+      ]
+    },
+    {
+      "type": "phone",
+      "dur": 7.0,
+      "shot": "img/mapa-estados.png",
+      "title": "Luego, el punto del pin\nte dice *cómo está.*",
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.62,
+          "fx": 0.5,
+          "fy": 0,
+          "at": [
+            540,
+            470
+          ]
+        },
+        {
+          "t": 1.0,
+          "s": 0.76,
+          "fx": 0.5,
+          "fy": 0.43,
+          "at": [
+            540,
+            1200
+          ]
+        },
+        {
+          "t": 6.8,
+          "s": 0.79,
+          "fx": 0.5,
+          "fy": 0.43,
+          "at": [
+            540,
+            1200
+          ]
+        }
+      ],
+      "pulses": [
+        {
+          "t0": 1.0,
+          "t1": 7.0,
+          "x": 512,
+          "y": 1325,
+          "color": "#ff9f0a"
+        },
+        {
+          "t0": 2.3,
+          "t1": 7.0,
+          "x": 933,
+          "y": 1692,
+          "color": "#ff9f0a"
+        },
+        {
+          "t0": 3.6,
+          "t1": 7.0,
+          "x": 586,
+          "y": 498,
+          "color": "#ff453a"
+        },
+        {
+          "t0": 4.9,
+          "t1": 7.0,
+          "x": 317,
+          "y": 1687,
+          "color": "#ff453a"
+        }
+      ],
+      "overlays": [
+        {
+          "t0": 1.1,
+          "anim": "pop",
+          "origin": "0 50%",
+          "html": "<div class='lab' style='left:560px;top:1240px'><i style='background:#ff9f0a'></i>En mantenimiento</div>"
+        },
+        {
+          "t0": 2.4,
+          "anim": "pop",
+          "origin": "100% 50%",
+          "html": "<div class='lab' style='left:330px;top:1540px'><i style='background:linear-gradient(90deg,#ff9f0a 50%,#fff 50%);box-shadow:0 0 0 3px #ff9f0a inset'></i>Funciona a medias</div>"
+        },
+        {
+          "t0": 3.7,
+          "anim": "pop",
+          "origin": "0 50%",
+          "html": "<div class='lab' style='left:630px;top:420px'><i style='background:#ff453a'></i>Cerrada por ahora</div>"
+        },
+        {
+          "t0": 5.0,
+          "anim": "pop",
+          "origin": "0 50%",
+          "html": "<div class='lab' style='left:370px;top:1790px'><i style='background:#a1a1aa;box-shadow:0 0 0 6px #ff453a'></i>Fuera de servicio</div>"
+        }
+      ]
+    },
+    {
+      "type": "phone",
+      "dur": 4.2,
+      "shot": "img/ficha-mantenimiento.png",
+      "title": "Y en la ficha, *el detalle*\ny cuándo vuelve.",
+      "cam": [
+        {
+          "t": 0,
+          "s": 0.62,
+          "fx": 0.5,
+          "fy": 0,
+          "at": [
+            540,
+            470
+          ]
+        },
+        {
+          "t": 1.8,
+          "s": 0.76,
+          "fx": 0.5,
+          "fy": 0.4,
+          "at": [
+            540,
+            1180
+          ]
+        }
+      ],
+      "highlights": [
+        {
+          "t0": 1.6,
+          "x": 43,
+          "y": 897,
+          "w": 1084,
+          "h": 293,
+          "r": 70
+        }
+      ]
+    },
+    {
+      "type": "outro",
+      "dur": 5.6,
       "tagline": "Comparte estaciones.\nCuenta cómo las encontraste.",
       "cta": "Así nos ayudamos entre todos."
     }
