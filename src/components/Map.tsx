@@ -142,24 +142,39 @@ function MapController({ variant }: { variant: Variant }) {
   const { selectedStationId, stations, userLocation } = useStore();
   const map = useMap();
   const prevSelectedRef = useRef<string | null>(null);
+  const mapFocus = useStore((s) => s.mapFocus);
+
+  const centerOn = useCallback((station: ChargerStation, minZoom: number) => {
+    const zoom = Math.max(map.getZoom(), minZoom);
+    let target = L.latLng(station.lat, station.lng);
+    // En celular la tarjeta flotante tapa la mitad de abajo: subimos el pin
+    // para que quede visible por encima de ella. En computadora el mapa
+    // ya ocupa solo el área libre a la derecha de la lista: va centrado.
+    if (variant === 'mobile' && !window.matchMedia('(min-width: 1024px)').matches) {
+      target = map.unproject(map.project(target, zoom).add([0, 110]), zoom);
+    }
+    map.setView(target, zoom, { animate: true });
+  }, [map, variant]);
+
+  // "Ver en el mapa" (desde la ficha o la lista): acerca más que un toque
+  // normal, para ver la calle. Va antes que el efecto de abajo para que este
+  // no mueva el mapa otra vez por la misma estación.
+  const focusSeq = mapFocus?.seq;
+  useEffect(() => {
+    if (!mapFocus) return;
+    const station = useStore.getState().stations.find((s) => s.id === mapFocus.id);
+    if (station) centerOn(station, 17);
+    prevSelectedRef.current = mapFocus.id;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSeq, centerOn]);
 
   useEffect(() => {
     if (selectedStationId && selectedStationId !== prevSelectedRef.current) {
       const station = stations.find((s) => s.id === selectedStationId);
-      if (station) {
-        const zoom = Math.max(map.getZoom(), 15);
-        let target = L.latLng(station.lat, station.lng);
-        // En celular la tarjeta flotante tapa la mitad de abajo: subimos el pin
-        // para que quede visible por encima de ella. En computadora el mapa
-        // ya ocupa solo el área libre a la derecha de la lista: va centrado.
-        if (variant === 'mobile' && !window.matchMedia('(min-width: 1024px)').matches) {
-          target = map.unproject(map.project(target, zoom).add([0, 110]), zoom);
-        }
-        map.setView(target, zoom, { animate: true });
-      }
+      if (station) centerOn(station, 15);
     }
     prevSelectedRef.current = selectedStationId;
-  }, [selectedStationId, stations, map, variant]);
+  }, [selectedStationId, stations, centerOn]);
 
   // Modo ruta: el mapa sigue al usuario sin cambiarle el zoom. Si mueve el
   // mapa con el dedo o abre una estación, el seguimiento se pausa y vuelve
@@ -280,7 +295,15 @@ function StationMarkers({ stations }: { stations: ChargerStation[] }) {
   const map = useMap();
   const selectedStationId = useStore((s) => s.selectedStationId);
   const [zoom, setZoom] = useState(() => map.getZoom());
-  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+  // Escucha fija (no useMapEvents): useMapEvents se vuelve a registrar en cada
+  // render, y un salto de zoom sin animación ("Ver en el mapa" lo hace en el
+  // mismo instante en que esta lista se redibuja) caía en ese hueco: el zoom
+  // quedaba viejo y la estación seguía metida en un grupo.
+  useEffect(() => {
+    const onZoom = () => setZoom(map.getZoom());
+    map.on('zoomend', onZoom);
+    return () => { map.off('zoomend', onZoom); };
+  }, [map]);
 
   const items = useMemo<Item[]>(() => {
     if (zoom >= NO_CLUSTER_ZOOM) return stations.map((station) => ({ kind: 'station', station }));
@@ -366,7 +389,14 @@ function StationMarkers({ stations }: { stations: ChargerStation[] }) {
 }
 
 export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
-  const { filteredStations } = useStore();
+  const { filteredStations, stations, selectedStationId } = useStore();
+  // La estación elegida (p. ej. con "Ver en el mapa" desde Guardadas) se
+  // dibuja aunque los filtros actuales la oculten.
+  const shown = useMemo(() => {
+    if (!selectedStationId || filteredStations.some((s) => s.id === selectedStationId)) return filteredStations;
+    const sel = stations.find((s) => s.id === selectedStationId);
+    return sel ? [...filteredStations, sel] : filteredStations;
+  }, [filteredStations, stations, selectedStationId]);
 
   return (
     <div className={variant === 'mobile' ? 'absolute inset-0 ev-map-mobile' : 'relative flex-1 h-full'}>
@@ -395,11 +425,14 @@ export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
           updateWhenIdle={true}
         />
 
+        {/* StationMarkers va antes que MapController: así su escucha de zoom
+            ya existe cuando MapController salta a una estación al cargar
+            (enlace /?estacion=...); si no, los pines quedaban agrupados. */}
+        <StationMarkers stations={shown} />
+
         <MapController variant={variant} />
         <ClearSelectionOnMapClick />
         {isTouch && <DisableTap />}
-
-        <StationMarkers stations={filteredStations} />
 
         {/* User location marker */}
         <UserMarker />

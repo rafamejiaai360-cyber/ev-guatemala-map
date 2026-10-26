@@ -49,7 +49,7 @@ export default function MobileShell() {
     currentUser, isAdminAuthenticated, setAuthModalOpen, openAddStation,
     setProfileModalOpen, setContactAdminModalOpen, setScanModalOpen, logoutUser,
     joinPrompt, setJoinPrompt, openAuth, pendingAddType, setPendingAddType,
-    myStations, loadMyStations,
+    myStations, loadMyStations, focusStationOnMap,
   } = useStore();
 
   const [tab, setTab] = useState<Tab>('map');
@@ -97,6 +97,37 @@ export default function MobileShell() {
     // En computadora el mapa queda visible: marcar y centrar la estación.
     if (isWide) setSelectedStationId(id);
   }
+  // "Ver en el mapa": desde la ficha o cualquier lista, vuelve al mapa y lo
+  // acerca a la estación (en celular queda con su tarjeta flotante abajo).
+  function showOnMap(id: string) {
+    setDetailId(null);
+    setTab('map');
+    setMode('map');
+    focusStationOnMap(id);
+  }
+  // Enlace directo /?estacion=<id>: abre el mapa en esa estación. Se espera a
+  // que llegue de la API (la semilla puede no tenerla) y se quita de la
+  // dirección para que recargar no vuelva a saltar ahí.
+  useEffect(() => {
+    let linkedId = new URLSearchParams(window.location.search).get('estacion');
+    if (!linkedId) return;
+    const tryOpen = () => {
+      if (!linkedId || !useStore.getState().stations.some((s) => s.id === linkedId)) return;
+      const id = linkedId;
+      linkedId = null;
+      unsub();
+      const url = new URL(window.location.href);
+      url.searchParams.delete('estacion');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+      setDetailId(null);
+      setTab('map');
+      setMode('map');
+      useStore.getState().focusStationOnMap(id);
+    };
+    const unsub = useStore.subscribe(tryOpen);
+    const t = window.setTimeout(tryOpen, 0);
+    return () => { unsub(); window.clearTimeout(t); };
+  }, []);
   function closeDetail() {
     setDetailId(null);
     if (isWide) setSelectedStationId(null);
@@ -219,7 +250,7 @@ export default function MobileShell() {
               <span>{listed.length} {listed.length === 1 ? 'estación' : 'estaciones'} · {userLocation ? 'por cercanía' : 'por nombre'}</span>
             </div>
             {listed.map(({ s, km }) => (
-              <StationCard key={s.id} station={s} km={km} rating={ratings[s.id]} onOpen={openDetail} selected={s.id === selectedStationId} />
+              <StationCard key={s.id} station={s} km={km} rating={ratings[s.id]} onOpen={openDetail} onShowOnMap={showOnMap} selected={s.id === selectedStationId} />
             ))}
             {listed.length === 0 && <div className="m-empty-line">No hay estaciones con estos filtros.</div>}
           </div>
@@ -262,7 +293,7 @@ export default function MobileShell() {
           <div className="m-lt">Guardadas</div>
           <p className="m-sub">{currentUser ? 'Sincronizadas con tu cuenta, en todos tus dispositivos' : 'Tus estaciones de siempre, a un toque'}</p>
           {savedIds.map((id) => byId.get(id)).filter((s): s is ChargerStation => !!s).map((s) => (
-            <StationCard key={s.id} station={s} km={distanceKm(s, userLocation)} rating={ratings[s.id]} onOpen={openDetail} />
+            <StationCard key={s.id} station={s} km={distanceKm(s, userLocation)} rating={ratings[s.id]} onOpen={openDetail} onShowOnMap={showOnMap} />
           ))}
           {savedIds.filter((id) => byId.has(id)).length === 0 && (
             <div className="m-empty">
@@ -360,7 +391,7 @@ export default function MobileShell() {
       {/* ---------- Ficha completa ---------- */}
       <div className={`m-detail m-scroll${detailStation ? ' on' : ''}`} aria-hidden={!detailStation}>
         {detailStation && (
-          <StationScreen key={detailStation.id} station={detailStation} backLabel={backLabel} onBack={closeDetail} />
+          <StationScreen key={detailStation.id} station={detailStation} backLabel={backLabel} onBack={closeDetail} onShowOnMap={showOnMap} />
         )}
       </div>
 

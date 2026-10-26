@@ -20,6 +20,7 @@ interface Props {
   station: ChargerStation;
   backLabel: string;
   onBack: () => void;
+  onShowOnMap: (id: string) => void;
 }
 
 // Ficha completa de una estación en celular. Misma información y mismas
@@ -27,7 +28,7 @@ interface Props {
 // - `notes` son notas para usuarios (visibles para todos, oct 2026); el
 //   historial de verificación (`verificationLog`, con correos) solo llega al admin.
 // - quién dio de alta la estación solo se muestra a admins.
-export default function StationScreen({ station, backLabel, onBack }: Props) {
+export default function StationScreen({ station, backLabel, onBack, onShowOnMap }: Props) {
   const { currentUser, userLocation, setAuthModalOpen, savedIds, toggleSaved, ratings, setJoinPrompt, selectedVehicle, myAdapters } = useStore();
   const [showEdit, setShowEdit] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
@@ -95,6 +96,9 @@ export default function StationScreen({ station, backLabel, onBack }: Props) {
             <span className="m-pill soft">★ {rating.avg.toFixed(1).replace('.', ',')} · {rating.count} reseñas</span>
           )}
         </div>
+        <button type="button" className="m-nav m-showmap" onClick={() => onShowOnMap(station.id)}>
+          {Icon.map}{station.approximate ? 'Ver zona en el mapa' : 'Ver en el mapa'}
+        </button>
         {station.approximate ? (
           <p className="m-approx">{Icon.pin}Ubicación aproximada (a menos de 1 km) para proteger la privacidad del dueño.</p>
         ) : (

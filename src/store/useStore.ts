@@ -186,6 +186,10 @@ interface AppState {
   // Map / sidebar interaction
   selectedStationId: string | null;
   setSelectedStationId: (id: string | null) => void;
+  /** "Ver en el mapa": marca la estación y pide al mapa acercarse a ella.
+   *  `seq` cambia en cada pedido para que repetir el mismo vuelva a centrar. */
+  mapFocus: { id: string; seq: number } | null;
+  focusStationOnMap: (id: string) => void;
 
   // User geolocation
   userLocation: { lat: number; lng: number } | null;
@@ -468,6 +472,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   selectedStationId: null,
   setSelectedStationId: (id) => set({ selectedStationId: id }),
+  mapFocus: null,
+  focusStationOnMap: (id) => set({ selectedStationId: id, mapFocus: { id, seq: (get().mapFocus?.seq ?? 0) + 1 } }),
 
   userLocation: null,
   setUserLocation: (loc) => set({ userLocation: loc }),

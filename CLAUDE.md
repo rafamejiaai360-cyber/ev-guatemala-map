@@ -781,6 +781,29 @@ o foto nueva, de cualquier estación: estrellas + autor/correo + comentario
 (máx. 500) en la reseña; quién la subió + enlace `/api/photo/<id>` en la foto.
 Staging no tiene Telegram (queda en `ops_log`). Sin migración.
 
+**"Ver en el mapa" (26 oct 2026, rama `ver-en-mapa`, publicado directo en prod
+el 26 oct 2026 sin pasar por staging, a pedido explícito de Rafa)**: Rafa no podía ubicar una estación en el mapa desde
+la ficha o la lista. Botón "Ver en el mapa" en la ficha (`StationScreen`,
+encima de Waze/Google Maps; "Ver zona en el mapa" si es residencial
+aproximada) y botón "Mapa" en cada tarjeta de Lista y Guardadas
+(`StationCard`, ahora `div role="button"` para no anidar botones). Ambos
+llaman `focusStationOnMap(id)` del store (`mapFocus` con `seq`, para que
+repetir el mismo vuelva a centrar): `MapController` acerca a zoom ≥ 17. La
+estación elegida se dibuja aunque los filtros la oculten. **Bug corregido de
+paso**: `StationMarkers` escuchaba `zoomend` con `useMapEvents`, que se
+vuelve a registrar en cada render; un salto de zoom sin animación (> 4
+niveles) justo cuando la lista se redibuja perdía el evento y los pines
+quedaban agrupados. Ahora es una escucha fija con `map.on`, y
+`StationMarkers` va antes que `MapController` en el JSX (al cargar con
+enlace, el salto ocurría antes de que existiera la escucha).
+**Enlace directo** `/?estacion=<id>`: MobileShell espera a que la estación
+exista en el store, la enfoca y quita el parámetro de la dirección; `App.tsx`
+no centra el mapa en la ubicación del usuario si se abrió con ese enlace. Lo
+usa el botón **"Ver en mapa"** junto al estado en la lista de Estaciones del
+panel de admin (misma pestaña). Sirve también para compartir una estación
+(las residenciales siguen saliendo aproximadas a quien no es admin ni dueño).
+Sin migración.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
