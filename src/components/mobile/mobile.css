@@ -512,11 +512,11 @@
 .m-report-msg { margin: 0; font-size: 12.5px; color: var(--green); }
 .m-report-msg.err { color: var(--danger); }
 
-/* "Ver en el mapa" (oct 2026): en la ficha, botón a lo ancho encima de
+/* "Ver en el mapa" + "Compartir" (oct 2026): en la ficha, fila encima de
    Waze/Google Maps; en las tarjetas de lista, botón chico junto a la nota. */
-.m-showmap { width: 100%; margin-top: 16px; color: var(--green); }
-.m-showmap + .m-navs { margin-top: 8px; }
-.m-showmap + .m-approx { margin-top: 10px; }
+.m-showmap { color: var(--green); }
+.m-navs-top + .m-navs { margin-top: 8px; }
+.m-navs-top + .m-approx { margin-top: 10px; }
 .m-cardend { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .m-cardmap { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 12px; font-weight: 600; cursor: pointer; }
 .m-cardmap svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
