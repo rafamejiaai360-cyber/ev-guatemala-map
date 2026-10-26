@@ -12,6 +12,18 @@ Rafa (dueño del proyecto) no tiene formación técnica. Para cualquier cambio d
 - Flujo esperado: cambio en una rama → deploy a staging → Rafa prueba → visto bueno → merge a `main` (dispara el deploy automático a producción).
 - Si por algún motivo (como pasó el 18 ago 2026) el código termina publicado en producción antes de validarlo en staging, decirlo de inmediato y con claridad — no dejarlo implícito.
 
+## Dominio oficial (26 oct 2026, indicado por Rafa)
+
+La app está publicada en **https://www.movilidadelectricagt.com**. Usar
+**siempre** este dominio en todo lo que se le muestre a Rafa o a usuarios:
+mensajes, enlaces para compartir, videos, textos de marketing, documentación.
+La dirección `ev-guatemala-map.rafamejia-ai360.workers.dev` sigue existiendo
+por detrás (es la del Worker de Cloudflare), pero no se presenta como la
+dirección de la app. El enlace de "Compartir" y los avisos a Telegram usan la
+dirección desde donde se abrió la app (`window.location.origin` / `origin`
+del request), así que salen con el dominio cuando se usa desde ahí.
+Staging y las vistas previas por rama siguen en `*.workers.dev`.
+
 ## Stack
 
 - **Frontend**: React 19 + TypeScript + Vite, Zustand (estado), Tailwind CSS, Leaflet/react-leaflet (mapa)
@@ -35,7 +47,8 @@ Rafa (dueño del proyecto) no tiene formación técnica. Para cualquier cambio d
 **D1 es la única fuente de verdad.** Notion es espejo editorial de solo
 lectura (sincroniza DESDE D1, en segundo plano). Plan y detalle:
 `docs/plan-migracion-d1.md`. URL prod:
-`https://ev-guatemala-map.rafamejia-ai360.workers.dev`.
+`https://www.movilidadelectricagt.com` (el Worker también responde en
+`https://ev-guatemala-map.rafamejia-ai360.workers.dev`).
 
 ```
 Frontend (React/Zustand)
