@@ -425,11 +425,14 @@ export default function EVMap({ variant = 'desktop' }: { variant?: Variant }) {
           updateWhenIdle={true}
         />
 
+        {/* StationMarkers va antes que MapController: así su escucha de zoom
+            ya existe cuando MapController salta a una estación al cargar
+            (enlace /?estacion=...); si no, los pines quedaban agrupados. */}
+        <StationMarkers stations={shown} />
+
         <MapController variant={variant} />
         <ClearSelectionOnMapClick />
         {isTouch && <DisableTap />}
-
-        <StationMarkers stations={shown} />
 
         {/* User location marker */}
         <UserMarker />

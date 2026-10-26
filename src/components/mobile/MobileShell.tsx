@@ -105,6 +105,29 @@ export default function MobileShell() {
     setMode('map');
     focusStationOnMap(id);
   }
+  // Enlace directo /?estacion=<id>: abre el mapa en esa estación. Se espera a
+  // que llegue de la API (la semilla puede no tenerla) y se quita de la
+  // dirección para que recargar no vuelva a saltar ahí.
+  useEffect(() => {
+    let linkedId = new URLSearchParams(window.location.search).get('estacion');
+    if (!linkedId) return;
+    const tryOpen = () => {
+      if (!linkedId || !useStore.getState().stations.some((s) => s.id === linkedId)) return;
+      const id = linkedId;
+      linkedId = null;
+      unsub();
+      const url = new URL(window.location.href);
+      url.searchParams.delete('estacion');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+      setDetailId(null);
+      setTab('map');
+      setMode('map');
+      useStore.getState().focusStationOnMap(id);
+    };
+    const unsub = useStore.subscribe(tryOpen);
+    const t = window.setTimeout(tryOpen, 0);
+    return () => { unsub(); window.clearTimeout(t); };
+  }, []);
   function closeDetail() {
     setDetailId(null);
     if (isWide) setSelectedStationId(null);

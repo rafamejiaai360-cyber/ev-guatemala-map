@@ -793,7 +793,16 @@ estación elegida se dibuja aunque los filtros la oculten. **Bug corregido de
 paso**: `StationMarkers` escuchaba `zoomend` con `useMapEvents`, que se
 vuelve a registrar en cada render; un salto de zoom sin animación (> 4
 niveles) justo cuando la lista se redibuja perdía el evento y los pines
-quedaban agrupados. Ahora es una escucha fija con `map.on`. Sin migración.
+quedaban agrupados. Ahora es una escucha fija con `map.on`, y
+`StationMarkers` va antes que `MapController` en el JSX (al cargar con
+enlace, el salto ocurría antes de que existiera la escucha).
+**Enlace directo** `/?estacion=<id>`: MobileShell espera a que la estación
+exista en el store, la enfoca y quita el parámetro de la dirección; `App.tsx`
+no centra el mapa en la ubicación del usuario si se abrió con ese enlace. Lo
+usa el botón **"Ver en mapa"** junto al estado en la lista de Estaciones del
+panel de admin (misma pestaña). Sirve también para compartir una estación
+(las residenciales siguen saliendo aproximadas a quien no es admin ni dueño).
+Sin migración.
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"

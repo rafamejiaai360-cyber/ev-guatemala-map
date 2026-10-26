@@ -450,7 +450,17 @@ function StationsTab() {
                 {KIND_EMOJI[stationKind(station)]} {station.name}
               </div>
               <div className="text-xs text-gray-400 truncate">{station.zone} · {station.id}</div>
-              <StatusPicker station={station} onChange={status => changeStatus(station, status)} />
+              <div className="flex items-center gap-1.5">
+                <StatusPicker station={station} onChange={status => changeStatus(station, status)} />
+                {/* Abre el mapa de la app acercado a esta estación */}
+                <a href={`/?estacion=${encodeURIComponent(station.id)}`} title="Ver en el mapa"
+                  className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
+                  <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14" />
+                  </svg>
+                  Ver en mapa
+                </a>
+              </div>
             </div>
 
             {/* Edit button */}

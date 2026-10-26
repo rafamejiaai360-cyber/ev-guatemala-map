@@ -9,6 +9,10 @@ import MobileShell from './components/mobile/MobileShell';
 import { useStore } from './store/useStore';
 
 const isAdminPanel = window.location.pathname === '/admin';
+// Enlace directo a una estación (/?estacion=<id>, p. ej. el botón "Mapa" del
+// panel de admin): lo resuelve MobileShell. Se lee aquí al cargar porque
+// MobileShell lo quita de la dirección apenas lo usa.
+const openedAtStation = new URLSearchParams(window.location.search).has('estacion');
 
 // Pide la ubicación del navegador de forma opcional: si el usuario acepta, se
 // usa para (a) centrar el mapa ahí y mostrarle las estaciones cercanas, y
@@ -46,7 +50,9 @@ export default function App() {
     loadVehicles();
     if (!isAdminPanel) {
       getOptionalCoords().then(({ coords, reason }) => {
-        if (coords) setUserLocation(coords);
+        // Si se abrió el enlace de una estación, no mover el mapa a la
+        // ubicación del usuario (taparía la estación pedida).
+        if (coords && !openedAtStation) setUserLocation(coords);
         // No contar visitas de sesiones con acceso de administrador (ej. Rafa
         // revisando el mapa público ya logueado) — el contador es para medir
         // impacto real de usuarios, no las propias revisiones del admin.
