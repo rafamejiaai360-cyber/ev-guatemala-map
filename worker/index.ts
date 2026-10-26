@@ -3496,7 +3496,7 @@ export default {
         try {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=gt&q=${encodeURIComponent(q.trim())}`,
-            { headers: { 'User-Agent': 'EVGuatemalaMap/1.0 (https://ev-guatemala-map.rafamejia-ai360.workers.dev)' }, signal: AbortSignal.timeout(8000) }
+            { headers: { 'User-Agent': 'EVGuatemalaMap/1.0 (https://www.movilidadelectricagt.com)' }, signal: AbortSignal.timeout(8000) }
           );
           if (!res.ok) return apiError('Error del servicio de geocodificación');
           const results = await res.json() as { lat: string; lon: string }[];
