@@ -781,6 +781,20 @@ o foto nueva, de cualquier estación: estrellas + autor/correo + comentario
 (máx. 500) en la reseña; quién la subió + enlace `/api/photo/<id>` en la foto.
 Staging no tiene Telegram (queda en `ops_log`). Sin migración.
 
+**"Ver en el mapa" (26 oct 2026, rama `ver-en-mapa`, pendiente de staging y
+visto bueno de Rafa)**: Rafa no podía ubicar una estación en el mapa desde
+la ficha o la lista. Botón "Ver en el mapa" en la ficha (`StationScreen`,
+encima de Waze/Google Maps; "Ver zona en el mapa" si es residencial
+aproximada) y botón "Mapa" en cada tarjeta de Lista y Guardadas
+(`StationCard`, ahora `div role="button"` para no anidar botones). Ambos
+llaman `focusStationOnMap(id)` del store (`mapFocus` con `seq`, para que
+repetir el mismo vuelva a centrar): `MapController` acerca a zoom ≥ 17. La
+estación elegida se dibuja aunque los filtros la oculten. **Bug corregido de
+paso**: `StationMarkers` escuchaba `zoomend` con `useMapEvents`, que se
+vuelve a registrar en cada render; un salto de zoom sin animación (> 4
+niveles) justo cuando la lista se redibuja perdía el evento y los pines
+quedaban agrupados. Ahora es una escucha fija con `map.on`. Sin migración.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
