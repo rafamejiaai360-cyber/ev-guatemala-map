@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>EV Guatemala · motor de videos</title>
+<!--
+  Motor de videos de EV Guatemala (estilo oficial: marketing/estilo-videos.md).
+  No se edita para cada video: cada video es un archivo video.json con sus
+  escenas (ver marketing/video-kit/README.md). render.cjs inyecta ese JSON en
+  window.VIDEO, pide cuadro por cuadro con window.seek(t) y arma el MP4.
+-->
+<style>
+  :root {
+    --bg: #050906; --green: #22c55e; --logo: #16a34a; --ink: #ffffff;
+    --dim: rgba(255,255,255,.28); --muted: rgba(255,255,255,.72);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); font-family: 'Inter', system-ui, sans-serif; color: var(--ink); }
+  #stage { position: absolute; inset: 0; overflow: hidden; background: var(--bg); }
+  .abs { position: absolute; }
+  /* Degradado superior: cuando la cámara se acerca y el teléfono sube, el título sigue legible */
+  #topfade { left: 0; top: 0; width: 1080px; height: 640px; z-index: 20; background: linear-gradient(var(--bg) 0, var(--bg) 380px, rgba(5,9,6,0) 640px); }
+  #glow { left: 540px; top: 1150px; width: 1500px; height: 1300px; margin: -650px 0 0 -750px; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(34,197,94,.20), rgba(34,197,94,.06) 55%, transparent); }
+
+  /* Títulos: palabra por palabra, de borroso/gris a nítido/blanco */
+  #title { left: 60px; right: 60px; top: 150px; text-align: center; font-size: 86px; font-weight: 800; line-height: 1.18; letter-spacing: -.025em; z-index: 30; }
+  #title.mid { top: 330px; }
+  #title .w { display: inline-block; white-space: pre; will-change: filter, opacity; }
+  #title .g { color: var(--green); }
+  #title .sub { display: block; font-size: 50px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; color: var(--muted); margin-top: 18px; }
+
+  /* Teléfono: borde fino, grande, cortado por abajo */
+  #phone { left: 0; top: 0; transform-origin: 0 0; border-radius: 156px; background: #161718; padding: 26px;
+    box-shadow: 0 0 0 3px #2a2b2d, 0 80px 160px rgba(0,0,0,.55); z-index: 10; }
+  #screen { position: relative; width: 1170px; height: 2532px; border-radius: 132px; overflow: hidden; background: #fff; }
+  #screen > * { position: absolute; }
+  .shot { left: 0; top: 0; width: 1170px; height: 2532px; }
+  .ov { left: 0; top: 0; z-index: 5; }
+  .hl { z-index: 6; border: 9px solid var(--green); border-radius: 44px; box-shadow: 0 0 0 10px rgba(34,197,94,.22), 0 0 60px rgba(34,197,94,.55); }
+  .rip { z-index: 7; width: 150px; height: 150px; margin: -75px 0 0 -75px; border-radius: 50%; border: 8px solid var(--green); }
+  .pulse { z-index: 7; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 8px solid var(--green); }
+  #badge { left: 540px; z-index: 25; transform-origin: 50% 50%; white-space: nowrap; padding: 14px 28px; border-radius: 999px;
+    background: rgba(20,22,21,.92); border: 2px solid rgba(255,255,255,.12); font-size: 30px; font-weight: 600; color: #fff; }
+  #badge i { color: var(--green); font-style: normal; margin-right: 10px; }
+
+  /* Gancho con carro (línea blanca + batería) */
+  #car { left: 0; top: 0; width: 1080px; height: 1920px; z-index: 5; }
+
+  /* Cierre */
+  #outro { left: 0; right: 0; top: 640px; text-align: center; z-index: 30; }
+  .logo { width: 230px; height: 230px; border-radius: 58px; background: var(--logo); display: grid; place-items: center; margin: 0 auto;
+    box-shadow: 0 30px 80px rgba(22,163,74,.35); }
+  .logo svg { width: 128px; height: 128px; }
+  #oName { font-size: 92px; font-weight: 800; letter-spacing: -.03em; margin-top: 60px; }
+  #oTag { font-size: 46px; font-weight: 500; line-height: 1.35; color: var(--muted); margin-top: 26px; }
+  #oCta { font-size: 44px; font-weight: 700; color: var(--green); margin-top: 70px; }
+  #oUrl { display: inline-block; margin-top: 60px; padding: 22px 46px; border-radius: 999px; border: 2px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.04); font-size: 40px; font-weight: 600; }
+  .dot { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--green); z-index: 4; }
+</style>
+<style id="videoCss"></style>
+</head>
+<body>
+<div id="stage">
+  <div class="abs" id="glow"></div>
+  <svg id="car" class="abs" viewBox="0 0 1080 1920"></svg>
+  <div id="dots"></div>
+  <div class="abs" id="phone"><div id="screen"></div></div>
+  <div class="abs" id="topfade"></div>
+  <div class="abs" id="badge"></div>
+  <div class="abs" id="title"></div>
+  <div class="abs" id="outro">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="#fff"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg></div>
+    <div id="oName">EV Guatemala</div>
+    <div id="oTag"></div>
+    <div id="oCta"></div>
+    <div><span id="oUrl">www.movilidadelectricagt.com</span></div>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const eo = (x) => 1 - Math.pow(1 - x, 3);
+const eo5 = (x) => 1 - Math.pow(1 - x, 5);
+const eio = (x) => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const p = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+function vis(el, o) { el.style.opacity = o; el.style.visibility = o <= .001 ? 'hidden' : 'visible'; }
+
+const V = window.VIDEO;
+const SW = 1170, SH = 2532, BEZ = 26;
+const TRANS = 0.6;           // segundos de transición de cámara entre escenas
+document.getElementById('videoCss').textContent = V.css || '';
+
+// ---- Línea de tiempo ----
+let acc = 0;
+const SCENES = V.scenes.map((s, i) => { const o = { ...s, i, start: acc }; acc += s.dur; return o; });
+const TOTAL = acc;
+const sceneAt = (t) => SCENES.find((s) => t < s.start + s.dur) || SCENES[SCENES.length - 1];
+
+// ---- Pantallas (capturas) del teléfono ----
+const shots = {};
+for (const s of SCENES) if (s.shot && !shots[s.shot]) {
+  const img = document.createElement('img'); img.className = 'shot'; img.src = V.base + s.shot; img.style.opacity = 0;
+  $('screen').appendChild(img); shots[s.shot] = img;
+}
+// ---- Capas por escena: overlays, resaltados, toques, pulsos ----
+for (const s of SCENES) {
+  s._ov = (s.overlays || []).map((o) => {
+    const el = document.createElement('div'); el.className = 'ov';
+    el.innerHTML = o.html;
+    Object.assign(el.style, { left: (o.x || 0) + 'px', top: (o.y || 0) + 'px', width: (o.w || SW) + 'px', height: o.h ? o.h + 'px' : 'auto' });
+    $('screen').appendChild(el); return { o, el };
+  });
+  s._hl = (s.highlights || []).map((h) => { const el = document.createElement('div'); el.className = 'hl'; Object.assign(el.style, { left: h.x + 'px', top: h.y + 'px', width: h.w + 'px', height: h.h + 'px', borderRadius: (h.r ?? 44) + 'px' }); $('screen').appendChild(el); return { h, el }; });
+  s._tap = (s.taps || []).map((k) => { const el = document.createElement('div'); el.className = 'rip'; el.style.left = k.x + 'px'; el.style.top = k.y + 'px'; $('screen').appendChild(el); return { k, el }; });
+  s._pu = (s.pulses || []).map((k) => { const a = document.createElement('div'), b = document.createElement('div'); a.className = b.className = 'pulse'; [a, b].forEach((e) => { e.style.left = k.x + 'px'; e.style.top = k.y + 'px'; if (k.color) e.style.borderColor = k.color; $('screen').appendChild(e); }); return { k, els: [a, b] }; });
+}
+
+// ---- Títulos ----
+function titleHTML(txt) {
+  if (!txt) return '';
+  const [main, sub] = txt.split('||');
+  let html = '', g = false, L = 0;
+  for (const line of main.split('\n')) {
+    const parts = line.split(/(\*)/);
+    let words = [];
+    for (const part of parts) { if (part === '*') { g = !g; continue; } for (const w of part.split(/(\s+)/)) if (w) words.push({ w, g }); }
+    html += words.map((x) => (/^\s+$/.test(x.w) ? x.w : `<span class="w${x.g ? ' g' : ''}" data-l="${L}">${x.w}</span>`)).join('') + '<br>';
+    L++;
+  }
+  if (sub) html += `<span class="sub w" data-l="${L}">${sub}</span>`;
+  return html;
+}
+let curTitle = -1;
+
+// ---- Cámara del teléfono: {s, fx, fy, at:[X,Y]} = el punto (fx,fy) de la captura queda en (X,Y) con escala s ----
+const DEF = { s: 0.66, fx: 0.5, fy: 0.0, at: [540, 560] };
+function camOf(s, tau) {
+  const ks = (s.cam || [{}]).map((k) => ({ t: 0, ...DEF, ...k }));
+  if (tau <= ks[0].t) return ks[0];
+  for (let i = 0; i < ks.length - 1; i++) if (tau < ks[i + 1].t) { const k = eio(p(tau, ks[i].t, ks[i + 1].t)); return mix(ks[i], ks[i + 1], k); }
+  return ks[ks.length - 1];
+}
+function mix(a, b, k) { return { s: lerp(a.s, b.s, k), fx: lerp(a.fx, b.fx, k), fy: lerp(a.fy, b.fy, k), at: [lerp(a.at[0], b.at[0], k), lerp(a.at[1], b.at[1], k)] }; }
+const hasPhone = (s) => s.type === 'phone';
+
+// ---- Carro del gancho (SVG) ----
+$('car').innerHTML = `
+  <defs>
+    <linearGradient id="beam" x1="0" x2="1"><stop offset="0" stop-color="#fff7c2" stop-opacity=".55"/><stop offset="1" stop-color="#fff7c2" stop-opacity="0"/></linearGradient>
+    <radialGradient id="ground" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#22c55e" stop-opacity=".28"/><stop offset="1" stop-color="#22c55e" stop-opacity="0"/></radialGradient>
+  </defs>
+  <ellipse cx="540" cy="1250" rx="620" ry="260" fill="url(#ground)"/>
+  <path id="hills" d="M-40 1130 Q 160 1010 330 1090 T 700 1060 T 1120 1100 L1120 1180 L-40 1180 Z" fill="#0d2414"/>
+  <rect x="-40" y="1178" width="1160" height="6" fill="#1d2a22"/>
+  <g id="dashes"></g>
+  <g id="carG">
+    <path d="M 860 1080 L 1250 1020 L 1250 1150 Z" fill="url(#beam)"/>
+    <path d="M 210 1150 L 210 1070 Q 215 1040 250 1035 L 380 1020 Q 450 960 520 950 L 690 950 Q 760 955 820 1015 L 880 1030 Q 905 1040 905 1070 L 905 1150"
+      fill="none" stroke="#fff" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M 210 1150 L 265 1150 M 395 1150 L 690 1150 M 820 1150 L 905 1150" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+    <rect x="895" y="1060" width="16" height="14" rx="4" fill="#facc15"/>
+    <g id="batt"><rect x="470" y="1062" width="170" height="64" rx="12" fill="none" stroke="#fff" stroke-width="7"/><rect x="640" y="1080" width="12" height="28" rx="3" fill="#fff"/>
+      <rect id="battFill" x="480" y="1072" width="150" height="44" rx="6" fill="#22c55e"/>
+      <path d="M 562 1078 L 545 1100 L 558 1100 L 552 1116 L 572 1092 L 559 1092 Z" fill="#06140a"/></g>
+    <g class="wheel" data-cx="330" data-cy="1150"><circle cx="330" cy="1150" r="58" fill="#050906" stroke="#fff" stroke-width="9"/><circle cx="330" cy="1150" r="16" fill="#fff"/><path class="sp" d="M 330 1104 L 330 1196 M 284 1150 L 376 1150" stroke="#fff" stroke-width="6"/></g>
+    <g class="wheel" data-cx="755" data-cy="1150"><circle cx="755" cy="1150" r="58" fill="#050906" stroke="#fff" stroke-width="9"/><circle cx="755" cy="1150" r="16" fill="#fff"/><path class="sp" d="M 755 1104 L 755 1196 M 709 1150 L 801 1150" stroke="#fff" stroke-width="6"/></g>
+  </g>`;
+const dashes = $('dashes');
+for (let i = 0; i < 14; i++) { const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect'); r.setAttribute('y', 1236); r.setAttribute('width', 70); r.setAttribute('height', 8); r.setAttribute('rx', 4); r.setAttribute('fill', '#2b3a31'); dashes.appendChild(r); }
+
+// ---- Puntos verdes del cierre ----
+let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const DOTS = Array.from({ length: 26 }, () => { const el = document.createElement('div'); el.className = 'dot'; $('dots').appendChild(el); return { el, x: rnd() * 1080, y: 300 + rnd() * 1500, sp: 10 + rnd() * 30, ph: rnd() * 6.28, sz: .5 + rnd() }; });
+
+// ---- Señales para el audio (render.cjs las lee y se las pasa a audio.py) ----
+window.TOTAL = TOTAL;
+window.CUES = [];
+for (const s of SCENES) {
+  if (s.i > 0) CUES.push({ t: s.start - 0.25, type: 'whoosh' });
+  CUES.push({ t: s.start, type: 'section', kind: s.type });
+  (s.taps || []).forEach((k) => CUES.push({ t: s.start + k.t, type: 'tap' }));
+  (s.overlays || []).forEach((o) => { if (o.anim === 'up' || o.anim === 'left') CUES.push({ t: s.start + o.t0, type: 'swish' }); if (o.anim === 'pop') CUES.push({ t: s.start + o.t0, type: 'pop' }); if (o.sound) CUES.push({ t: s.start + o.t0, type: o.sound }); });
+  (s.pulses || []).forEach((k) => CUES.push({ t: s.start + k.t0, type: 'boop' }));
+  if (s.type === 'outro') CUES.push({ t: s.start + 0.3, type: 'chime' });
+}
+
+window.seek = function (T) {
+  const s = sceneAt(T), tau = T - s.start, prev = SCENES[s.i - 1];
+
+  // Título
+  if (curTitle !== s.i) { $('title').innerHTML = titleHTML(s.title); $('title').className = 'abs' + (s.type === 'hook' || s.type === 'text' ? ' mid' : ''); curTitle = s.i; }
+  const words = [...$('title').querySelectorAll('.w')];
+  const outK = s.keepTitle ? 0 : p(tau, s.dur - 0.35, s.dur);
+  words.forEach((w, k) => {
+    // lineDelay: cada línea entra ese tiempo después de la anterior (gancho en dos frases)
+    const l = +w.dataset.l;
+    const start = (s.titleAt ?? 0.15) + k * (s.stagger ?? 0.09) + l * (s.lineDelay ?? 0) + (w.classList.contains('sub') ? 0.25 : 0);
+    const q = eo(p(tau, start, start + 0.5));
+    // dimLines: las primeras N líneas se apagan a gris cuando entra la siguiente frase
+    const dimAt = (s.titleAt ?? 0.15) + (s.dimLines ?? 0) * (s.lineDelay ?? 0);
+    const dim = l < (s.dimLines ?? 0) ? eo(p(tau, dimAt, dimAt + .5)) : 0;
+    w.style.opacity = q * (1 - outK) * (1 - .65 * dim);
+    w.style.filter = `blur(${(1 - q) * 10 + outK * 10}px)`;
+    w.style.transform = `translateY(${(1 - q) * 18}px)`;
+  });
+
+  // Fondo
+  $('glow').style.top = (s.type === 'outro' ? 900 : s.type === 'hook' ? 1250 : 1150) + 'px';
+  $('glow').style.opacity = s.type === 'text' ? .6 : 1;
+
+  // Teléfono + cámara
+  const ph = $('phone');
+  const inK = hasPhone(s) ? (prev && hasPhone(prev) ? 1 : eo5(p(tau, 0, .9))) : 0;
+  const outPh = hasPhone(s) ? 0 : (prev && hasPhone(prev) ? eo(p(tau, 0, .5)) : 1);
+  let cam = hasPhone(s) ? camOf(s, tau) : (prev && hasPhone(prev) ? camOf(prev, prev.dur) : DEF);
+  if (hasPhone(s) && prev && hasPhone(prev) && tau < TRANS) cam = mix(camOf(prev, prev.dur), cam, eio(tau / TRANS));
+  const sc = cam.s;
+  const x = cam.at[0] - (BEZ + cam.fx * SW) * sc;
+  const y = cam.at[1] - (BEZ + cam.fy * SH) * sc + (1 - inK) * 700 + outPh * 500;
+  ph.style.transform = `translate(${x}px, ${y}px) scale(${sc})`;
+  vis(ph, hasPhone(s) ? inK : 1 - outPh);
+  vis($('topfade'), clamp((470 - y) / 160) * (hasPhone(s) ? 1 : 1 - outPh));
+
+  // Captura visible (fundido si cambia)
+  const curShot = hasPhone(s) ? s.shot : prev?.shot;
+  const prevShot = prev?.shot;
+  for (const [name, img] of Object.entries(shots)) {
+    let o = 0;
+    if (name === curShot) o = hasPhone(s) && prevShot && prevShot !== curShot ? eo(p(tau, 0, .45)) : 1;
+    else if (name === prevShot && hasPhone(s) && prevShot !== curShot) o = 1;
+    img.style.opacity = o; img.style.zIndex = name === curShot ? 2 : 1;
+  }
+
+  // Capas de todas las escenas: solo las de la escena actual (las de la anterior se apagan durante la transición)
+  for (const S of SCENES) {
+    const active = S === s, fading = S === prev && hasPhone(s) && tau < .4;
+    const tt = active ? tau : S.dur + tau;
+    S._ov.forEach(({ o, el }) => {
+      if (!active && !fading) { vis(el, 0); return; }
+      const t1 = o.t1 ?? S.dur + (o.carry ? 99 : .4);
+      const q = eo5(p(tt, o.t0, o.t0 + (o.inDur ?? .5)));
+      const qo = 1 - eo(p(tt, t1 - .35, t1));
+      let o2 = Math.min(q, qo), tf = '';
+      if (o.anim === 'up') { o2 = qo; tf = `translateY(${(1 - q) * 1600}px)`; if (q <= 0) o2 = 0; }
+      else if (o.anim === 'left') { o2 = qo; tf = `translateX(${(1 - q) * 1170}px)`; if (q <= 0) o2 = 0; }
+      else if (o.anim === 'pop') tf = `scale(${.85 + .15 * q})`;
+      else if (o.anim === 'rise') tf = `translateY(${(1 - q) * 40}px)`;
+      el.style.transformOrigin = o.origin || '50% 50%';
+      el.style.transform = tf; vis(el, o2);
+    });
+    S._hl.forEach(({ h, el }) => { const k = active ? Math.min(eo(p(tau, h.t0, h.t0 + .3)), 1 - eo(p(tau, (h.t1 ?? S.dur) - .3, h.t1 ?? S.dur))) : 0; vis(el, k); el.style.transform = `scale(${1.04 - .04 * k})`; });
+    S._tap.forEach(({ k, el }) => { const q = active ? (tau - k.t) / .6 : -1; if (q < 0 || q > 1) vis(el, 0); else { vis(el, 1 - q); el.style.transform = `scale(${.4 + q * 1.4})`; } });
+    S._pu.forEach(({ k, els }) => els.forEach((el, j) => { const q = active && tau > k.t0 && tau < (k.t1 ?? S.dur) ? (((tau - k.t0) / 1.4 + j * .5) % 1) : -1; if (q < 0) vis(el, 0); else { vis(el, (1 - q) * .9); el.style.transform = `scale(${.6 + q * 2.4})`; } }));
+  }
+
+  // Etiqueta sobre el teléfono
+  const b = $('badge');
+  if (s.badge && hasPhone(s)) {
+    b.innerHTML = `<i>${s.badge.icon || '●'}</i>${s.badge.text}`;
+    const k = Math.min(eo(p(tau, s.badge.t0 ?? .4, (s.badge.t0 ?? .4) + .4)), 1 - eo(p(tau, s.dur - .3, s.dur)));
+    b.style.top = Math.max(y - 92, 430) + 'px'; b.style.transform = `translateX(-50%) translateY(${(1 - k) * 12}px)`; vis(b, k);
+  } else vis(b, 0);
+
+  // Gancho con carro
+  const car = $('car');
+  if (s.type === 'hook' && s.car) {
+    const k = Math.min(eo(p(tau, 0, .6)), 1 - eo(p(tau, s.dur - .4, s.dur)));
+    vis(car, k);
+    const drive = (1 - eo5(p(tau, 0, 1.4))) * -700;
+    $('carG').setAttribute('transform', `translate(${drive + Math.sin(tau * 9) * 1.2} ${Math.sin(tau * 13) * 1.5})`);
+    car.querySelectorAll('.wheel').forEach((w) => w.querySelector('.sp').setAttribute('transform', `rotate(${tau * 420} ${w.dataset.cx} ${w.dataset.cy})`));
+    [...dashes.children].forEach((r, i) => r.setAttribute('x', ((i * 120 - tau * 520) % 1680 + 1680) % 1680 - 160));
+    const lvl = s.car.battery ?? 1;
+    $('battFill').setAttribute('width', 150 * lvl);
+    $('battFill').setAttribute('fill', lvl < .3 ? '#ef4444' : '#22c55e');
+  } else vis(car, 0);
+
+  // Cierre
+  const ou = $('outro');
+  if (s.type === 'outro') {
+    $('oTag').innerHTML = (s.tagline || '').replace(/\n/g, '<br>');
+    $('oCta').textContent = s.cta || ''; vis(ou, 1);
+    const parts = [['.logo', .1], ['#oName', .5], ['#oTag', .8], ['#oCta', 1.2], ['#oUrl', 1.5]];
+    parts.forEach(([sel, a]) => { const el = ou.querySelector(sel); const q = eo(p(tau, a, a + .6)); el.style.opacity = q; el.style.filter = `blur(${(1 - q) * 10}px)`; el.style.transform = `translateY(${(1 - q) * 24}px) scale(${sel === '.logo' ? .92 + .08 * q : 1})`; });
+    ou.style.opacity = 1 - p(tau, s.dur - .6, s.dur);
+    DOTS.forEach((d) => { const k = eo(p(tau, .4, 1.6)); vis(d.el, k * (.25 + .35 * (1 + Math.sin(T * 2 + d.ph)) / 2) * (1 - p(tau, s.dur - .6, s.dur))); d.el.style.transform = `translate(${d.x}px, ${d.y - tau * d.sp}px) scale(${d.sz})`; });
+  } else { vis(ou, 0); DOTS.forEach((d) => vis(d.el, 0)); }
+};
+window.seek(0);
+</script>
+</body>
+</html>

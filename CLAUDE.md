@@ -24,6 +24,20 @@ dirección desde donde se abrió la app (`window.location.origin` / `origin`
 del request), así que salen con el dominio cuando se usa desde ahí.
 Staging y las vistas previas por rama siguen en `*.workers.dev`.
 
+## Videos e imágenes de la marca (26 oct 2026, pedido de Rafa)
+
+Todos los videos e imágenes salen con **un solo estilo**, el de los videos de
+referencia de Rafa ("modo ruta" y "¿dónde cargo?"): fondo casi negro con
+brillo verde, títulos Inter extra negrita de 2 líneas con la palabra clave en
+verde, pantallas reales de la app en un teléfono de borde fino, historia
+gancho → pasos → confianza → cierre con logo + www.movilidadelectricagt.com,
+música electrónica pareja sin voz. Guía completa:
+`marketing/estilo-videos.md`. Plantilla: `marketing/video-kit/` (un video =
+`marketing/videos/<nombre>/video.json` + capturas; `render.cjs` arma el MP4).
+Skill del proyecto: `.claude/skills/videos-marca`. Nada de confeti ni efectos
+llamativos (Rafa los pidió quitar: "restan elegancia"). Los MP4 no se suben al
+repo; se le mandan a Rafa y él los publica.
+
 ## Stack
 
 - **Frontend**: React 19 + TypeScript + Vite, Zustand (estado), Tailwind CSS, Leaflet/react-leaflet (mapa)

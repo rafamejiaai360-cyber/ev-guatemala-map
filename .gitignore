@@ -44,3 +44,7 @@ verificacion-identidad-*.zip
 *dpi*.png
 *selfie*.jpg
 *selfie*.jpeg
+
+# Videos de marketing: el MP4 y la vista previa se generan con marketing/video-kit/render.cjs
+marketing/videos/**/*.mp4
+marketing/videos/**/preview.jpg
