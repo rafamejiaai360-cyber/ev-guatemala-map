@@ -804,8 +804,9 @@ panel de admin (misma pestaña). Sirve también para compartir una estación
 (las residenciales siguen saliendo aproximadas a quien no es admin ni dueño).
 Sin migración.
 
-**Botón "Compartir" en la ficha (26 oct 2026, rama `compartir-estacion`,
-pendiente de prueba y visto bueno de Rafa)**: junto a "Ver en el mapa" en
+**Botón "Compartir" en la ficha (26 oct 2026, rama `compartir-estacion`, probado
+por Rafa en la vista previa de la rama y publicado en prod el 26 oct 2026 con su
+visto bueno)**: junto a "Ver en el mapa" en
 `StationScreen`. Comparte `<origen>/?estacion=<id>` (el enlace directo de
 arriba) con `navigator.share` (menú del teléfono: WhatsApp, etc.); sin él,
 copia al portapapeles ("Enlace copiado"). Residenciales: el enlace se
