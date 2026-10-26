@@ -781,8 +781,8 @@ o foto nueva, de cualquier estación: estrellas + autor/correo + comentario
 (máx. 500) en la reseña; quién la subió + enlace `/api/photo/<id>` en la foto.
 Staging no tiene Telegram (queda en `ops_log`). Sin migración.
 
-**"Ver en el mapa" (26 oct 2026, rama `ver-en-mapa`, pendiente de staging y
-visto bueno de Rafa)**: Rafa no podía ubicar una estación en el mapa desde
+**"Ver en el mapa" (26 oct 2026, rama `ver-en-mapa`, publicado directo en prod
+el 26 oct 2026 sin pasar por staging, a pedido explícito de Rafa)**: Rafa no podía ubicar una estación en el mapa desde
 la ficha o la lista. Botón "Ver en el mapa" en la ficha (`StationScreen`,
 encima de Waze/Google Maps; "Ver zona en el mapa" si es residencial
 aproximada) y botón "Mapa" en cada tarjeta de Lista y Guardadas
