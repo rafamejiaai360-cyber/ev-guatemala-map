@@ -53,6 +53,27 @@ export default function StationScreen({ station, backLabel, onBack, onShowOnMap 
   // Solo carga aquí con el adaptador propio del conductor ("Mis adaptadores").
   const ownAdapterPlugs = via === 'my-adapter' ? myAdapterPlugs(station, myAdapters) : [];
 
+  // Compartir (oct 2026): enlace /?estacion=<id>, que abre el mapa en esta
+  // estación. En el celular abre el menú de compartir del teléfono (WhatsApp,
+  // Mensajes…); donde no existe, copia el enlace. Una residencial se comparte
+  // igual: quien lo abra la ve en su ubicación aproximada, como siempre.
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+  async function share() {
+    const url = `${window.location.origin}/?estacion=${encodeURIComponent(station.id)}`;
+    const text = `${station.name} · estación de carga en EV Guatemala`;
+    if (navigator.share) {
+      try { await navigator.share({ title: station.name, text, url }); } catch { /* lo canceló */ }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      setShareMsg('Enlace copiado');
+    } catch {
+      window.prompt('Copia este enlace:', url);
+    }
+    window.setTimeout(() => setShareMsg(null), 2500);
+  }
+
   return (
     <>
       <div className="m-hero" style={{ ['--tint' as string]: TYPE_SOFT[t] }}>
@@ -96,9 +117,14 @@ export default function StationScreen({ station, backLabel, onBack, onShowOnMap 
             <span className="m-pill soft">★ {rating.avg.toFixed(1).replace('.', ',')} · {rating.count} reseñas</span>
           )}
         </div>
-        <button type="button" className="m-nav m-showmap" onClick={() => onShowOnMap(station.id)}>
-          {Icon.map}{station.approximate ? 'Ver zona en el mapa' : 'Ver en el mapa'}
-        </button>
+        <div className="m-navs m-navs-top">
+          <button type="button" className="m-nav m-showmap" onClick={() => onShowOnMap(station.id)}>
+            {Icon.map}{station.approximate ? 'Ver zona' : 'Ver en el mapa'}
+          </button>
+          <button type="button" className="m-nav" onClick={() => void share()}>
+            {Icon.share}{shareMsg ?? 'Compartir'}
+          </button>
+        </div>
         {station.approximate ? (
           <p className="m-approx">{Icon.pin}Ubicación aproximada (a menos de 1 km) para proteger la privacidad del dueño.</p>
         ) : (

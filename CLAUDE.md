@@ -804,6 +804,13 @@ panel de admin (misma pestaña). Sirve también para compartir una estación
 (las residenciales siguen saliendo aproximadas a quien no es admin ni dueño).
 Sin migración.
 
+**Botón "Compartir" en la ficha (26 oct 2026, rama `compartir-estacion`,
+pendiente de prueba y visto bueno de Rafa)**: junto a "Ver en el mapa" en
+`StationScreen`. Comparte `<origen>/?estacion=<id>` (el enlace directo de
+arriba) con `navigator.share` (menú del teléfono: WhatsApp, etc.); sin él,
+copia al portapapeles ("Enlace copiado"). Residenciales: el enlace se
+comparte igual y quien lo abre ve la ubicación aproximada. Sin migración.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
