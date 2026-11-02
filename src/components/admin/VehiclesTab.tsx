@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import type { ConnectorType, Vehicle } from '../../types';
+import VerifiedBadge from '../VerifiedBadge';
 
 const CONNECTORS: { value: ConnectorType; label: string }[] = [
   { value: 'CCS2', label: 'CCS2' },
@@ -33,6 +34,7 @@ export default function VehiclesTab() {
   const [busy, setBusy] = useState<number | null>(null);
   const [editing, setEditing] = useState<Vehicle | 'new' | null>(null);
   const [query, setQuery] = useState('');
+  const [show, setShow] = useState<'all' | 'verified' | 'pending'>('all');
   // Autos eliminados (status='hidden' en D1): no se borran de verdad, para
   // poder restaurarlos si se eliminaron por error.
   const [removed, setRemoved] = useState<Vehicle[]>([]);
@@ -109,7 +111,10 @@ export default function VehiclesTab() {
   }
 
   const q = query.trim().toLowerCase();
-  const catalog = vehicleCatalog.filter((v) => !q || `${v.brand} ${v.model} ${v.year}`.toLowerCase().includes(q));
+  const verifiedCount = vehicleCatalog.filter((v) => v.verified).length;
+  const catalog = vehicleCatalog
+    .filter((v) => show === 'all' || (show === 'verified' ? v.verified : !v.verified))
+    .filter((v) => !q || `${v.brand} ${v.model} ${v.year}`.toLowerCase().includes(q));
 
   return (
     <div className="space-y-8">
@@ -162,23 +167,49 @@ export default function VehiclesTab() {
         </div>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar marca o modelo"
           className="w-full mb-2 px-3 py-2 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {([
+            ['all', `Todos · ${vehicleCatalog.length}`],
+            ['verified', `Verificados · ${verifiedCount}`],
+            ['pending', `Sin verificar · ${vehicleCatalog.length - verifiedCount}`],
+          ] as const).map(([key, text]) => (
+            <button key={key} onClick={() => setShow(key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${show === key ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>
+              {key === 'verified' && <VerifiedBadge size={13} color="#16a34a" label="Ficha verificada" />}
+              {text}
+            </button>
+          ))}
+        </div>
+        {catalog.length === 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 px-4 py-8 text-center text-sm text-gray-500">Ningún vehículo coincide</div>
+        )}
+        <div className="space-y-2">
           {catalog.map((v) => (
-            <div key={v.id} className="flex items-center gap-3 px-3 py-2.5">
-              <div className="w-14 h-10 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center text-gray-400 text-[10px]">
-                {v.image_url ? <img src={v.image_url} alt="" className="w-full h-full object-cover" /> : 'Sin foto'}
+            <div key={v.id} className={`bg-white rounded-xl border p-3 ${v.verified ? 'border-green-200' : 'border-gray-200'}`}>
+              <div className="flex items-start gap-3">
+                <div className="w-16 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center text-gray-400 text-[10px]">
+                  {v.image_url ? <img src={v.image_url} alt="" className="w-full h-full object-cover" /> : 'Sin foto'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-900 leading-snug break-words">
+                    {v.brand} {v.model} <span className="text-gray-400 font-normal">{v.year}</span>
+                    {v.verified && <VerifiedBadge size={16} color="#16a34a" label="Ficha verificada" className="ml-1" />}
+                  </p>
+                  {v.verified
+                    ? <p className="text-[11px] font-medium text-green-700 mt-0.5">Ficha verificada</p>
+                    : <p className="text-[11px] text-gray-400 mt-0.5">Sin verificar</p>}
+                  <p className="text-xs text-gray-600 mt-1 break-words">
+                    {v.range_km} km{v.battery_kwh != null && ` · ${v.battery_kwh} kWh`}
+                  </p>
+                  <p className={`text-xs mt-0.5 break-words ${v.compatible_connectors?.length ? 'text-gray-600' : 'text-amber-700'}`}>
+                    {v.compatible_connectors?.length ? `Conectores: ${v.compatible_connectors.map(connLabel).join(', ')}` : 'Conector sin confirmar'}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {v.brand} {v.model} <span className="text-gray-400 font-normal">{v.year}</span>
-                  {v.verified && <span className="ml-2 text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full">Verificada</span>}
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {v.range_km} km{v.battery_kwh != null && ` · ${v.battery_kwh} kWh`} · {v.compatible_connectors?.length ? v.compatible_connectors.map(connLabel).join(', ') : 'conector sin confirmar'}
-                </p>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => setEditing(v)} className="flex-1 text-xs py-2 rounded-full bg-gray-100 text-gray-800 font-medium">Editar</button>
+                <button disabled={busyId === v.id} onClick={() => setVisibility(v, true)} className="flex-1 text-xs py-2 rounded-full bg-red-50 text-red-600 font-medium disabled:opacity-50">Eliminar</button>
               </div>
-              <button onClick={() => setEditing(v)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 flex-shrink-0">Editar</button>
-              <button disabled={busyId === v.id} onClick={() => setVisibility(v, true)} className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 flex-shrink-0 disabled:opacity-50">Eliminar</button>
             </div>
           ))}
         </div>
