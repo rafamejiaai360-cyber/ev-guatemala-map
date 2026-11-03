@@ -839,6 +839,17 @@ arriba) con `navigator.share` (menú del teléfono: WhatsApp, etc.); sin él,
 copia al portapapeles ("Enlace copiado"). Residenciales: el enlace se
 comparte igual y quien lo abre ve la ubicación aproximada. Sin migración.
 
+**Modo oscuro (3 nov 2026, rama `modo-oscuro`, en staging)**: Rafa lo pidió
+tras usar la app de noche en el carro. Botón pequeño de luna/sol en los
+controles del mapa (`MobileMapTools` en `Map.tsx`, grupo `.m-tgroup-sm`).
+Store `darkMode` → `localStorage.ev_theme` y `html[data-theme="dark"]`; un
+script en `index.html` lo aplica antes de pintar (sin parpadeo blanco) y
+cambia `meta theme-color`. Colores: variables de `.m-shell` redefinidas al
+final de `mobile.css` (nueva `--on-ink` = texto sobre fondo `--ink`) y de
+`--ev-*` al final de `theme.css` (ventanas de Tailwind). Mapa base: el mismo
+OSM invertido y atenuado (`.ev-tiles`); los pines conservan sus colores. Solo
+en el teléfono, sin cuenta ni servidor. Sin migración.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

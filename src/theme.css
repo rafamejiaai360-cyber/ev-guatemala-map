@@ -111,3 +111,28 @@ html, body { background: var(--ev-page); color: var(--ev-ink); -webkit-font-smoo
   border-color: transparent;
   border-radius: 999px;
 }
+
+/* ── Modo oscuro (nov 2026): ventanas de Tailwind (alta/edición, login,
+   perfil, panel de admin). Ver html[data-theme="dark"] en mobile.css. ── */
+html[data-theme="dark"] {
+  --ev-ink: #f2f2f7;
+  --ev-ink2: #a1a1a8;
+  --ev-ink3: #6e6e74;
+  --ev-hair: rgba(255, 255, 255, .1);
+  --ev-page: #000;
+  --ev-surface: #1c1c1e;
+  --ev-ghost: rgba(255, 255, 255, .09);
+  --ev-card-sh: 0 0 0 .5px rgba(255, 255, 255, .06);
+  color-scheme: dark;
+}
+html[data-theme="dark"] :where(.bg-white) { background-color: var(--ev-surface); }
+html[data-theme="dark"] :where(.bg-gray-50, .bg-gray-100) { background-color: var(--ev-ghost); }
+html[data-theme="dark"] :where(.text-gray-700, .text-gray-900, .text-gray-800) { color: var(--ev-ink); }
+html[data-theme="dark"] :where(.border-gray-100, .border-gray-200, .border-gray-300) { border-color: var(--ev-hair); }
+html[data-theme="dark"] :where(button, a):where(.bg-gray-900) { color: #000; }
+html[data-theme="dark"] .adm-top { background: rgba(28, 28, 30, .86); }
+html[data-theme="dark"] .adm-avatar, html[data-theme="dark"] .adm-tab[aria-pressed="true"] { color: #000; }
+html[data-theme="dark"] :where(.bg-green-50) { background-color: rgba(34, 197, 94, .14); }
+html[data-theme="dark"] :where(.bg-blue-50) { background-color: rgba(59, 130, 246, .16); }
+html[data-theme="dark"] :where(.bg-amber-50, .bg-yellow-50, .bg-orange-50) { background-color: rgba(245, 158, 11, .14); }
+html[data-theme="dark"] :where(.bg-red-50) { background-color: rgba(239, 68, 68, .14); }

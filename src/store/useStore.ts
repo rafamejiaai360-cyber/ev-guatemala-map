@@ -214,6 +214,10 @@ interface AppState {
   // el norte arriba (false). Se recuerda en este teléfono.
   headingUp: boolean;
   setHeadingUp: (on: boolean) => void;
+  // Modo oscuro (nov 2026): para manejar de noche. Se recuerda en este
+  // teléfono (localStorage.ev_theme); index.html lo aplica antes de pintar.
+  darkMode: boolean;
+  setDarkMode: (on: boolean) => void;
 
   // Sidebar visibility (mobile)
   sidebarOpen: boolean;
@@ -362,6 +366,16 @@ function loadRouteRadius(): number {
   return 2;
 }
 
+function loadDarkMode(): boolean {
+  try { return localStorage.getItem('ev_theme') === 'dark'; } catch { return false; }
+}
+
+function applyTheme(dark: boolean) {
+  const root = document.documentElement;
+  if (dark) root.dataset.theme = 'dark'; else delete root.dataset.theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#000000' : '#f2f2f7');
+}
+
 function loadHeadingUp(): boolean {
   try { return localStorage.getItem('ev_heading_up') !== '0'; } catch { return true; }
 }
@@ -487,6 +501,12 @@ export const useStore = create<AppState>((set, get) => ({
   setHeadingUp: (on) => {
     try { localStorage.setItem('ev_heading_up', on ? '1' : '0'); } catch { /* sin almacenamiento */ }
     set({ headingUp: on });
+  },
+  darkMode: loadDarkMode(),
+  setDarkMode: (on) => {
+    try { localStorage.setItem('ev_theme', on ? 'dark' : 'light'); } catch { /* sin almacenamiento */ }
+    applyTheme(on);
+    set({ darkMode: on });
   },
   routeRadiusKm: loadRouteRadius(),
   setRouteRadiusKm: (km) => {

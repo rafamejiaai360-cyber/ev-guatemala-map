@@ -14,6 +14,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="EV Guatemala" />
+    <!-- Modo oscuro: se aplica antes de pintar para que no "parpadee" en blanco. -->
+    <script>
+      try {
+        if (localStorage.getItem('ev_theme') === 'dark') {
+          document.documentElement.dataset.theme = 'dark';
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#000000');
+        }
+      } catch (e) {}
+    </script>
     <title>EV Guatemala — Mapa de Cargadores</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
