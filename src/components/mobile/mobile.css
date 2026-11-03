@@ -532,14 +532,13 @@
 .m-tgroup-sm .m-tbtn svg { width: 15px; height: 15px; }
 html[data-theme="dark"] .m-shell {
   --ink: #f2f2f7;
-  --on-ink: #000;
+  --on-ink: #fff;
   --ink2: #a1a1a8;
   --ink3: #6e6e74;
   --hair: rgba(255, 255, 255, .1);
   --page: #000;
   --surface: #1c1c1e;
   --glass: rgba(28, 28, 30, .86);
-  --green: #22c55e;
   --green-soft: rgba(34, 197, 94, .18);
   --blue: #60a5fa;
   --blue-soft: rgba(59, 130, 246, .2);
@@ -570,3 +569,14 @@ html[data-theme="dark"] .m-admin { color: #fcd34d; background: rgba(245, 158, 11
 html[data-theme="dark"] .m-fp-switch input { background: #3a3a3c; }
 html[data-theme="dark"] .m-scrim { background: rgba(0, 0, 0, .55); }
 html[data-theme="dark"] .m-mode::before, html[data-theme="dark"] .m-fp-seg button[aria-pressed="true"] { background: #3a3a3c; }
+/* Lo que en claro es negro con letra blanca (chip elegido, "Cómo llegar"…)
+   en oscuro es gris claro con letra blanca: nada queda blanco. */
+html[data-theme="dark"] .m-chip[aria-pressed="true"],
+html[data-theme="dark"] .m-route-radii button[aria-pressed="true"],
+html[data-theme="dark"] .m-btn.primary,
+html[data-theme="dark"] .m-fp-chip[aria-pressed="true"] { background: #48484a; }
+html[data-theme="dark"] .m-price strong, html[data-theme="dark"] .m-adapter b, html[data-theme="dark"] .m-tag.adapt,
+html[data-theme="dark"] .m-back, html[data-theme="dark"] .m-linkbtn, html[data-theme="dark"] .m-glist .r.accent,
+html[data-theme="dark"] .m-tab[aria-selected="true"] { color: #4ade80 !important; }
+html[data-theme="dark"] .m-join-mark.b { background: #2563eb; }
+html[data-theme="dark"] .m-avatar { color: #4ade80; }

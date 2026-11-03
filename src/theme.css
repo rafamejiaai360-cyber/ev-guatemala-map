@@ -113,29 +113,83 @@ html, body { background: var(--ev-page); color: var(--ev-ink); -webkit-font-smoo
 }
 
 /* ── Modo oscuro (nov 2026): ventanas de Tailwind (alta/edición, login,
-   perfil, panel de admin). Ver html[data-theme="dark"] en mobile.css. ── */
+   perfil, panel de admin). Ver html[data-theme="dark"] en mobile.css.
+   Se traducen a oscuro TODAS las clases claras de Tailwind que usa la app
+   (fondos, textos y bordes, también los de color: verde/rojo/ámbar/azul). */
 html[data-theme="dark"] {
   --ev-ink: #f2f2f7;
   --ev-ink2: #a1a1a8;
-  --ev-ink3: #6e6e74;
+  --ev-ink3: #7c7c82;
   --ev-hair: rgba(255, 255, 255, .1);
   --ev-page: #000;
   --ev-surface: #1c1c1e;
+  --ev-raised: #2c2c2e;
+  --ev-raised2: #3a3a3c;
   --ev-ghost: rgba(255, 255, 255, .09);
+  --ev-green-dark: #15803d;
   --ev-card-sh: 0 0 0 .5px rgba(255, 255, 255, .06);
+  --ev-selected: #48484a; /* pestaña/botón elegido: gris claro, no blanco */
+  /* Letra de las etiquetas de estado (StatusPicker en AdminPanel) */
+  --st-ok: #4ade80;
+  --st-warn: #fbbf24;
+  --st-bad: #ff6b6b;
+  --st-gone: #a1a1a8;
   color-scheme: dark;
 }
-/* #root tiene fondo y letra claros fijos en index.css (#fafafa / #111827):
-   eso dejaba blanco el fondo del panel y oscuro el título "EV Guatemala". */
-html[data-theme="dark"] #root { background: var(--ev-page); color: var(--ev-ink); }
+/* Fondo de la página detrás de todo. index.css pone #fafafa/#111827 fijos en
+   html, body y #root, y como se carga después de este archivo ganaba: por
+   eso al bajar en el panel aparecía blanco debajo del contenido. */
+html[data-theme="dark"], html[data-theme="dark"] body, html[data-theme="dark"] #root {
+  background: var(--ev-page);
+  color: var(--ev-ink);
+}
+
+/* Fondos neutros */
 html[data-theme="dark"] :where(.bg-white) { background-color: var(--ev-surface); }
-html[data-theme="dark"] :where(.bg-gray-50, .bg-gray-100) { background-color: var(--ev-ghost); }
-html[data-theme="dark"] :where(.text-gray-700, .text-gray-900, .text-gray-800) { color: var(--ev-ink); }
-html[data-theme="dark"] :where(.border-gray-100, .border-gray-200, .border-gray-300) { border-color: var(--ev-hair); }
-html[data-theme="dark"] :where(button, a):where(.bg-gray-900) { color: #000; }
-html[data-theme="dark"] .adm-top { background: rgba(28, 28, 30, .86); }
-html[data-theme="dark"] .adm-avatar, html[data-theme="dark"] .adm-tab[aria-pressed="true"] { color: #000; }
-html[data-theme="dark"] :where(.bg-green-50) { background-color: rgba(34, 197, 94, .14); }
-html[data-theme="dark"] :where(.bg-blue-50) { background-color: rgba(59, 130, 246, .16); }
+html[data-theme="dark"] :where(.bg-white\/80) { background-color: rgba(28, 28, 30, .85); }
+html[data-theme="dark"] :where(.bg-gray-50, .bg-gray-100) { background-color: var(--ev-raised); }
+html[data-theme="dark"] :where(.min-h-screen.bg-gray-50) { background-color: var(--ev-page); }
+html[data-theme="dark"] :where(.bg-gray-200) { background-color: var(--ev-raised2); }
+html[data-theme="dark"] :where(.hover\:bg-gray-50, .hover\:bg-gray-100):hover { background-color: var(--ev-raised); }
+html[data-theme="dark"] :where(.hover\:bg-gray-200):hover { background-color: var(--ev-raised2); }
+
+/* Fondos de color suaves (avisos, etiquetas) → mismo color, translúcido */
+html[data-theme="dark"] :where(.bg-green-50, .bg-emerald-50, .hover\:bg-green-50:hover) { background-color: rgba(34, 197, 94, .13); }
+html[data-theme="dark"] :where(.bg-green-100) { background-color: rgba(34, 197, 94, .22); }
+html[data-theme="dark"] :where(.bg-red-50, .hover\:bg-red-50:hover) { background-color: rgba(239, 68, 68, .14); }
+html[data-theme="dark"] :where(.bg-red-100, .hover\:bg-red-100:hover) { background-color: rgba(239, 68, 68, .24); }
 html[data-theme="dark"] :where(.bg-amber-50, .bg-yellow-50, .bg-orange-50) { background-color: rgba(245, 158, 11, .14); }
-html[data-theme="dark"] :where(.bg-red-50) { background-color: rgba(239, 68, 68, .14); }
+html[data-theme="dark"] :where(.bg-amber-100, .bg-orange-100, .hover\:bg-amber-100:hover) { background-color: rgba(245, 158, 11, .24); }
+html[data-theme="dark"] :where(.bg-blue-50, .hover\:bg-blue-50:hover) { background-color: rgba(59, 130, 246, .15); }
+html[data-theme="dark"] :where(.bg-blue-100) { background-color: rgba(59, 130, 246, .25); }
+
+/* Textos */
+html[data-theme="dark"] :where(.text-gray-900, .text-gray-800, .text-gray-700) { color: var(--ev-ink); }
+html[data-theme="dark"] :where(.text-gray-600, .text-gray-500) { color: var(--ev-ink2); }
+html[data-theme="dark"] :where(.text-gray-400, .text-gray-300) { color: var(--ev-ink3); }
+html[data-theme="dark"] :where(.text-green-500, .text-green-600, .text-green-700, .text-green-800, .hover\:text-green-700:hover, .hover\:text-green-800:hover) { color: #4ade80; }
+html[data-theme="dark"] :where(.text-red-400, .text-red-500, .text-red-600, .text-red-700, .hover\:text-red-400:hover) { color: #ff6b6b; }
+html[data-theme="dark"] :where(.text-amber-500, .text-amber-600, .text-amber-700, .text-amber-800, .text-amber-900) { color: #fbbf24; }
+html[data-theme="dark"] :where(.text-orange-700) { color: #fb923c; }
+html[data-theme="dark"] :where(.text-blue-400, .text-blue-600, .text-blue-700, .text-blue-800, .text-blue-900, .hover\:text-blue-500:hover, .hover\:text-blue-600:hover) { color: #60a5fa; }
+html[data-theme="dark"] :where(.text-purple-700) { color: #c084fc; }
+html[data-theme="dark"] :where(.text-indigo-700) { color: #a5b4fc; }
+
+/* Bordes */
+html[data-theme="dark"] :where(.border-gray-50, .border-gray-100, .border-gray-200, .border-gray-300) { border-color: var(--ev-hair); }
+html[data-theme="dark"] :where(.border-green-100, .border-green-200, .border-green-300) { border-color: rgba(34, 197, 94, .3); }
+html[data-theme="dark"] :where(.border-red-100) { border-color: rgba(239, 68, 68, .3); }
+html[data-theme="dark"] :where(.border-amber-100, .border-amber-200) { border-color: rgba(245, 158, 11, .3); }
+html[data-theme="dark"] :where(.border-blue-200) { border-color: rgba(59, 130, 246, .3); }
+
+/* Botones y barra del panel */
+html[data-theme="dark"] :where(.bg-gray-900, .bg-gray-800) { background-color: var(--ev-selected); color: #fff; }
+html[data-theme="dark"] :where(button, a):where(.bg-gray-900):hover { background-color: #545456; }
+html[data-theme="dark"] :where(button):where(.bg-gray-100) { background-color: var(--ev-ghost); }
+html[data-theme="dark"] .adm-top { background: rgba(28, 28, 30, .86); }
+html[data-theme="dark"] .adm-avatar, html[data-theme="dark"] .adm-tab[aria-pressed="true"] { background: var(--ev-selected); color: #fff; }
+html[data-theme="dark"] .ev-seg button[aria-pressed="true"] { background: var(--ev-raised2); }
+
+/* Ventanitas del mapa (Leaflet) */
+html[data-theme="dark"] .leaflet-popup-content-wrapper, html[data-theme="dark"] .leaflet-tooltip.station-tooltip { background: var(--ev-surface) !important; color: var(--ev-ink); border-color: var(--ev-hair) !important; }
+html[data-theme="dark"] .leaflet-popup-tip { background: var(--ev-surface); }

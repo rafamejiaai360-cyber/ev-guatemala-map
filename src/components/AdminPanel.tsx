@@ -364,12 +364,12 @@ function AddStationForm({ onSuccess }: { onSuccess: (name: string) => void }) {
 // eligió Rafa): pequeña y de color, bajo el nombre. Encima lleva la lista
 // real del teléfono, invisible (16 px para que iOS no haga zoom al tocarla).
 const STATUS_PILL: Record<string, { bg: string; fg: string; dot?: string }> = {
-  active: { bg: 'rgba(52,199,89,.14)', fg: '#1f8a3b' },
-  partial: { bg: 'rgba(255,159,10,.15)', fg: '#a15c00', dot: 'linear-gradient(90deg,#ff9f0a 50%,#fff 50%)' },
-  maintenance: { bg: 'rgba(255,159,10,.15)', fg: '#a15c00', dot: '#ff9f0a' },
-  closed: { bg: 'rgba(255,69,58,.13)', fg: '#c4281d', dot: '#ff453a' },
-  offline: { bg: 'rgba(255,69,58,.13)', fg: '#c4281d', dot: '#ff453a' },
-  gone: { bg: 'rgba(120,120,128,.14)', fg: '#6b6b73', dot: '#aeaeb2' },
+  active: { bg: 'rgba(52,199,89,.14)', fg: 'var(--st-ok, #1f8a3b)' },
+  partial: { bg: 'rgba(255,159,10,.15)', fg: 'var(--st-warn, #a15c00)', dot: 'linear-gradient(90deg,#ff9f0a 50%,#fff 50%)' },
+  maintenance: { bg: 'rgba(255,159,10,.15)', fg: 'var(--st-warn, #a15c00)', dot: '#ff9f0a' },
+  closed: { bg: 'rgba(255,69,58,.13)', fg: 'var(--st-bad, #c4281d)', dot: '#ff453a' },
+  offline: { bg: 'rgba(255,69,58,.13)', fg: 'var(--st-bad, #c4281d)', dot: '#ff453a' },
+  gone: { bg: 'rgba(120,120,128,.14)', fg: 'var(--st-gone, #6b6b73)', dot: '#aeaeb2' },
 };
 
 function StatusPicker({ station, onChange }: { station: ChargerStation; onChange: (s: ChargerStatus) => void }) {

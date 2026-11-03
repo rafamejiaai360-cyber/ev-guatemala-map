@@ -849,6 +849,14 @@ final de `mobile.css` (nueva `--on-ink` = texto sobre fondo `--ink`) y de
 `--ev-*` al final de `theme.css` (ventanas de Tailwind). Mapa base: el mismo
 OSM invertido y atenuado (`.ev-tiles`); los pines conservan sus colores. Solo
 en el teléfono, sin cuenta ni servidor. Sin migración.
+Segunda pasada (mismo día, Rafa vio blanco en el panel): `index.css` pone
+`#fafafa` fijo en html/body/#root y se carga DESPUÉS de `theme.css`, así que
+ganaba — al bajar aparecía blanco. `theme.css` ahora traduce a oscuro todas
+las clases claras de Tailwind (fondos, textos y bordes, también los de
+color), las etiquetas de estado del panel usan `var(--st-ok|warn|bad|gone)`, y
+lo "elegido" (pestañas, chips, botón negro) es gris `#48484a` en vez de
+blanco. Revisado con un script que compone capas y marca fondos claros o texto
+de poco contraste en todas las pantallas del mapa y pestañas del panel.
 
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
