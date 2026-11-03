@@ -842,6 +842,7 @@ comparte igual y quien lo abre ve la ubicación aproximada. Sin migración.
 **Modo oscuro (3 nov 2026, rama `modo-oscuro`, en staging)**: Rafa lo pidió
 tras usar la app de noche en el carro. Botón pequeño de luna/sol en los
 controles del mapa (`MobileMapTools` en `Map.tsx`, grupo `.m-tgroup-sm`).
+También en la barra del panel de admin (`ThemeToggle` en AdminPanel).
 Store `darkMode` → `localStorage.ev_theme` y `html[data-theme="dark"]`; un
 script en `index.html` lo aplica antes de pintar (sin parpadeo blanco) y
 cambia `meta theme-color`. Colores: variables de `.m-shell` redefinidas al
