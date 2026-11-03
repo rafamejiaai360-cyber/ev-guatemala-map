@@ -311,7 +311,7 @@
    Barra superior con las secciones, lista siempre visible a la izquierda (ahí
    mismo se abren la ficha y las otras pestañas) y el mapa a la derecha. */
 @media (min-width: 1024px) {
-  .m-shell { --head: 60px; --side: 400px; }
+  .m-shell { --head: 60px; --panel: 400px; --side: var(--panel); }
 
   /* Lo propio del celular se oculta */
   .m-tabbar, .m-topbar, .m-mode, .m-chips, .m-peek, .m-topfade { display: none; }
@@ -344,7 +344,7 @@
   .ev-map-mobile .leaflet-bottom.leaflet-right { bottom: 0; }
 
   /* Lista fija a la izquierda */
-  .m-list, .m-shell[data-mode="list"] .m-list { top: var(--head); left: 0; right: auto; bottom: 0; width: var(--side); padding: 0; opacity: 1; pointer-events: auto; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border-right: 1px solid var(--hair); z-index: 15; }
+  .m-list, .m-shell[data-mode="list"] .m-list { top: var(--head); left: 0; right: auto; bottom: 0; width: var(--panel); padding: 0; opacity: 1; pointer-events: auto; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border-right: 1px solid var(--hair); z-index: 15; }
   .m-listtop { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 14px 14px 8px; }
   .m-listtop .m-search { background: var(--ghost); box-shadow: none; margin: 0; }
   .m-chips-inline { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -362,15 +362,31 @@
 
   /* Actividad, Guardadas y Perfil: en el mismo lugar que la lista */
   .m-view:not(.m-view-map) { pointer-events: none; z-index: 21; }
-  .m-view:not(.m-view-map) .m-screen { top: var(--head); right: auto; width: var(--side); padding: 18px 16px 28px; background: var(--page); border-right: 1px solid var(--hair); }
+  .m-view:not(.m-view-map) .m-screen { top: var(--head); right: auto; width: var(--panel); padding: 18px 16px 28px; background: var(--page); border-right: 1px solid var(--hair); }
   .m-view.on:not(.m-view-map) .m-screen { pointer-events: auto; }
   .m-view.pushed:not(.m-view-map) { transform: none; filter: none; }
   .m-lt { font-size: 24px; margin-top: 0; }
 
   /* Ficha: reemplaza la lista con un deslizamiento corto */
-  .m-detail { top: var(--head); right: auto; width: var(--side); padding-bottom: 28px; transform: translateX(-24px); opacity: 0; transition: transform .4s var(--ease), opacity .25s var(--ease), visibility 0s linear .4s; border-right: 1px solid var(--hair); box-shadow: none; }
+  .m-detail { top: var(--head); right: auto; width: var(--panel); padding-bottom: 28px; transform: translateX(-24px); opacity: 0; transition: transform .4s var(--ease), opacity .25s var(--ease), visibility 0s linear .4s; border-right: 1px solid var(--hair); box-shadow: none; }
   .m-detail.on { transform: none; opacity: 1; transition: transform .4s var(--ease), opacity .25s var(--ease); }
   .m-hero { padding-top: 14px; }
+
+  /* Lista plegable (nov 2026, pedido de Rafa para ver más mapa, p. ej. en la
+     pantalla del carro): botón de flechas en la barra superior. Plegada,
+     --side vale 0: el mapa ocupa todo el ancho y los paneles salen por la
+     izquierda (conservan su ancho para no aplastar el contenido). */
+  .m-dside { flex: none; width: 34px; height: 34px; margin-right: -6px; border: 0; border-radius: 10px; background: transparent; color: var(--ink2) !important; display: grid; place-items: center; cursor: pointer; }
+  .m-dside:hover { background: var(--ghost); color: var(--ink) !important; }
+  .m-dside svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .m-shell[data-side="hidden"] { --side: 0px; }
+  .m-mapwrap { transition: left .35s var(--ease), opacity .35s var(--ease); }
+  .m-route { transition: left .35s var(--ease); }
+  .m-list, .m-view:not(.m-view-map) .m-screen { transition: transform .35s var(--ease), opacity .35s var(--ease); }
+  .m-shell[data-side="hidden"] .m-list,
+  .m-shell[data-side="hidden"] .m-view:not(.m-view-map) .m-screen,
+  .m-shell[data-side="hidden"] .m-detail,
+  .m-shell[data-side="hidden"] .m-detail.on { transform: translateX(calc(-100% - 2px)); opacity: 0; pointer-events: none; }
 
   /* Hojas → ventanas centradas */
   .m-sheet { left: 50%; right: auto; top: 50%; bottom: auto; width: 440px; max-height: 80%; border-radius: 22px; padding: 18px 18px 20px;
