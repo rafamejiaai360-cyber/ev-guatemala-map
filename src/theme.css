@@ -125,6 +125,9 @@ html[data-theme="dark"] {
   --ev-card-sh: 0 0 0 .5px rgba(255, 255, 255, .06);
   color-scheme: dark;
 }
+/* #root tiene fondo y letra claros fijos en index.css (#fafafa / #111827):
+   eso dejaba blanco el fondo del panel y oscuro el título "EV Guatemala". */
+html[data-theme="dark"] #root { background: var(--ev-page); color: var(--ev-ink); }
 html[data-theme="dark"] :where(.bg-white) { background-color: var(--ev-surface); }
 html[data-theme="dark"] :where(.bg-gray-50, .bg-gray-100) { background-color: var(--ev-ghost); }
 html[data-theme="dark"] :where(.text-gray-700, .text-gray-900, .text-gray-800) { color: var(--ev-ink); }
