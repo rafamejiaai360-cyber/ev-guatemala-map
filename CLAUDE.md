@@ -859,8 +859,9 @@ lo "elegido" (pestañas, chips, botón negro) es gris `#48484a` en vez de
 blanco. Revisado con un script que compone capas y marca fondos claros o texto
 de poco contraste en todas las pantallas del mapa y pestañas del panel.
 
-**Lista plegable en computadora (3 nov 2026, rama `panel-plegable`, en
-prueba)**: Rafa lo pidió tras usar la vista de computadora en la pantalla del
+**Lista plegable en computadora (3 nov 2026, rama `panel-plegable`, probada
+por Rafa en la vista previa de la rama y publicada en prod el 3 nov 2026 con su
+visto bueno)**: Rafa lo pidió tras usar la vista de computadora en la pantalla del
 carro, para ver más mapa. Botón de flechas `.m-dside` a la izquierda del logo
 en la barra superior (solo >= 1024 px). Estado `sideHidden` en MobileShell
 (`localStorage.ev_side_hidden`); `sideFolded` = plegada Y sin ficha abierta Y
