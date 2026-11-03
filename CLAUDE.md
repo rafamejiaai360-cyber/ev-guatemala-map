@@ -859,6 +859,17 @@ lo "elegido" (pestañas, chips, botón negro) es gris `#48484a` en vez de
 blanco. Revisado con un script que compone capas y marca fondos claros o texto
 de poco contraste en todas las pantallas del mapa y pestañas del panel.
 
+**Lista plegable en computadora (3 nov 2026, rama `panel-plegable`, en
+prueba)**: Rafa lo pidió tras usar la vista de computadora en la pantalla del
+carro, para ver más mapa. Botón de flechas `.m-dside` a la izquierda del logo
+en la barra superior (solo >= 1024 px). Estado `sideHidden` en MobileShell
+(`localStorage.ev_side_hidden`); `sideFolded` = plegada Y sin ficha abierta Y
+en la pestaña Mapa: tocar un pin u otra pestaña muestran el panel mientras
+estén abiertos y al cerrarlos se pliega otra vez. CSS: `--panel` (400 px, ancho
+fijo de los paneles) y `--side` (0 al plegar; corre el mapa). Al cambiar se
+dispara `resize` a los 380 ms para que Leaflet recalcule su tamaño. Sin
+migración.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma

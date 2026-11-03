@@ -76,6 +76,14 @@ export default function MobileShell() {
     setStaleDismissed(true);
     try { sessionStorage.setItem('ev_stale_prompt', '1'); } catch { /* sin almacenamiento */ }
   }
+  // Computadora: lista de la izquierda plegable (se recuerda en este equipo).
+  const [sideHidden, setSideHiddenState] = useState(() => {
+    try { return localStorage.getItem('ev_side_hidden') === '1'; } catch { return false; }
+  });
+  function setSideHidden(hidden: boolean) {
+    setSideHiddenState(hidden);
+    try { localStorage.setItem('ev_side_hidden', hidden ? '1' : '0'); } catch { /* sin almacenamiento */ }
+  }
   const [query, setQuery] = useState('');
   const [showIdentity, setShowIdentity] = useState(false);
 
@@ -87,6 +95,16 @@ export default function MobileShell() {
   const shownDetailId = detailId ?? (isWide && tab === 'map' ? selectedStationId : null);
   const detailStation = shownDetailId ? byId.get(shownDetailId) ?? null : null;
   const backLabel = isWide && tab === 'map' ? 'Estaciones' : detailFrom;
+  // Con la lista plegada, una ficha (tocar un pin) u otra pestaña la vuelven a
+  // mostrar mientras estén abiertas; al cerrarlas, se pliega otra vez.
+  const sideFolded = isWide && sideHidden && !shownDetailId && tab === 'map';
+  // Leaflet no se entera solo de que su caja cambió de ancho: al terminar la
+  // animación se le avisa como si la ventana hubiera cambiado de tamaño.
+  useEffect(() => {
+    if (!isWide) return;
+    const t = window.setTimeout(() => window.dispatchEvent(new Event('resize')), 380);
+    return () => window.clearTimeout(t);
+  }, [isWide, sideFolded]);
   const peekStation = selectedStationId ? byId.get(selectedStationId) ?? null : null;
   const isAdmin = isAdminAuthenticated || currentUser?.role === 'admin';
 
@@ -216,7 +234,7 @@ export default function MobileShell() {
   }, [filteredStations, query, userLocation]);
 
   return (
-    <div className="m-shell" data-mode={mode}>
+    <div className="m-shell" data-mode={mode} data-side={sideFolded ? 'hidden' : 'shown'}>
       {/* Aviso del modo ruta: "Ver" vuelve al mapa con la estación marcada */}
       <RouteAlertCard
         alert={routeAlert}
@@ -397,6 +415,24 @@ export default function MobileShell() {
 
       {/* ---------- Barra superior (solo computadora) ---------- */}
       <header className="m-dtop">
+        <button
+          type="button"
+          className="m-dside"
+          aria-label={sideFolded ? 'Mostrar la lista' : 'Ocultar la lista y ver más mapa'}
+          aria-pressed={!sideFolded}
+          title={sideFolded ? 'Mostrar la lista' : 'Ocultar la lista'}
+          onClick={() => {
+            if (sideFolded) { setSideHidden(false); return; }
+            // Ocultar: también cierra la ficha o la pestaña que estuviera abierta.
+            setSideHidden(true);
+            if (shownDetailId) closeDetail();
+            if (tab !== 'map') goTab('map');
+          }}
+        >
+          {sideFolded
+            ? <svg viewBox="0 0 24 24"><path d="m6 7 5 5-5 5M13 7l5 5-5 5" /></svg>
+            : <svg viewBox="0 0 24 24"><path d="m18 7-5 5 5 5M11 7l-5 5 5 5" /></svg>}
+        </button>
         <div className="m-brand"><i>{Icon.bolt}</i>EV Guatemala</div>
         <nav className="m-dnav" role="tablist" aria-label="Secciones">
           <button type="button" role="tab" aria-selected={tab === 'map'} onClick={() => goTab('map')}>{Icon.map}Mapa</button>
