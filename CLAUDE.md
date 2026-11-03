@@ -839,7 +839,7 @@ arriba) con `navigator.share` (menú del teléfono: WhatsApp, etc.); sin él,
 copia al portapapeles ("Enlace copiado"). Residenciales: el enlace se
 comparte igual y quien lo abre ve la ubicación aproximada. Sin migración.
 
-**Modo oscuro (3 nov 2026, rama `modo-oscuro`, en staging)**: Rafa lo pidió
+**Modo oscuro (3 nov 2026, rama `modo-oscuro`, probado por Rafa en la vista previa de la rama y publicado en prod el 3 nov 2026 con su visto bueno)**: Rafa lo pidió
 tras usar la app de noche en el carro. Botón pequeño de luna/sol en los
 controles del mapa (`MobileMapTools` en `Map.tsx`, grupo `.m-tgroup-sm`).
 También en la barra del panel de admin (`ThemeToggle` en AdminPanel).
