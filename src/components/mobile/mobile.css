@@ -5,6 +5,7 @@
    resto de la app. */
 .m-shell {
   --ink: #1c1c1e;
+  --on-ink: #fff; /* texto sobre fondo --ink (cambia en modo oscuro) */
   --ink2: #74747a;
   --ink3: #aeaeb2;
   --hair: rgba(0, 0, 0, .08);
@@ -69,7 +70,7 @@
 .m-chips { position: absolute; top: calc(var(--top) + 86px); left: 0; right: 0; display: flex; gap: 6px; padding: 2px 14px 10px; overflow-x: auto; scrollbar-width: none; z-index: 19; }
 .m-chips::-webkit-scrollbar { display: none; }
 .m-chip { flex: none; font-size: 12.5px; font-weight: 500; border: 0; border-radius: 999px; height: 28px; padding: 0 11px; box-shadow: 0 0 0 1px var(--hair), 0 4px 10px -6px rgba(0, 0, 0, .2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background-color .3s var(--ease), color .3s var(--ease); white-space: nowrap; }
-.m-chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.m-chip[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
 .m-chip i { width: 7px; height: 7px; border-radius: 50%; }
 .m-chip .n { min-width: 16px; height: 16px; border-radius: 8px; background: var(--green); color: #fff; font-size: 10px; display: grid; place-items: center; padding: 0 4px; }
 .m-chip svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
@@ -117,7 +118,7 @@
 .m-route-txt b { font-weight: 650; }
 .m-route-radii { display: flex; gap: 3px; }
 .m-route-radii button { border: 0; border-radius: 10px; padding: 3px 7px; font-size: 11.5px; font-weight: 500; background: var(--ghost); cursor: pointer; }
-.m-route-radii button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.m-route-radii button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
 .m-route-center { border: 0; border-radius: 10px; padding: 3px 9px; font-size: 11.5px; font-weight: 600; background: var(--green); color: #fff; cursor: pointer; }
 .m-route-off { margin-left: auto; border: 0; background: transparent; color: var(--danger); font-size: 12px; font-weight: 600; cursor: pointer; padding: 3px 4px; }
 .m-route-hint { flex-basis: 100%; order: 9; margin: 4px 0 2px; font-size: 11.5px; line-height: 1.35; color: var(--ink2, #3c3c43); }
@@ -155,7 +156,7 @@
 .m-actions { display: flex; gap: 8px; margin-top: 12px; }
 .m-btn { font-size: 14px; font-weight: 600; letter-spacing: -.01em; height: 40px; border-radius: 20px; border: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px; transition: transform .2s var(--ease); text-decoration: none; }
 .m-btn svg { width: 14px; height: 14px; fill: currentColor; }
-.m-btn.primary { flex: 1; background: var(--ink); color: #fff; }
+.m-btn.primary { flex: 1; background: var(--ink); color: var(--on-ink); }
 .m-btn.ghost { background: var(--ghost); color: var(--ink); }
 .m-btn:active { transform: scale(.97); }
 
@@ -405,7 +406,7 @@
 .m-fp-vrow .chk svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .m-fp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .m-fp-chip { border: 0; height: 32px; padding: 0 13px; border-radius: 999px; background: var(--ghost); font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color .2s var(--ease), color .2s var(--ease); }
-.m-fp-chip[aria-pressed="true"] { background: var(--ink); color: #fff !important; }
+.m-fp-chip[aria-pressed="true"] { background: var(--ink); color: var(--on-ink) !important; }
 .m-fp-adapt-sum { margin: 10px 0 0; color: var(--green); font-weight: 500; }
 .m-fp-tag { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 13px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 13px; font-weight: 600; }
 .m-fp-tag small { font-size: 11px; font-weight: 500; opacity: .8; }
@@ -521,3 +522,61 @@
 .m-cardmap { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 12px; font-weight: 600; cursor: pointer; }
 .m-cardmap svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .m-card:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+/* ── Modo oscuro (nov 2026) ─────────────────────────────────────────────
+   Para manejar de noche: botón de luna en los controles del mapa
+   (MobileMapTools en Map.tsx), guardado en localStorage.ev_theme y aplicado
+   como html[data-theme="dark"] (index.html lo pone antes de pintar). Se
+   cambian las variables de color; abajo, lo que tenía blanco fijo. */
+.m-tgroup-sm .m-tbtn { width: 38px; height: 32px; }
+.m-tgroup-sm .m-tbtn svg { width: 15px; height: 15px; }
+html[data-theme="dark"] .m-shell {
+  --ink: #f2f2f7;
+  --on-ink: #fff;
+  --ink2: #a1a1a8;
+  --ink3: #6e6e74;
+  --hair: rgba(255, 255, 255, .1);
+  --page: #000;
+  --surface: #1c1c1e;
+  --glass: rgba(28, 28, 30, .86);
+  --green-soft: rgba(34, 197, 94, .18);
+  --blue: #60a5fa;
+  --blue-soft: rgba(59, 130, 246, .2);
+  --orange: #fb923c;
+  --orange-soft: rgba(249, 115, 22, .2);
+  --ghost: rgba(255, 255, 255, .09);
+  --danger: #ff453a;
+  --float-sh: 0 0 0 1px var(--hair), 0 10px 30px -10px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
+/* Mapa: mismas imágenes de OpenStreetMap invertidas a tonos oscuros y
+   atenuadas (los pines no se tocan: conservan sus colores). */
+html[data-theme="dark"] .ev-tiles { filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.78) contrast(.9); }
+html[data-theme="dark"] .ev-map-mobile .leaflet-container { background: #1a1b1e; }
+html[data-theme="dark"] .ev-map-mobile .leaflet-control-attribution { background: rgba(0, 0, 0, .55); color: #8e8e93; }
+html[data-theme="dark"] .ev-map-mobile .leaflet-control-attribution a { color: #a1a1a8; }
+html[data-theme="dark"] .m-tgroup { background: rgba(28, 28, 30, .88); }
+html[data-theme="dark"] .m-tbtn { color: var(--ink); }
+html[data-theme="dark"] .m-tbtn + .m-tbtn { border-top-color: rgba(255, 255, 255, .1); }
+html[data-theme="dark"] .m-tbtn:active { background: rgba(255, 255, 255, .08); }
+html[data-theme="dark"] .m-tbtn.on, html[data-theme="dark"] .m-compass.on { background: var(--green); color: #fff; }
+html[data-theme="dark"] .ev-cluster > span { background: #1c1c1e; color: #f2f2f7; }
+html[data-theme="dark"] .ev-pin-shape, html[data-theme="dark"] .ev-pin-dot { border-color: #1c1c1e; }
+html[data-theme="dark"] .m-pill.active, html[data-theme="dark"] .m-mine-ap.active { color: #4ade80; }
+html[data-theme="dark"] .m-pill.maintenance, html[data-theme="dark"] .m-pill.partial, html[data-theme="dark"] .m-mine-ap.pending { color: #fbbf24; }
+html[data-theme="dark"] .m-pill.offline, html[data-theme="dark"] .m-pill.closed, html[data-theme="dark"] .m-pill.gone, html[data-theme="dark"] .m-mine-ap.rejected { color: #ff6961; }
+html[data-theme="dark"] .m-admin { color: #fcd34d; background: rgba(245, 158, 11, .14); }
+html[data-theme="dark"] .m-fp-switch input { background: #3a3a3c; }
+html[data-theme="dark"] .m-scrim { background: rgba(0, 0, 0, .55); }
+html[data-theme="dark"] .m-mode::before, html[data-theme="dark"] .m-fp-seg button[aria-pressed="true"] { background: #3a3a3c; }
+/* Lo que en claro es negro con letra blanca (chip elegido, "Cómo llegar"…)
+   en oscuro es gris claro con letra blanca: nada queda blanco. */
+html[data-theme="dark"] .m-chip[aria-pressed="true"],
+html[data-theme="dark"] .m-route-radii button[aria-pressed="true"],
+html[data-theme="dark"] .m-btn.primary,
+html[data-theme="dark"] .m-fp-chip[aria-pressed="true"] { background: #48484a; }
+html[data-theme="dark"] .m-price strong, html[data-theme="dark"] .m-adapter b, html[data-theme="dark"] .m-tag.adapt,
+html[data-theme="dark"] .m-back, html[data-theme="dark"] .m-linkbtn, html[data-theme="dark"] .m-glist .r.accent,
+html[data-theme="dark"] .m-tab[aria-selected="true"] { color: #4ade80 !important; }
+html[data-theme="dark"] .m-join-mark.b { background: #2563eb; }
+html[data-theme="dark"] .m-avatar { color: #4ade80; }

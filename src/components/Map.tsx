@@ -518,7 +518,7 @@ function ZoomControls() {
 function MobileMapTools() {
   const map = useMap();
   const locate = useLocate();
-  const { routeMode, setRouteMode, setRouteFollow, headingUp, setHeadingUp, filters, setFilters, selectedVehicle, setSheetRequest } = useStore();
+  const { routeMode, setRouteMode, setRouteFollow, headingUp, setHeadingUp, filters, setFilters, selectedVehicle, setSheetRequest, darkMode, setDarkMode } = useStore();
   const bearing = useMapBearing();
   // Enchufe = "Filtrar por mi auto". Sin auto (o con ficha sin conectores
   // confirmados) no hay nada que filtrar: abre "Filtros" para elegirlo.
@@ -565,6 +565,21 @@ function MobileMapTools() {
           onClick={() => { if (vehicleReady) setFilters({ vehicleFilter: !byVehicle }); else setSheetRequest('filters'); }}
         >
           <svg viewBox="0 0 24 24"><path d="M9 3v4.5M15 3v4.5" /><path d="M6.5 7.5h11v3.5a5.5 5.5 0 0 1-11 0z" /><path d="M12 16.5V21" /></svg>
+        </button>
+      </div>
+      {/* Modo oscuro: botón pequeño de luna/sol, para manejar de noche. */}
+      <div className="m-tgroup m-glass m-tgroup-sm">
+        <button
+          type="button"
+          className="m-tbtn"
+          aria-label={darkMode ? 'Pasar a modo claro' : 'Pasar a modo oscuro'}
+          aria-pressed={darkMode}
+          title={darkMode ? 'Modo claro' : 'Modo oscuro'}
+          onClick={() => setDarkMode(!darkMode)}
+        >
+          {darkMode
+            ? <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>
+            : <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>}
         </button>
       </div>
       {/* Brújula: en modo ruta alterna "girar con mi dirección" / "norte

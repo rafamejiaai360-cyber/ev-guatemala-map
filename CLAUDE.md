@@ -839,6 +839,26 @@ arriba) con `navigator.share` (menú del teléfono: WhatsApp, etc.); sin él,
 copia al portapapeles ("Enlace copiado"). Residenciales: el enlace se
 comparte igual y quien lo abre ve la ubicación aproximada. Sin migración.
 
+**Modo oscuro (3 nov 2026, rama `modo-oscuro`, probado por Rafa en la vista previa de la rama y publicado en prod el 3 nov 2026 con su visto bueno)**: Rafa lo pidió
+tras usar la app de noche en el carro. Botón pequeño de luna/sol en los
+controles del mapa (`MobileMapTools` en `Map.tsx`, grupo `.m-tgroup-sm`).
+También en la barra del panel de admin (`ThemeToggle` en AdminPanel).
+Store `darkMode` → `localStorage.ev_theme` y `html[data-theme="dark"]`; un
+script en `index.html` lo aplica antes de pintar (sin parpadeo blanco) y
+cambia `meta theme-color`. Colores: variables de `.m-shell` redefinidas al
+final de `mobile.css` (nueva `--on-ink` = texto sobre fondo `--ink`) y de
+`--ev-*` al final de `theme.css` (ventanas de Tailwind). Mapa base: el mismo
+OSM invertido y atenuado (`.ev-tiles`); los pines conservan sus colores. Solo
+en el teléfono, sin cuenta ni servidor. Sin migración.
+Segunda pasada (mismo día, Rafa vio blanco en el panel): `index.css` pone
+`#fafafa` fijo en html/body/#root y se carga DESPUÉS de `theme.css`, así que
+ganaba — al bajar aparecía blanco. `theme.css` ahora traduce a oscuro todas
+las clases claras de Tailwind (fondos, textos y bordes, también los de
+color), las etiquetas de estado del panel usan `var(--st-ok|warn|bad|gone)`, y
+lo "elegido" (pestañas, chips, botón negro) es gris `#48484a` en vez de
+blanco. Revisado con un script que compone capas y marca fondos claros o texto
+de poco contraste en todas las pantallas del mapa y pestañas del panel.
+
 **Hallazgo (no introducido por este cambio, documentado tal cual se encontró
 14 jul 2026)**: `Header.tsx` solo muestra el botón "Agregar/Proponer estación"
 a usuarios con sesión (admin o normal) — un visitante anónimo no tiene forma
