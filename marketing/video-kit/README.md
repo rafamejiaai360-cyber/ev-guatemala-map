@@ -53,6 +53,14 @@ salen solos.
 }
 ```
 
+- **Pantalla horizontal** (vista de computadora / pantalla del carro, añadido
+  4 nov 2026): `{ "type": "wide", "shot": "img/escritorio.png", "shot2":
+  "img/otra.png", "swapAt": 2.7, ... }`. Captura de 1280 × 720 a densidad 2
+  (2560 × 1440); mismo borde fino, título, cámara, `highlights`, `taps`,
+  `pulses` y `badge` que el teléfono, con coordenadas de esa captura. `shot2`
+  (opcional) reemplaza a `shot` con un fundido en `swapAt`. Escala ≈ 0,385 =
+  la pantalla completa a 1000 px de ancho. Ejemplo: `videos/modo-oscuro`.
+- Escena `"type": "text"`: solo título centrado (p. ej. "Próximamente…").
 - Tiempos (`t`, `t0`, `t1`) en segundos desde el inicio de la escena.
 - Sonidos de `overlays.sound`: `success`, `notify`, `pop`, `swish`. Los
   cambios de escena, toques y pulsos ya tienen su sonido automático.
