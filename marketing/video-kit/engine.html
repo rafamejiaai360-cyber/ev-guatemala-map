@@ -36,6 +36,12 @@
   #screen { position: relative; width: 1170px; height: 2532px; border-radius: 132px; overflow: hidden; background: #fff; }
   #screen > * { position: absolute; }
   .shot { left: 0; top: 0; width: 1170px; height: 2532px; }
+  /* Pantalla horizontal (vista de computadora / pantalla del carro): mismo borde fino que el teléfono */
+  #wide { left: 0; top: 0; transform-origin: 0 0; border-radius: 52px; background: #161718; padding: 18px;
+    box-shadow: 0 0 0 3px #2a2b2d, 0 80px 160px rgba(0,0,0,.55); z-index: 10; }
+  #wscreen { position: relative; width: 2560px; height: 1440px; border-radius: 36px; overflow: hidden; background: #000; }
+  #wscreen > * { position: absolute; }
+  .wshot { left: 0; top: 0; width: 2560px; height: 1440px; }
   .ov { left: 0; top: 0; z-index: 5; }
   .hl { z-index: 6; border: 9px solid var(--green); border-radius: 44px; box-shadow: 0 0 0 10px rgba(34,197,94,.22), 0 0 60px rgba(34,197,94,.55); }
   .rip { z-index: 7; width: 150px; height: 150px; margin: -75px 0 0 -75px; border-radius: 50%; border: 8px solid var(--green); }
@@ -67,6 +73,7 @@
   <svg id="car" class="abs" viewBox="0 0 1080 1920"></svg>
   <div id="dots"></div>
   <div class="abs" id="phone"><div id="screen"></div></div>
+  <div class="abs" id="wide"><div id="wscreen"></div></div>
   <div class="abs" id="topfade"></div>
   <div class="abs" id="badge"></div>
   <div class="abs" id="title"></div>
@@ -90,6 +97,10 @@ function vis(el, o) { el.style.opacity = o; el.style.visibility = o <= .001 ? 'h
 
 const V = window.VIDEO;
 const SW = 1170, SH = 2532, BEZ = 26;
+// Escenas "wide": captura horizontal de 2560 × 1440 (1280 × 720 a densidad 2)
+const WW = 2560, WH = 1440, WBEZ = 18;
+const isWide = (s) => s && s.type === 'wide';
+const hostOf = (s) => (isWide(s) ? $('wscreen') : $('screen'));
 const TRANS = 0.6;           // segundos de transición de cámara entre escenas
 document.getElementById('videoCss').textContent = V.css || '';
 
@@ -101,21 +112,28 @@ const sceneAt = (t) => SCENES.find((s) => t < s.start + s.dur) || SCENES[SCENES.
 
 // ---- Pantallas (capturas) del teléfono ----
 const shots = {};
-for (const s of SCENES) if (s.shot && !shots[s.shot]) {
+for (const s of SCENES) if (s.shot && !shots[s.shot] && !isWide(s)) {
   const img = document.createElement('img'); img.className = 'shot'; img.src = V.base + s.shot; img.style.opacity = 0;
   $('screen').appendChild(img); shots[s.shot] = img;
 }
+// Capturas horizontales: "shot" y, opcional, "shot2" que la reemplaza con un fundido en "swapAt" (s)
+const wshots = {};
+for (const s of SCENES) if (isWide(s)) for (const name of [s.shot, s.shot2]) if (name && !wshots[name]) {
+  const img = document.createElement('img'); img.className = 'wshot'; img.src = V.base + name; img.style.opacity = 0;
+  $('wscreen').appendChild(img); wshots[name] = img;
+}
+const wideShotAt = (s, tau) => (s.shot2 && tau >= (s.swapAt ?? 0) ? s.shot2 : s.shot);
 // ---- Capas por escena: overlays, resaltados, toques, pulsos ----
 for (const s of SCENES) {
   s._ov = (s.overlays || []).map((o) => {
     const el = document.createElement('div'); el.className = 'ov';
     el.innerHTML = o.html;
     Object.assign(el.style, { left: (o.x || 0) + 'px', top: (o.y || 0) + 'px', width: (o.w || SW) + 'px', height: o.h ? o.h + 'px' : 'auto' });
-    $('screen').appendChild(el); return { o, el };
+    hostOf(s).appendChild(el); return { o, el };
   });
-  s._hl = (s.highlights || []).map((h) => { const el = document.createElement('div'); el.className = 'hl'; Object.assign(el.style, { left: h.x + 'px', top: h.y + 'px', width: h.w + 'px', height: h.h + 'px', borderRadius: (h.r ?? 44) + 'px' }); $('screen').appendChild(el); return { h, el }; });
-  s._tap = (s.taps || []).map((k) => { const el = document.createElement('div'); el.className = 'rip'; el.style.left = k.x + 'px'; el.style.top = k.y + 'px'; $('screen').appendChild(el); return { k, el }; });
-  s._pu = (s.pulses || []).map((k) => { const a = document.createElement('div'), b = document.createElement('div'); a.className = b.className = 'pulse'; [a, b].forEach((e) => { e.style.left = k.x + 'px'; e.style.top = k.y + 'px'; if (k.color) e.style.borderColor = k.color; $('screen').appendChild(e); }); return { k, els: [a, b] }; });
+  s._hl = (s.highlights || []).map((h) => { const el = document.createElement('div'); el.className = 'hl'; Object.assign(el.style, { left: h.x + 'px', top: h.y + 'px', width: h.w + 'px', height: h.h + 'px', borderRadius: (h.r ?? 44) + 'px' }); hostOf(s).appendChild(el); return { h, el }; });
+  s._tap = (s.taps || []).map((k) => { const el = document.createElement('div'); el.className = 'rip'; el.style.left = k.x + 'px'; el.style.top = k.y + 'px'; hostOf(s).appendChild(el); return { k, el }; });
+  s._pu = (s.pulses || []).map((k) => { const a = document.createElement('div'), b = document.createElement('div'); a.className = b.className = 'pulse'; [a, b].forEach((e) => { e.style.left = k.x + 'px'; e.style.top = k.y + 'px'; if (k.color) e.style.borderColor = k.color; hostOf(s).appendChild(e); }); return { k, els: [a, b] }; });
 }
 
 // ---- Títulos ----
@@ -180,7 +198,7 @@ window.TOTAL = TOTAL;
 window.CUES = [];
 for (const s of SCENES) {
   if (s.i > 0) CUES.push({ t: s.start - 0.25, type: 'whoosh' });
-  CUES.push({ t: s.start, type: 'section', kind: s.type });
+  CUES.push({ t: s.start, type: 'section', kind: isWide(s) ? 'phone' : s.type });
   (s.taps || []).forEach((k) => CUES.push({ t: s.start + k.t, type: 'tap' }));
   (s.overlays || []).forEach((o) => { if (o.anim === 'up' || o.anim === 'left') CUES.push({ t: s.start + o.t0, type: 'swish' }); if (o.anim === 'pop') CUES.push({ t: s.start + o.t0, type: 'pop' }); if (o.sound) CUES.push({ t: s.start + o.t0, type: o.sound }); });
   (s.pulses || []).forEach((k) => CUES.push({ t: s.start + k.t0, type: 'boop' }));
@@ -222,7 +240,29 @@ window.seek = function (T) {
   const y = cam.at[1] - (BEZ + cam.fy * SH) * sc + (1 - inK) * 700 + outPh * 500;
   ph.style.transform = `translate(${x}px, ${y}px) scale(${sc})`;
   vis(ph, hasPhone(s) ? inK : 1 - outPh);
-  vis($('topfade'), clamp((470 - y) / 160) * (hasPhone(s) ? 1 : 1 - outPh));
+  let fadeK = clamp((470 - y) / 160) * (hasPhone(s) ? 1 : 1 - outPh);
+
+  // Pantalla horizontal + cámara (mismo sistema: el punto (fx,fy) de la captura queda en at con escala s)
+  const wd = $('wide');
+  const inW = isWide(s) ? (isWide(prev) ? 1 : eo5(p(tau, 0, .9))) : 0;
+  const outW = isWide(s) ? 0 : (isWide(prev) ? eo(p(tau, 0, .5)) : 1);
+  let wcam = isWide(s) ? camOf(s, tau) : (isWide(prev) ? camOf(prev, prev.dur) : DEF);
+  if (isWide(s) && isWide(prev) && tau < TRANS) wcam = mix(camOf(prev, prev.dur), wcam, eio(tau / TRANS));
+  const wx = wcam.at[0] - (WBEZ + wcam.fx * WW) * wcam.s;
+  const wy = wcam.at[1] - (WBEZ + wcam.fy * WH) * wcam.s + (1 - inW) * 700 + outW * 500;
+  wd.style.transform = `translate(${wx}px, ${wy}px) scale(${wcam.s})`;
+  vis(wd, isWide(s) ? inW : 1 - outW);
+  fadeK = Math.max(fadeK, clamp((470 - wy) / 160) * (isWide(s) ? 1 : 1 - outW));
+  vis($('topfade'), fadeK);
+  const wCur = isWide(s) ? wideShotAt(s, tau) : (isWide(prev) ? wideShotAt(prev, prev.dur) : null);
+  const wPrev = isWide(s) && s.shot2 && tau >= (s.swapAt ?? 0) ? s.shot : (isWide(prev) ? wideShotAt(prev, prev.dur) : null);
+  const wFrom = isWide(s) && s.shot2 && tau >= (s.swapAt ?? 0) ? (s.swapAt ?? 0) : 0;
+  for (const [name, img] of Object.entries(wshots)) {
+    let o = 0;
+    if (name === wCur) o = isWide(s) && wPrev && wPrev !== wCur ? eo(p(tau, wFrom, wFrom + .45)) : 1;
+    else if (name === wPrev && isWide(s)) o = 1;
+    img.style.opacity = o; img.style.zIndex = name === wCur ? 2 : 1;
+  }
 
   // Captura visible (fundido si cambia)
   const curShot = hasPhone(s) ? s.shot : prev?.shot;
@@ -258,10 +298,10 @@ window.seek = function (T) {
 
   // Etiqueta sobre el teléfono
   const b = $('badge');
-  if (s.badge && hasPhone(s)) {
+  if (s.badge && (hasPhone(s) || isWide(s))) {
     b.innerHTML = `<i>${s.badge.icon || '●'}</i>${s.badge.text}`;
     const k = Math.min(eo(p(tau, s.badge.t0 ?? .4, (s.badge.t0 ?? .4) + .4)), 1 - eo(p(tau, s.dur - .3, s.dur)));
-    b.style.top = Math.max(y - 92, 430) + 'px'; b.style.transform = `translateX(-50%) translateY(${(1 - k) * 12}px)`; vis(b, k);
+    b.style.top = Math.max((isWide(s) ? wy : y) - 92, 430) + 'px'; b.style.transform = `translateX(-50%) translateY(${(1 - k) * 12}px)`; vis(b, k);
   } else vis(b, 0);
 
   // Gancho con carro
