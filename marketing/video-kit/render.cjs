@@ -14,6 +14,7 @@ const path = require('path');
 const KIT = __dirname;
 const dir = path.resolve(process.argv[2] || '');
 const preview = process.argv.includes('--preview');
+const audioOnly = process.argv.includes('--audio'); // solo la mezcla de audio → audio.wav (para revisar rápido)
 const FPS = 30;
 if (!fs.existsSync(path.join(dir, 'video.json'))) { console.error('Falta video.json en', dir); process.exit(1); }
 const video = JSON.parse(fs.readFileSync(path.join(dir, 'video.json'), 'utf8'));
@@ -52,7 +53,7 @@ const name = video.name || path.basename(dir);
   }
 
   const frames = fs.mkdtempSync(path.join(os.tmpdir(), 'evframes-'));
-  const n = Math.round(total * FPS);
+  const n = audioOnly ? 0 : Math.round(total * FPS);
   for (let i = 0; i < n; i++) {
     await page.evaluate((x) => window.seek(x), i / FPS);
     await page.screenshot({ path: path.join(frames, `f${String(i).padStart(5, '0')}.jpg`), type: 'jpeg', quality: 92 });
@@ -63,12 +64,23 @@ const name = video.name || path.basename(dir);
   const cuesFile = path.join(frames, 'cues.json');
   fs.writeFileSync(cuesFile, JSON.stringify({ total, cues }));
   const wav = path.join(frames, 'audio.wav');
-  execFileSync('python3', ['-I', path.join(KIT, 'audio.py'), cuesFile, wav], { stdio: 'inherit' });
+  if (video.audio) {
+    // Voz/música/efectos externos (p. ej. ElevenLabs): ver README, sección "Audio externo"
+    execFileSync('python3', ['-I', path.join(KIT, 'mix.py'), cuesFile, path.join(dir, 'video.json'), dir, wav], { stdio: 'inherit' });
+  } else {
+    execFileSync('python3', ['-I', path.join(KIT, 'audio.py'), cuesFile, wav], { stdio: 'inherit' });
+  }
 
+  if (audioOnly) {
+    const aw = path.join(dir, 'audio.wav');
+    execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', wav, '-af', 'loudnorm=I=-15:TP=-1.5:LRA=11', '-ar', '48000', aw]);
+    fs.rmSync(frames, { recursive: true, force: true });
+    console.log('Audio:', aw); return;
+  }
   const out = path.join(dir, `${name}.mp4`);
   execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-framerate', String(FPS), '-i', path.join(frames, 'f%05d.jpg'), '-i', wav,
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-preset', 'medium',
-    '-af', 'loudnorm=I=-15:TP=-1.5:LRA=7', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-shortest', '-movflags', '+faststart', out]);
+    '-af', `loudnorm=I=-15:TP=-1.5:LRA=${video.audio ? 11 : 7}`, '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-shortest', '-movflags', '+faststart', out]);
   fs.rmSync(frames, { recursive: true, force: true });
   console.log('Listo:', out);
 })();

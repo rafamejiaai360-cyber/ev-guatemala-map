@@ -37,6 +37,16 @@ música electrónica pareja sin voz. Guía completa:
 Skill del proyecto: `.claude/skills/videos-marca`. Nada de confeti ni efectos
 llamativos (Rafa los pidió quitar: "restan elegancia"). Los MP4 no se suben al
 repo; se le mandan a Rafa y él los publica.
+**Variante con voz (14 nov 2026)**: a pedido de Rafa, un video puede llevar
+voz narrada + música + efectos de **ElevenLabs** (conector MCP) en lugar del
+audio sintetizado: bloque `"audio"` en `video.json` → `video-kit/mix.py`
+(ver README del kit, "Audio externo"). Primer video:
+`marketing/videos/unete-y-resena` (voz "Fernando", `eleven_v4`). Los audios
+quedan en `<video>/audio/` (sí van al repo). Para bajar los audios generados
+hace falta que la red del entorno permita `elevenlabsusercontent.com` (se
+agregó al entorno "Predeterminado" ese día). Plan de Rafa en ElevenLabs:
+Starter (40 000 créditos/mes); este video gastó ≈ 4 400 (voz 2 tomas ≈ 1 330,
+música 4 tomas = 3 000, efectos ≈ 80) — pedir 1 toma de música si sobra.
 
 ## Stack
 

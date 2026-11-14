@@ -59,10 +59,40 @@ salen solos.
 - Medir coordenadas: abrir la captura y multiplicar lo que se ve por el
   factor (las capturas son de 1170 px de ancho).
 
+## Audio externo: voz narrada, música y efectos (ElevenLabs)
+
+Opcional (14 nov 2026, primer uso: `videos/unete-y-resena`). Si `video.json`
+trae un bloque `"audio"`, `render.cjs` usa `mix.py` en lugar de `audio.py`:
+
+```jsonc
+"audio": {
+  "voice": { "file": "audio/voz.mp3" },              // toda la locución en un archivo
+  "music": { "file": "audio/musica.mp3", "gain": -4, "duck": -7 },  // dB; baja sola bajo la voz
+  "sfx": { "whoosh": "audio/transicion.mp3",          // cambio de escena
+           "tap": "audio/toque.mp3", "success": "audio/confirmacion.mp3",
+           "chime": { "file": "audio/logo.mp3", "gain": 5 },        // cierre
+           "stars": "audio/estrellas.mp3" }           // nombre libre, para "sfx" de escena
+}
+```
+
+- En cada escena: `"vo": [desde, hasta]` = el trozo de la locución (segundos
+  dentro de `voz.mp3`) y `"voAt"` = cuándo empieza dentro de la escena. La
+  duración de la escena se ajusta a su frase (frase + ≈ 0,6 s).
+- Para cortar bien las frases: generar la voz en una sola toma (una frase por
+  línea con `[pause]`) y sacar los tiempos con la transcripción de ElevenLabs
+  (`creative_transcribe_audio`, da inicio/fin por palabra) o con
+  `ffmpeg -af silencedetect=noise=-38dB:d=0.25`.
+- Efectos propios de una escena: `"sfx": [{ "t": 2.2, "name": "stars" }]`.
+- `node render.cjs <carpeta> --audio` → solo `audio.wav` en segundos, para
+  revisar la mezcla antes de renderizar todo.
+- Los audios generados van en `<carpeta>/audio/` (sí se suben al repo, para
+  poder volver a renderizar); el MP4 no.
+
 ## Archivos
 
 - `engine.html`: motor de animación (no se toca para cada video).
 - `audio.py`: música y efectos sintetizados a partir de lo que pasa en pantalla.
+- `mix.py`: mezcla voz + música + efectos externos (cuando hay bloque `audio`).
 - `render.cjs`: arma cuadros + audio y entrega el MP4 a −15 LUFS.
 
 Requiere Chromium + Playwright, ffmpeg y python3 con numpy (presentes en el
