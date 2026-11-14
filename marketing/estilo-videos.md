@@ -91,6 +91,20 @@ colores). El naranja/azul solo aparecen porque están dentro de la app
 - Toda la música y los efectos se sintetizan en `audio.py`: sin pistas de
   terceros, sin problemas de derechos.
 
+### Variante con voz narrada (14 nov 2026, pedido de Rafa)
+
+Para promos que invitan a la acción (registrarse, dejar reseñas) se puede
+usar locución + música + efectos de **ElevenLabs** en lugar del audio
+sintetizado. Primer video: `videos/unete-y-resena`.
+- Voz: "Fernando – Energetic Latin Commercial" (español latino, enérgico),
+  modelo `eleven_v4`, frases cortas en segunda persona, la misma idea que el
+  título de la escena. El dominio se dice "movilidad eléctrica GT punto com".
+- Música: electrónica oscura y limpia, sin voz (Music v2.5, instrumental);
+  baja sola cuando habla el narrador.
+- Efectos: transición, toque, confirmación, estrellas y logo (Sound Effects
+  v2). Sin confeti ni efectos llamativos, igual que siempre.
+- Lo visual no cambia: mismos colores, letra, teléfono y cierre.
+
 ## Imágenes fijas (portadas, publicaciones)
 
 Mismos colores, letra y cierre. Para una portada: título del video en 2

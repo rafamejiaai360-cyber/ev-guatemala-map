@@ -22,6 +22,8 @@ sus videos de referencia ("modo ruta" y "¿dónde cargo?"). No improvisar otro.
 5. Mandarle el MP4 a Rafa con SendUserFile. **No publicarlo en ningún
    lado**: él lo sube. El MP4 no se guarda en el repositorio (.gitignore).
 6. Dominio siempre **www.movilidadelectricagt.com**.
+7. Si Rafa pide voz narrada / ElevenLabs: seguir "Variante con voz" de la
+   guía y "Audio externo" del README del kit (`unete-y-resena` de ejemplo).
 
 Si Rafa pide cambiar el estilo de forma permanente, actualizar la guía y el
 kit (no solo un video) y anotarlo en la guía con la fecha.

@@ -1,0 +1,154 @@
+{
+  "name": "unete-y-resena",
+  "about": "Promo 14 nov 2026: invitar a registrarse y a dejar reseñas, mostrando que la app es completa. Voz (Fernando, eleven_v4), música (Music v2.5, toma 4) y efectos (Sound Effects v2) de ElevenLabs, flujo 'EV Guatemala · Video únete y reseña'. Capturas reales de la app (vite preview + semilla); la reseña es de demostración.",
+  "audio": {
+    "voice": { "file": "audio/voz.mp3" },
+    "music": { "file": "audio/musica.mp3", "gain": -4, "duck": -7, "fadeOut": 1.8 },
+    "sfx": {
+      "whoosh": { "file": "audio/transicion.mp3", "gain": -3 },
+      "swish": { "file": "audio/transicion.mp3", "gain": -7 },
+      "tap": { "file": "audio/toque.mp3", "gain": 2 },
+      "pop": { "file": "audio/toque.mp3", "gain": -4 },
+      "success": "audio/confirmacion.mp3",
+      "notify": "audio/confirmacion.mp3",
+      "stars": { "file": "audio/estrellas.mp3", "gain": 2 },
+      "chime": { "file": "audio/logo.mp3", "gain": 5 }
+    }
+  },
+  "css": ".dim{position:absolute;inset:0;width:1170px;height:2532px;background:rgba(0,0,0,.45)} .feat{display:flex;flex-direction:column;align-items:center;gap:44px} .fp{display:flex;align-items:center;gap:26px;padding:30px 54px;border-radius:999px;background:rgba(17,24,20,.94);color:#fff;font-size:58px;font-weight:700;white-space:nowrap;box-shadow:0 0 0 3px rgba(34,197,94,.35),0 16px 40px rgba(0,0,0,.35)} .fp i{color:#22c55e;font-style:normal;font-size:60px} .cov{position:absolute;width:46px;height:46px;background:#f0fdf4;display:grid;place-items:center} .cov svg{width:38px;height:38px}",
+  "scenes": [
+    {
+      "type": "hook", "dur": 3.2, "car": { "battery": 0.6 },
+      "title": "¿Manejas eléctrico\n*en Guatemala?*",
+      "vo": [0.0, 2.05], "voAt": 0.35
+    },
+    {
+      "type": "phone", "dur": 5.6, "shot": "img/mapa.png",
+      "title": "Todas las estaciones,\n*en un solo mapa.*",
+      "vo": [2.35, 7.25], "voAt": 0.35,
+      "badge": { "icon": "●", "text": "Públicas · Semi-públicas · Residenciales", "t0": 2.4 },
+      "cam": [
+        { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
+        { "t": 1.6, "s": 0.86, "fx": 0.42, "fy": 0.54, "at": [540, 1250] },
+        { "t": 5.6, "s": 0.9, "fx": 0.42, "fy": 0.54, "at": [540, 1250] }
+      ],
+      "pulses": [
+        { "t0": 1.4, "x": 285, "y": 1155 },
+        { "t0": 1.7, "x": 438, "y": 1125 },
+        { "t0": 2.0, "x": 315, "y": 1443 },
+        { "t0": 2.3, "x": 861, "y": 1374, "color": "#f97316" },
+        { "t0": 2.6, "x": 822, "y": 1575 },
+        { "t0": 2.9, "x": 333, "y": 1716 }
+      ]
+    },
+    {
+      "type": "phone", "dur": 3.7, "shot": "img/filtros.png",
+      "title": "Elige tu carro.\n*Solo las que te sirven.*",
+      "vo": [7.3, 10.3], "voAt": 0.3,
+      "badge": { "icon": "⚡", "text": "Nissan Leaf · 14 estaciones", "t0": 2.9 },
+      "cam": [
+        { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
+        { "t": 1.5, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
+        { "t": 2.3, "s": 0.7, "fx": 0.5, "fy": 0.62, "at": [540, 1250] }
+      ],
+      "highlights": [
+        { "t0": 0.5, "t1": 1.6, "x": 90, "y": 888, "w": 990, "h": 132, "r": 40 },
+        { "t0": 2.2, "t1": 3.5, "x": 315, "y": 2331, "w": 807, "h": 129, "r": 64 }
+      ],
+      "taps": [ { "t": 1.0, "x": 978, "y": 954 }, { "t": 2.9, "x": 720, "y": 2395 } ]
+    },
+    {
+      "type": "phone", "dur": 4.3, "shot": "img/ruta.png",
+      "title": "Te avisa cuando\n*tienes una cerca.*",
+      "vo": [10.35, 14.05], "voAt": 0.3,
+      "badge": { "icon": "◉", "text": "Modo ruta encendido", "t0": 0.4 },
+      "cam": [
+        { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
+        { "t": 1.6, "s": 0.82, "fx": 0.5, "fy": 0.2, "at": [540, 860] }
+      ],
+      "highlights": [ { "t0": 1.0, "x": 36, "y": 165, "w": 1098, "h": 231, "r": 60 } ],
+      "pulses": [
+        { "t0": 0.3, "x": 582, "y": 1266, "color": "#0a84ff" },
+        { "t0": 1.3, "x": 405, "y": 954 }
+      ],
+      "sfx": [ { "t": 1.0, "name": "notify" } ]
+    },
+    {
+      "type": "phone", "dur": 4.5, "shot": "img/ficha.png",
+      "title": "Conectores, potencia\n*y cómo llegar.*",
+      "vo": [14.1, 18.05], "voAt": 0.3,
+      "cam": [
+        { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
+        { "t": 1.4, "s": 0.7, "fx": 0.5, "fy": 0.13, "at": [540, 700] }
+      ],
+      "highlights": [
+        { "t0": 0.5, "t1": 1.5, "x": 42, "y": 1596, "w": 1086, "h": 489, "r": 60 },
+        { "t0": 1.5, "t1": 2.4, "x": 54, "y": 717, "w": 1062, "h": 126, "r": 40 }
+      ],
+      "overlays": [
+        { "t0": 2.35, "anim": "fade", "html": "<div class='dim'></div>" },
+        { "t0": 2.45, "anim": "pop", "x": 0, "y": 760, "w": 1170, "html": "<div class='feat'><div class='fp'><i>★</i>Guarda tus favoritas</div></div>" },
+        { "t0": 2.7, "anim": "pop", "x": 0, "y": 1010, "w": 1170, "html": "<div class='feat'><div class='fp'><i>↗</i>Comparte estaciones</div></div>" },
+        { "t0": 2.95, "anim": "pop", "x": 0, "y": 1260, "w": 1170, "html": "<div class='feat'><div class='fp'><i>✓</i>Reporta en un toque</div></div>" },
+        { "t0": 3.2, "anim": "pop", "x": 0, "y": 1510, "w": 1170, "html": "<div class='feat'><div class='fp'><i>☾</i>Modo oscuro</div></div>" }
+      ]
+    },
+    {
+      "type": "text", "dur": 4.3,
+      "title": "Lo mejor lo hacemos\n*entre todos.*",
+      "stagger": 0.11,
+      "vo": [18.1, 21.7], "voAt": 0.35
+    },
+    {
+      "type": "phone", "dur": 5.3, "shot": "img/resena-llena.png",
+      "title": "¿Ya cargaste?\n*Deja tu reseña.*",
+      "vo": [21.75, 26.45], "voAt": 0.3,
+      "cam": [
+        { "t": 0, "s": 0.66, "fx": 0.5, "fy": 0.52, "at": [540, 1150] },
+        { "t": 1.4, "s": 1.0, "fx": 0.5, "fy": 0.64, "at": [540, 1150] }
+      ],
+      "overlays": [
+        { "t0": 0, "t1": 2.35, "inDur": 0.01, "anim": "fade", "x": 128, "y": 1452, "w": 46, "h": 46, "html": "<div class='cov'><svg viewBox='0 0 24 24' fill='none' stroke='#d1d5db' stroke-width='1.5'><polygon points='12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26'/></svg></div>" },
+        { "t0": 0, "t1": 2.45, "inDur": 0.01, "anim": "fade", "x": 176, "y": 1452, "w": 46, "h": 46, "html": "<div class='cov'><svg viewBox='0 0 24 24' fill='none' stroke='#d1d5db' stroke-width='1.5'><polygon points='12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26'/></svg></div>" },
+        { "t0": 0, "t1": 2.55, "inDur": 0.01, "anim": "fade", "x": 224, "y": 1452, "w": 46, "h": 46, "html": "<div class='cov'><svg viewBox='0 0 24 24' fill='none' stroke='#d1d5db' stroke-width='1.5'><polygon points='12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26'/></svg></div>" },
+        { "t0": 0, "t1": 2.65, "inDur": 0.01, "anim": "fade", "x": 272, "y": 1452, "w": 46, "h": 46, "html": "<div class='cov'><svg viewBox='0 0 24 24' fill='none' stroke='#d1d5db' stroke-width='1.5'><polygon points='12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26'/></svg></div>" },
+        { "t0": 0, "t1": 2.75, "inDur": 0.01, "anim": "fade", "x": 320, "y": 1452, "w": 46, "h": 46, "html": "<div class='cov'><svg viewBox='0 0 24 24' fill='none' stroke='#d1d5db' stroke-width='1.5'><polygon points='12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26'/></svg></div>" }
+      ],
+      "highlights": [
+        { "t0": 1.5, "t1": 2.9, "x": 112, "y": 1440, "w": 270, "h": 70, "r": 24 },
+        { "t0": 3.0, "t1": 4.1, "x": 120, "y": 1530, "w": 930, "h": 195, "r": 36 },
+        { "t0": 4.1, "x": 120, "y": 1888, "w": 680, "h": 94, "r": 47 }
+      ],
+      "taps": [ { "t": 2.0, "x": 341, "y": 1475 }, { "t": 4.75, "x": 460, "y": 1935 } ],
+      "sfx": [ { "t": 2.25, "name": "stars" } ]
+    },
+    {
+      "type": "phone", "dur": 3.5, "shot": "img/resena-publicada.png",
+      "title": "Tu reseña ayuda\n*al próximo conductor.*",
+      "vo": [26.5, 29.35], "voAt": 0.3,
+      "badge": { "icon": "★", "text": "Reseña publicada", "t0": 0.6 },
+      "cam": [ { "t": 0, "s": 0.9, "fx": 0.5, "fy": 0.82, "at": [540, 1300] } ],
+      "highlights": [ { "t0": 0.5, "x": 42, "y": 1950, "w": 1086, "h": 255, "r": 50 } ],
+      "sfx": [ { "t": 0.5, "name": "success" } ]
+    },
+    {
+      "type": "phone", "dur": 5.8, "shot": "img/registro2.png",
+      "title": "Crea tu cuenta\n*gratis.*",
+      "vo": [29.38, 34.6], "voAt": 0.3,
+      "badge": { "icon": "✓", "text": "Tu carro y tus guardadas, en cualquier teléfono", "t0": 1.4 },
+      "cam": [
+        { "t": 0, "s": 0.62, "fx": 0.5, "fy": 0, "at": [540, 470] },
+        { "t": 2.4, "s": 0.74, "fx": 0.5, "fy": 0.6, "at": [540, 1250] }
+      ],
+      "highlights": [ { "t0": 3.3, "x": 120, "y": 2220, "w": 930, "h": 120, "r": 60 } ],
+      "taps": [ { "t": 4.2, "x": 585, "y": 2280 } ],
+      "sfx": [ { "t": 4.4, "name": "success" } ]
+    },
+    {
+      "type": "outro", "dur": 6.0,
+      "tagline": "Encuentra, carga y opina.\nEntre todos movemos Guatemala.",
+      "cta": "Crea tu cuenta gratis hoy.",
+      "vo": [34.65, 38.6], "voAt": 0.6
+    }
+  ]
+}
